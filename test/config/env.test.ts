@@ -10,7 +10,7 @@ describe('loadEnv', () => {
     BUSINESS_USER_EMAIL: 'b@x', BUSINESS_USER_PASSWORD: 'p',
     NEW_ADMIN_USER_EMAIL: 'n@x', NEW_ADMIN_USER_PASSWORD: 'p',
     ENV: 'dev', HEADLESS: 'true',
-    API_PORT: '3000', API_KEY: 'secret', LOG_LEVEL: 'info',
+    API_PORT: '3000', API_KEY: 'secretXYZ', LOG_LEVEL: 'info',
   };
 
   it('parses a valid env object', () => {

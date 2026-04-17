@@ -22,7 +22,7 @@ const envSchema = z.object({
   HEADLESS: z.string().transform((v) => v !== 'false').default('true'),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
-  API_KEY: z.string().min(1),
+  API_KEY: z.string().min(8),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 });
 
