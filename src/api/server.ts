@@ -5,9 +5,12 @@ import { healthRouter } from './routes/health.routes';
 import { createRunsRouter } from './routes/runs.routes';
 import { RunManager } from './services/run-manager.service';
 import { executePlaywright } from './services/playwright-executor.service';
+import type { TargetEnv } from './types/run.types';
 
 export interface ServerConfig {
   apiKey: string;
+  defaultEnv: TargetEnv;
+  allowProductionRuns: boolean;
   maxConcurrentRuns?: number;
 }
 
@@ -18,7 +21,12 @@ export function createServer(config: ServerConfig): { app: Express; runManager: 
   app.use(express.json({ limit: '256kb' }));
   app.use(healthRouter);
   app.use('/api', createAuthMiddleware(config.apiKey));
-  app.use('/api', createRunsRouter({ runManager, executePlaywright }));
+  app.use('/api', createRunsRouter({
+    runManager,
+    executePlaywright,
+    defaultEnv: config.defaultEnv,
+    allowProductionRuns: config.allowProductionRuns,
+  }));
   app.use(errorMiddleware);
 
   return { app, runManager };

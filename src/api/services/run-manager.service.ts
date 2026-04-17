@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import * as path from 'path';
-import type { RunRecord, RunRequest, RunStatus } from '../types/run.types';
+import type { RunRecord, RunRequest, RunStatus, TargetEnv } from '../types/run.types';
 
 export interface RunManagerOptions {
   maxConcurrent?: number;
@@ -17,12 +17,13 @@ export class RunManager {
     this.reportsRoot = opts.reportsRoot ?? path.resolve('reports', 'runs');
   }
 
-  create(request: RunRequest): RunRecord {
+  create(request: RunRequest, resolvedEnv: TargetEnv): RunRecord {
     const id = randomUUID();
     const record: RunRecord = {
       id,
       status: 'queued',
       request,
+      resolvedEnv,
       startedAt: new Date().toISOString(),
       artifactDir: path.join(this.reportsRoot, id),
     };
@@ -30,9 +31,7 @@ export class RunManager {
     return record;
   }
 
-  get(id: string): RunRecord | undefined {
-    return this.runs.get(id);
-  }
+  get(id: string): RunRecord | undefined { return this.runs.get(id); }
 
   list(): RunRecord[] {
     return Array.from(this.runs.values()).sort((a, b) => b.startedAt.localeCompare(a.startedAt));

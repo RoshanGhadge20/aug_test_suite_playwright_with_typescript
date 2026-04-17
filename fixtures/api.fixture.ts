@@ -1,5 +1,6 @@
 import { test as base, APIRequestContext, request as pwRequest } from '@playwright/test';
-import { API_SERVICE_AUTH, API_SERVICE_URLS } from '../config/urls';
+import { apiAuthConfig, apiUrl } from '../config/urls';
+import { getTargetEnv } from '../config/environments';
 import type { ApiService } from '../config/constants';
 import { fetchBearerToken, globalTokenCache } from '../utils/api/api-auth';
 
@@ -20,11 +21,12 @@ export const apiTest = base.extend<ApiFixtures>({
     await use(detectApiService(testInfo.project.name));
   },
   authedRequest: async ({ apiService }, use) => {
-    const baseURL = API_SERVICE_URLS[apiService];
-    const auth = API_SERVICE_AUTH[apiService];
+    const envName = getTargetEnv();
+    const baseURL = apiUrl(apiService, envName);
+    const auth = apiAuthConfig(apiService, envName);
     const loginCtx = await pwRequest.newContext({ baseURL });
     const token = await globalTokenCache.get(
-      `${apiService}:${auth.email}`,
+      `${envName}:${apiService}:${auth.email}`,
       () => fetchBearerToken({
         request: loginCtx,
         loginPath: auth.loginPath,

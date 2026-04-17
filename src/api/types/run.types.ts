@@ -4,12 +4,14 @@ export type UiPanel = 'admin' | 'customer' | 'business' | 'new-admin';
 export type ApiService = 'api-backend' | 'api-emi' | 'api-lgd';
 export type ProjectId = UiPanel | ApiService;
 
+export type TargetEnv = 'test' | 'uat' | 'production';
+
 export interface RunRequest {
   projects?: ProjectId[];
+  env?: TargetEnv;
   grep?: string;
   grepInvert?: string;
   specFiles?: string[];
-  env?: 'dev' | 'staging' | 'production';
   workers?: number;
   retries?: number;
   headed?: boolean;
@@ -19,6 +21,7 @@ export interface RunRecord {
   id: string;
   status: RunStatus;
   request: RunRequest;
+  resolvedEnv: TargetEnv;
   startedAt: string;
   finishedAt?: string;
   exitCode?: number;

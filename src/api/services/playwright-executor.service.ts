@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { RunRequest } from '../types/run.types';
+import type { RunRequest, TargetEnv } from '../types/run.types';
 import type { RunManager } from './run-manager.service';
 import { logger } from '../../../utils/logger/logger';
 
@@ -29,6 +29,7 @@ export function buildPlaywrightArgs(req: RunRequest): string[] {
 export interface ExecuteOptions {
   runId: string;
   request: RunRequest;
+  resolvedEnv: TargetEnv;
   runManager: RunManager;
   artifactDir: string;
   cwd?: string;
@@ -41,17 +42,14 @@ export async function executePlaywright(opts: ExecuteOptions): Promise<number> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...opts.extraEnv,
+    TARGET_ENV: opts.resolvedEnv,
     HEADLESS: opts.request.headed ? 'false' : 'true',
-    ...(opts.request.env ? { ENV: opts.request.env } : {}),
     PLAYWRIGHT_HTML_REPORT: path.join(opts.artifactDir, 'html'),
     PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(opts.artifactDir, 'results.json'),
   };
 
   return new Promise((resolve, reject) => {
-    const child = spawn('npx', ['playwright', ...args], {
-      cwd: opts.cwd ?? process.cwd(),
-      env,
-    });
+    const child = spawn('npx', ['playwright', ...args], { cwd: opts.cwd ?? process.cwd(), env });
     const stdoutLog = fs.createWriteStream(path.join(opts.artifactDir, 'stdout.log'));
     const stderrLog = fs.createWriteStream(path.join(opts.artifactDir, 'stderr.log'));
 
@@ -68,8 +66,7 @@ export async function executePlaywright(opts: ExecuteOptions): Promise<number> {
       reject(err);
     });
     child.on('close', (code) => {
-      stdoutLog.end();
-      stderrLog.end();
+      stdoutLog.end(); stderrLog.end();
       resolve(code ?? 1);
     });
   });

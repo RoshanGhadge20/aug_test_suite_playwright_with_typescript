@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
-import { STORAGE_STATE_PATH } from './config/constants';
-import { PANEL_URLS, API_SERVICE_URLS } from './config/urls';
+import { storageStatePath } from './config/constants';
+import { panelUrl, apiUrl } from './config/urls';
+import { getTargetEnv } from './config/environments';
 
+const targetEnv = getTargetEnv();
 const isCI = !!process.env.CI;
 const headless = process.env.HEADLESS !== 'false';
 
@@ -32,41 +34,41 @@ export default defineConfig({
     { name: 'auth-setup', testMatch: /setup\/auth\.setup\.ts/ },
     {
       name: 'admin',
-      use: { ...devices['Desktop Chrome'], baseURL: PANEL_URLS.admin, storageState: STORAGE_STATE_PATH.admin },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), storageState: storageStatePath(targetEnv, 'admin') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/admin\/.*\.spec\.ts/,
     },
     {
       name: 'customer',
-      use: { ...devices['Desktop Chrome'], baseURL: PANEL_URLS.customer, storageState: STORAGE_STATE_PATH.customer },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('customer', targetEnv), storageState: storageStatePath(targetEnv, 'customer') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/customer\/.*\.spec\.ts/,
     },
     {
       name: 'business',
-      use: { ...devices['Desktop Chrome'], baseURL: PANEL_URLS.business, storageState: STORAGE_STATE_PATH.business },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('business', targetEnv), storageState: storageStatePath(targetEnv, 'business') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/business\/.*\.spec\.ts/,
     },
     {
       name: 'new-admin',
-      use: { ...devices['Desktop Chrome'], baseURL: PANEL_URLS['new-admin'], storageState: STORAGE_STATE_PATH['new-admin'] },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('new-admin', targetEnv), storageState: storageStatePath(targetEnv, 'new-admin') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/new-admin\/.*\.spec\.ts/,
     },
     {
       name: 'api-backend',
-      use: { baseURL: API_SERVICE_URLS['api-backend'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      use: { baseURL: apiUrl('api-backend', targetEnv), extraHTTPHeaders: { 'Content-Type': 'application/json' } },
       testMatch: /tests\/api\/backend\/.*\.spec\.ts/,
     },
     {
       name: 'api-emi',
-      use: { baseURL: API_SERVICE_URLS['api-emi'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      use: { baseURL: apiUrl('api-emi', targetEnv), extraHTTPHeaders: { 'Content-Type': 'application/json' } },
       testMatch: /tests\/api\/emi\/.*\.spec\.ts/,
     },
     {
       name: 'api-lgd',
-      use: { baseURL: API_SERVICE_URLS['api-lgd'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      use: { baseURL: apiUrl('api-lgd', targetEnv), extraHTTPHeaders: { 'Content-Type': 'application/json' } },
       testMatch: /tests\/api\/lgd\/.*\.spec\.ts/,
     },
   ],

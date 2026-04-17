@@ -39,11 +39,11 @@ Request body (all fields optional):
 
 | Field        | Type       | Description                                        |
 |--------------|------------|----------------------------------------------------|
+| `env`        | string     | `test` \| `uat` \| `production` (defaults to `DEFAULT_ENV` on server) |
 | `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin`, `api-backend`, `api-emi`, `api-lgd` |
 | `grep`       | string     | Tag/pattern, e.g. `@smoke`                         |
 | `grepInvert` | string     | Exclusion pattern                                  |
 | `specFiles`  | string[]   | Relative paths, e.g. `tests/admin/login.spec.ts`   |
-| `env`        | string     | `dev` \| `staging` \| `production`                |
 | `workers`    | integer    | 1–16                                               |
 | `retries`    | integer    | 0–5                                                |
 | `headed`     | boolean    | Default false (server = headless)                  |
@@ -53,13 +53,14 @@ Example:
 curl -X POST http://<host>:3000/api/runs \
   -H 'Content-Type: application/json' \
   -H 'X-API-Key: <key>' \
-  -d '{"projects":["admin","customer"],"grep":"@smoke","workers":2}'
+  -d '{"env":"uat","projects":["admin","customer"],"grep":"@smoke","workers":2}'
 ```
 
 Responses:
 - `202` → run accepted, body is `RunRecord` with `id` and `status: "queued"`
 - `400` → validation failure (zod issue list)
 - `401` → missing/invalid API key
+- `403` → `env: "production"` requested but `ALLOW_PRODUCTION_RUNS=false` on the server
 - `429` → concurrency limit reached
 
 ### GET /api/runs
@@ -77,6 +78,39 @@ Returns `{ stdoutTail, stderrTail }` (last ~10KB each).
 ### GET /api/runs/:id/report
 
 Returns the Playwright HTML report for that run (only once run has finished writing to disk).
+
+## Environments
+
+Three target environments are supported: `test`, `uat`, `production`. All three URL sets + credentials are loaded from `.env` at server boot (keys are prefixed `TEST_`, `UAT_`, `PRODUCTION_`). Each `POST /api/runs` picks which env to run against via the `env` parameter; if omitted, `DEFAULT_ENV` is used.
+
+**Production safety:** requests with `env: "production"` are refused with `403 production_runs_disabled` unless the server was started with `ALLOW_PRODUCTION_RUNS=true`. This is a blast-radius safeguard — leave it off by default and flip it only for release smoke.
+
+Examples:
+
+```bash
+# UAT — admin panel smoke
+curl -X POST http://<host>:3000/api/runs \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"env":"uat","projects":["admin"],"grep":"@smoke"}'
+
+# Test env — mixed UI + API regression
+curl -X POST http://<host>:3000/api/runs \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"env":"test","projects":["admin","api-backend"],"grep":"@regression"}'
+
+# Production smoke (requires ALLOW_PRODUCTION_RUNS=true on server)
+curl -X POST http://<host>:3000/api/runs \
+  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"env":"production","projects":["api-backend"],"grep":"@smoke"}'
+```
+
+Storage state for UI auth is namespaced per env: `storage/<env>/<panel>.json`. The `auth-setup` project re-logs-in for each env the first time it's used and reuses cached state on subsequent runs.
+
+Local CLI usage targeting a specific env:
+```bash
+TARGET_ENV=uat npx playwright test --project=admin --grep=@smoke
+TARGET_ENV=test npm run test:api
+```
 
 ## EC2 deployment
 
@@ -120,9 +154,9 @@ Returns the Playwright HTML report for that run (only once run has finished writ
 
 Backend HTTP tests live under `tests/api/<service>/` and run via dedicated Playwright projects:
 
-- `api-backend` → `gold-loan-backend-two` (URL: `BASE_URL_BACKEND`)
-- `api-emi` → `emi-backend` (URL: `BASE_URL_EMI`)
-- `api-lgd` → `LGD-backend` (URL: `BASE_URL_LGD`)
+- `api-backend` → `gold-loan-backend-two` (URL: `<ENV>_BASE_URL_BACKEND`)
+- `api-emi` → `emi-backend` (URL: `<ENV>_BASE_URL_EMI`)
+- `api-lgd` → `LGD-backend` (URL: `<ENV>_BASE_URL_LGD`)
 
 These projects use Playwright's `request` fixture — no browser is launched, so they're fast and headless by nature. They do not depend on `auth-setup`; each auth-required test uses the `authedRequest` fixture from `fixtures/api.fixture.ts`, which calls the service's `/api/v1/auth/login`, caches the bearer token for 5 minutes per worker, and injects it as `Authorization: Bearer <token>`.
 

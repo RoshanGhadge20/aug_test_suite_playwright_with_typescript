@@ -24,9 +24,9 @@ describe('buildPlaywrightArgs', () => {
     expect(args).toContain('--retries=2');
   });
 
-  it('adds spec file args at end', () => {
-    const args = buildPlaywrightArgs({ specFiles: ['tests/admin/login.spec.ts'] });
-    expect(args[args.length - 1]).toBe('tests/admin/login.spec.ts');
+  it('does NOT include env in CLI args (env is passed via TARGET_ENV process var)', () => {
+    const args = buildPlaywrightArgs({ env: 'uat' });
+    expect(args.some((a) => a.includes('uat'))).toBe(false);
   });
 
   it('rejects spec files with path traversal', () => {

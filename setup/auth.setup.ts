@@ -1,47 +1,64 @@
-import { test as setup, expect } from '@playwright/test';
-import { PANEL_URLS, PANEL_CREDENTIALS } from '../config/urls';
-import { STORAGE_STATE_PATH } from '../config/constants';
+import { test as setup } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { panelUrl, panelCreds } from '../config/urls';
+import { storageStatePath } from '../config/constants';
+import { getTargetEnv } from '../config/environments';
 import { AdminLoginPage } from '../pages/admin/login.page';
 import { CustomerLoginPage } from '../pages/customer/login.page';
 import { BusinessLoginPage } from '../pages/business/login.page';
 import { NewAdminLoginPage } from '../pages/new-admin/login.page';
 
+const targetEnv = getTargetEnv();
+
+function ensureStorageDir(storagePath: string): void {
+  fs.mkdirSync(path.dirname(storagePath), { recursive: true });
+}
+
 setup('authenticate admin', async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: PANEL_URLS.admin });
+  const storagePath = storageStatePath(targetEnv, 'admin');
+  ensureStorageDir(storagePath);
+  const ctx = await browser.newContext({ baseURL: panelUrl('admin', targetEnv) });
   const page = await ctx.newPage();
   const login = new AdminLoginPage(page);
-  const { email, password } = PANEL_CREDENTIALS.admin;
+  const { email, password } = panelCreds('admin', targetEnv);
   await login.login(email, password);
-  await ctx.storageState({ path: STORAGE_STATE_PATH.admin });
+  await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
 
 setup('authenticate customer', async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: PANEL_URLS.customer });
+  const storagePath = storageStatePath(targetEnv, 'customer');
+  ensureStorageDir(storagePath);
+  const ctx = await browser.newContext({ baseURL: panelUrl('customer', targetEnv) });
   const page = await ctx.newPage();
   const login = new CustomerLoginPage(page);
-  const { email, password } = PANEL_CREDENTIALS.customer;
+  const { email, password } = panelCreds('customer', targetEnv);
   await login.login(email, password);
-  await ctx.storageState({ path: STORAGE_STATE_PATH.customer });
+  await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
 
 setup('authenticate business', async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: PANEL_URLS.business });
+  const storagePath = storageStatePath(targetEnv, 'business');
+  ensureStorageDir(storagePath);
+  const ctx = await browser.newContext({ baseURL: panelUrl('business', targetEnv) });
   const page = await ctx.newPage();
   const login = new BusinessLoginPage(page);
-  const { email, password } = PANEL_CREDENTIALS.business;
+  const { email, password } = panelCreds('business', targetEnv);
   await login.login(email, password);
-  await ctx.storageState({ path: STORAGE_STATE_PATH.business });
+  await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
 
 setup('authenticate new-admin', async ({ browser }) => {
-  const ctx = await browser.newContext({ baseURL: PANEL_URLS['new-admin'] });
+  const storagePath = storageStatePath(targetEnv, 'new-admin');
+  ensureStorageDir(storagePath);
+  const ctx = await browser.newContext({ baseURL: panelUrl('new-admin', targetEnv) });
   const page = await ctx.newPage();
   const login = new NewAdminLoginPage(page);
-  const { email, password } = PANEL_CREDENTIALS['new-admin'];
+  const { email, password } = panelCreds('new-admin', targetEnv);
   await login.login(email, password);
-  await ctx.storageState({ path: STORAGE_STATE_PATH['new-admin'] });
+  await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
