@@ -19,7 +19,7 @@ const envSchema = z.object({
   NEW_ADMIN_USER_PASSWORD: z.string().min(1),
 
   ENV: z.enum(['dev', 'staging', 'production']).default('dev'),
-  HEADLESS: z.string().transform((v) => v !== 'false').default('true'),
+  HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
   API_KEY: z.string().min(8),
