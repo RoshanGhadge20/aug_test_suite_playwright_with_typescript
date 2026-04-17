@@ -1,35 +1,85 @@
 import { z } from 'zod';
 import * as dotenv from 'dotenv';
+import { ENVIRONMENTS } from './environments';
 
 dotenv.config();
 
+const nonEmpty = z.string().min(1);
+const url = z.string().url();
+
 const envSchema = z.object({
-  BASE_URL_ADMIN: z.string().url(),
-  BASE_URL_CUSTOMER: z.string().url(),
-  BASE_URL_BUSINESS: z.string().url(),
-  BASE_URL_NEW_ADMIN: z.string().url(),
+  // TEST block
+  TEST_BASE_URL_ADMIN: url,
+  TEST_BASE_URL_CUSTOMER: url,
+  TEST_BASE_URL_BUSINESS: url,
+  TEST_BASE_URL_NEW_ADMIN: url,
+  TEST_BASE_URL_BACKEND: url,
+  TEST_BASE_URL_EMI: url,
+  TEST_BASE_URL_LGD: url,
+  TEST_ADMIN_USER_EMAIL: nonEmpty,
+  TEST_ADMIN_USER_PASSWORD: nonEmpty,
+  TEST_CUSTOMER_USER_EMAIL: nonEmpty,
+  TEST_CUSTOMER_USER_PASSWORD: nonEmpty,
+  TEST_BUSINESS_USER_EMAIL: nonEmpty,
+  TEST_BUSINESS_USER_PASSWORD: nonEmpty,
+  TEST_NEW_ADMIN_USER_EMAIL: nonEmpty,
+  TEST_NEW_ADMIN_USER_PASSWORD: nonEmpty,
+  TEST_BACKEND_USER_EMAIL: nonEmpty,
+  TEST_BACKEND_USER_PASSWORD: nonEmpty,
+  TEST_EMI_USER_EMAIL: nonEmpty,
+  TEST_EMI_USER_PASSWORD: nonEmpty,
+  TEST_LGD_USER_EMAIL: nonEmpty,
+  TEST_LGD_USER_PASSWORD: nonEmpty,
 
-  ADMIN_USER_EMAIL: z.string().min(1),
-  ADMIN_USER_PASSWORD: z.string().min(1),
-  CUSTOMER_USER_EMAIL: z.string().min(1),
-  CUSTOMER_USER_PASSWORD: z.string().min(1),
-  BUSINESS_USER_EMAIL: z.string().min(1),
-  BUSINESS_USER_PASSWORD: z.string().min(1),
-  NEW_ADMIN_USER_EMAIL: z.string().min(1),
-  NEW_ADMIN_USER_PASSWORD: z.string().min(1),
+  // UAT block
+  UAT_BASE_URL_ADMIN: url,
+  UAT_BASE_URL_CUSTOMER: url,
+  UAT_BASE_URL_BUSINESS: url,
+  UAT_BASE_URL_NEW_ADMIN: url,
+  UAT_BASE_URL_BACKEND: url,
+  UAT_BASE_URL_EMI: url,
+  UAT_BASE_URL_LGD: url,
+  UAT_ADMIN_USER_EMAIL: nonEmpty,
+  UAT_ADMIN_USER_PASSWORD: nonEmpty,
+  UAT_CUSTOMER_USER_EMAIL: nonEmpty,
+  UAT_CUSTOMER_USER_PASSWORD: nonEmpty,
+  UAT_BUSINESS_USER_EMAIL: nonEmpty,
+  UAT_BUSINESS_USER_PASSWORD: nonEmpty,
+  UAT_NEW_ADMIN_USER_EMAIL: nonEmpty,
+  UAT_NEW_ADMIN_USER_PASSWORD: nonEmpty,
+  UAT_BACKEND_USER_EMAIL: nonEmpty,
+  UAT_BACKEND_USER_PASSWORD: nonEmpty,
+  UAT_EMI_USER_EMAIL: nonEmpty,
+  UAT_EMI_USER_PASSWORD: nonEmpty,
+  UAT_LGD_USER_EMAIL: nonEmpty,
+  UAT_LGD_USER_PASSWORD: nonEmpty,
 
-  BASE_URL_BACKEND: z.string().url(),
-  BASE_URL_EMI: z.string().url(),
-  BASE_URL_LGD: z.string().url(),
+  // PRODUCTION block
+  PRODUCTION_BASE_URL_ADMIN: url,
+  PRODUCTION_BASE_URL_CUSTOMER: url,
+  PRODUCTION_BASE_URL_BUSINESS: url,
+  PRODUCTION_BASE_URL_NEW_ADMIN: url,
+  PRODUCTION_BASE_URL_BACKEND: url,
+  PRODUCTION_BASE_URL_EMI: url,
+  PRODUCTION_BASE_URL_LGD: url,
+  PRODUCTION_ADMIN_USER_EMAIL: nonEmpty,
+  PRODUCTION_ADMIN_USER_PASSWORD: nonEmpty,
+  PRODUCTION_CUSTOMER_USER_EMAIL: nonEmpty,
+  PRODUCTION_CUSTOMER_USER_PASSWORD: nonEmpty,
+  PRODUCTION_BUSINESS_USER_EMAIL: nonEmpty,
+  PRODUCTION_BUSINESS_USER_PASSWORD: nonEmpty,
+  PRODUCTION_NEW_ADMIN_USER_EMAIL: nonEmpty,
+  PRODUCTION_NEW_ADMIN_USER_PASSWORD: nonEmpty,
+  PRODUCTION_BACKEND_USER_EMAIL: nonEmpty,
+  PRODUCTION_BACKEND_USER_PASSWORD: nonEmpty,
+  PRODUCTION_EMI_USER_EMAIL: nonEmpty,
+  PRODUCTION_EMI_USER_PASSWORD: nonEmpty,
+  PRODUCTION_LGD_USER_EMAIL: nonEmpty,
+  PRODUCTION_LGD_USER_PASSWORD: nonEmpty,
 
-  BACKEND_USER_EMAIL: z.string().min(1),
-  BACKEND_USER_PASSWORD: z.string().min(1),
-  EMI_USER_EMAIL: z.string().min(1),
-  EMI_USER_PASSWORD: z.string().min(1),
-  LGD_USER_EMAIL: z.string().min(1),
-  LGD_USER_PASSWORD: z.string().min(1),
-
-  ENV: z.enum(['dev', 'staging', 'production']).default('dev'),
+  // Flags & runner
+  DEFAULT_ENV: z.enum(ENVIRONMENTS).default('test'),
+  ALLOW_PRODUCTION_RUNS: z.string().default('false').transform((v) => v === 'true'),
   HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
@@ -49,12 +99,8 @@ export function loadEnv(source: NodeJS.ProcessEnv | Record<string, string | unde
 }
 
 export const env = (() => {
-  try {
-    return loadEnv();
-  } catch (err) {
-    if (process.env.SKIP_ENV_VALIDATION === 'true') {
-      return {} as AppEnv;
-    }
+  try { return loadEnv(); } catch (err) {
+    if (process.env.SKIP_ENV_VALIDATION === 'true') return {} as AppEnv;
     throw err;
   }
 })();

@@ -1,36 +1,59 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { loadEnv } from '../../config/env';
 
-describe('loadEnv', () => {
-  const valid = {
-    BASE_URL_ADMIN: 'http://a', BASE_URL_CUSTOMER: 'http://c',
-    BASE_URL_BUSINESS: 'http://b', BASE_URL_NEW_ADMIN: 'http://n',
-    ADMIN_USER_EMAIL: 'a@x', ADMIN_USER_PASSWORD: 'p',
-    CUSTOMER_USER_EMAIL: 'c@x', CUSTOMER_USER_PASSWORD: 'p',
-    BUSINESS_USER_EMAIL: 'b@x', BUSINESS_USER_PASSWORD: 'p',
-    NEW_ADMIN_USER_EMAIL: 'n@x', NEW_ADMIN_USER_PASSWORD: 'p',
-    ENV: 'dev', HEADLESS: 'true',
-    API_PORT: '3000', API_KEY: 'secretXYZ', LOG_LEVEL: 'info',
-    BASE_URL_BACKEND: 'http://back', BASE_URL_EMI: 'http://emi', BASE_URL_LGD: 'http://lgd',
-    BACKEND_USER_EMAIL: 'bk@x', BACKEND_USER_PASSWORD: 'p',
-    EMI_USER_EMAIL: 'em@x', EMI_USER_PASSWORD: 'p',
-    LGD_USER_EMAIL: 'lg@x', LGD_USER_PASSWORD: 'p',
+function buildEnvBlock(prefix: string): Record<string, string> {
+  return {
+    [`${prefix}_BASE_URL_ADMIN`]: `http://${prefix.toLowerCase()}-admin`,
+    [`${prefix}_BASE_URL_CUSTOMER`]: `http://${prefix.toLowerCase()}-cust`,
+    [`${prefix}_BASE_URL_BUSINESS`]: `http://${prefix.toLowerCase()}-biz`,
+    [`${prefix}_BASE_URL_NEW_ADMIN`]: `http://${prefix.toLowerCase()}-nad`,
+    [`${prefix}_BASE_URL_BACKEND`]: `http://${prefix.toLowerCase()}-back`,
+    [`${prefix}_BASE_URL_EMI`]: `http://${prefix.toLowerCase()}-emi`,
+    [`${prefix}_BASE_URL_LGD`]: `http://${prefix.toLowerCase()}-lgd`,
+    [`${prefix}_ADMIN_USER_EMAIL`]: 'a@x', [`${prefix}_ADMIN_USER_PASSWORD`]: 'p',
+    [`${prefix}_CUSTOMER_USER_EMAIL`]: 'c@x', [`${prefix}_CUSTOMER_USER_PASSWORD`]: 'p',
+    [`${prefix}_BUSINESS_USER_EMAIL`]: 'b@x', [`${prefix}_BUSINESS_USER_PASSWORD`]: 'p',
+    [`${prefix}_NEW_ADMIN_USER_EMAIL`]: 'n@x', [`${prefix}_NEW_ADMIN_USER_PASSWORD`]: 'p',
+    [`${prefix}_BACKEND_USER_EMAIL`]: 'bk@x', [`${prefix}_BACKEND_USER_PASSWORD`]: 'p',
+    [`${prefix}_EMI_USER_EMAIL`]: 'em@x', [`${prefix}_EMI_USER_PASSWORD`]: 'p',
+    [`${prefix}_LGD_USER_EMAIL`]: 'lg@x', [`${prefix}_LGD_USER_PASSWORD`]: 'p',
   };
+}
 
-  it('parses a valid env object', () => {
-    const result = loadEnv(valid);
-    expect(result.BASE_URL_ADMIN).toBe('http://a');
-    expect(result.API_PORT).toBe(3000);
-    expect(result.HEADLESS).toBe(true);
+const valid = {
+  ...buildEnvBlock('TEST'),
+  ...buildEnvBlock('UAT'),
+  ...buildEnvBlock('PRODUCTION'),
+  DEFAULT_ENV: 'test',
+  ALLOW_PRODUCTION_RUNS: 'false',
+  HEADLESS: 'true',
+  API_PORT: '3000',
+  API_KEY: 'secretXYZ',
+  LOG_LEVEL: 'info',
+};
+
+describe('loadEnv (multi-env)', () => {
+  it('parses all three environment blocks', () => {
+    const cfg = loadEnv(valid);
+    expect(cfg.TEST_BASE_URL_ADMIN).toBe('http://test-admin');
+    expect(cfg.UAT_BASE_URL_ADMIN).toBe('http://uat-admin');
+    expect(cfg.PRODUCTION_BASE_URL_ADMIN).toBe('http://production-admin');
+    expect(cfg.DEFAULT_ENV).toBe('test');
+    expect(cfg.ALLOW_PRODUCTION_RUNS).toBe(false);
   });
 
-  it('throws when a required variable is missing', () => {
+  it('rejects invalid DEFAULT_ENV', () => {
+    expect(() => loadEnv({ ...valid, DEFAULT_ENV: 'mars' })).toThrow();
+  });
+
+  it('fails when a UAT url is missing', () => {
     const missing = { ...valid } as Record<string, string>;
-    delete missing.API_KEY;
-    expect(() => loadEnv(missing)).toThrow(/API_KEY/);
+    delete missing.UAT_BASE_URL_ADMIN;
+    expect(() => loadEnv(missing)).toThrow(/UAT_BASE_URL_ADMIN/);
   });
 
-  it('rejects invalid ENV value', () => {
-    expect(() => loadEnv({ ...valid, ENV: 'mars' })).toThrow();
+  it('coerces ALLOW_PRODUCTION_RUNS=true', () => {
+    const cfg = loadEnv({ ...valid, ALLOW_PRODUCTION_RUNS: 'true' });
+    expect(cfg.ALLOW_PRODUCTION_RUNS).toBe(true);
   });
 });

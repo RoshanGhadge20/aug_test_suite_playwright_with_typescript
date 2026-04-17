@@ -1,3 +1,5 @@
+import type { EnvName } from './environments';
+
 export const PANELS = ['admin', 'customer', 'business', 'new-admin'] as const;
 export type Panel = typeof PANELS[number];
 
@@ -7,12 +9,9 @@ export type ApiService = typeof API_SERVICES[number];
 export type ProjectId = Panel | ApiService;
 export const ALL_PROJECTS: readonly ProjectId[] = [...PANELS, ...API_SERVICES];
 
-export const STORAGE_STATE_PATH: Record<Panel, string> = {
-  admin: 'storage/admin.json',
-  customer: 'storage/customer.json',
-  business: 'storage/business.json',
-  'new-admin': 'storage/new-admin.json',
-};
+export function storageStatePath(envName: EnvName, panel: Panel): string {
+  return `storage/${envName}/${panel}.json`;
+}
 
 export const DEFAULT_TIMEOUTS = {
   action: 15_000,
