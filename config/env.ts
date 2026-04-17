@@ -18,6 +18,17 @@ const envSchema = z.object({
   NEW_ADMIN_USER_EMAIL: z.string().min(1),
   NEW_ADMIN_USER_PASSWORD: z.string().min(1),
 
+  BASE_URL_BACKEND: z.string().url(),
+  BASE_URL_EMI: z.string().url(),
+  BASE_URL_LGD: z.string().url(),
+
+  BACKEND_USER_EMAIL: z.string().min(1),
+  BACKEND_USER_PASSWORD: z.string().min(1),
+  EMI_USER_EMAIL: z.string().min(1),
+  EMI_USER_PASSWORD: z.string().min(1),
+  LGD_USER_EMAIL: z.string().min(1),
+  LGD_USER_PASSWORD: z.string().min(1),
+
   ENV: z.enum(['dev', 'staging', 'production']).default('dev'),
   HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
 

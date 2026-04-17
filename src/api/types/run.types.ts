@@ -1,9 +1,11 @@
 export type RunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'cancelled';
 
-export type Panel = 'admin' | 'customer' | 'business' | 'new-admin';
+export type UiPanel = 'admin' | 'customer' | 'business' | 'new-admin';
+export type ApiService = 'api-backend' | 'api-emi' | 'api-lgd';
+export type ProjectId = UiPanel | ApiService;
 
 export interface RunRequest {
-  projects?: Panel[];
+  projects?: ProjectId[];
   grep?: string;
   grepInvert?: string;
   specFiles?: string[];

@@ -11,6 +11,10 @@ describe('loadEnv', () => {
     NEW_ADMIN_USER_EMAIL: 'n@x', NEW_ADMIN_USER_PASSWORD: 'p',
     ENV: 'dev', HEADLESS: 'true',
     API_PORT: '3000', API_KEY: 'secretXYZ', LOG_LEVEL: 'info',
+    BASE_URL_BACKEND: 'http://back', BASE_URL_EMI: 'http://emi', BASE_URL_LGD: 'http://lgd',
+    BACKEND_USER_EMAIL: 'bk@x', BACKEND_USER_PASSWORD: 'p',
+    EMI_USER_EMAIL: 'em@x', EMI_USER_PASSWORD: 'p',
+    LGD_USER_EMAIL: 'lg@x', LGD_USER_PASSWORD: 'p',
   };
 
   it('parses a valid env object', () => {
