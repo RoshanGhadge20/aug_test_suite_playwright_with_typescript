@@ -1,11 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
+import * as fs from 'fs';
 import { storageStatePath } from './config/constants';
+import type { Panel } from './config/constants';
 import { panelUrl, apiUrl } from './config/urls';
-import { getTargetEnv } from './config/environments';
+import { getTargetEnv, type EnvName } from './config/environments';
 
 const targetEnv = getTargetEnv();
 const isCI = !!process.env.CI;
 const headless = process.env.HEADLESS !== 'false';
+
+function storageStateIfExists(env: EnvName, panel: Panel): string | undefined {
+  const p = storageStatePath(env, panel);
+  if (fs.existsSync(p)) return p;
+  console.warn(
+    `[playwright.config] storage state for ${panel}@${env} not found at ${p}. ` +
+    `Tests will run unauthenticated. Run the auth-setup project first: ` +
+    `\`npx playwright test --project=auth-setup\`.`,
+  );
+  return undefined;
+}
 
 export default defineConfig({
   testDir: './tests',
@@ -34,25 +47,25 @@ export default defineConfig({
     { name: 'auth-setup', testMatch: /setup\/auth\.setup\.ts/ },
     {
       name: 'admin',
-      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), storageState: storageStatePath(targetEnv, 'admin') },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), storageState: storageStateIfExists(targetEnv, 'admin') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/admin\/.*\.spec\.ts/,
     },
     {
       name: 'customer',
-      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('customer', targetEnv), storageState: storageStatePath(targetEnv, 'customer') },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('customer', targetEnv), storageState: storageStateIfExists(targetEnv, 'customer') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/customer\/.*\.spec\.ts/,
     },
     {
       name: 'business',
-      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('business', targetEnv), storageState: storageStatePath(targetEnv, 'business') },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('business', targetEnv), storageState: storageStateIfExists(targetEnv, 'business') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/business\/.*\.spec\.ts/,
     },
     {
       name: 'new-admin',
-      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('new-admin', targetEnv), storageState: storageStatePath(targetEnv, 'new-admin') },
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('new-admin', targetEnv), storageState: storageStateIfExists(targetEnv, 'new-admin') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/new-admin\/.*\.spec\.ts/,
     },
