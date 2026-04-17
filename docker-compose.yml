@@ -1,0 +1,14 @@
+services:
+  test-suite:
+    build: .
+    image: augmont-test-suite:dev
+    container_name: augmont-test-suite
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./reports:/app/reports
+      - ./storage:/app/storage
+    ipc: host
