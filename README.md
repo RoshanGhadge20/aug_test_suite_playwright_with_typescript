@@ -39,7 +39,7 @@ Request body (all fields optional):
 
 | Field        | Type       | Description                                        |
 |--------------|------------|----------------------------------------------------|
-| `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin` |
+| `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin`, `api-backend`, `api-emi`, `api-lgd` |
 | `grep`       | string     | Tag/pattern, e.g. `@smoke`                         |
 | `grepInvert` | string     | Exclusion pattern                                  |
 | `specFiles`  | string[]   | Relative paths, e.g. `tests/admin/login.spec.ts`   |
@@ -115,6 +115,42 @@ Returns the Playwright HTML report for that run (only once run has finished writ
 - Do not expose port 3000 publicly without a reverse proxy + TLS. Prefer placing it behind an internal ALB or restricting the SG to the bastion/office CIDR.
 - Rotate `API_KEY` periodically; the server only supports one active key. If you need multi-tenant access, upgrade auth before exposing publicly.
 - Reports may contain screenshots with sensitive UI data; treat the `reports/` volume as sensitive.
+
+## API testing
+
+Backend HTTP tests live under `tests/api/<service>/` and run via dedicated Playwright projects:
+
+- `api-backend` → `gold-loan-backend-two` (URL: `BASE_URL_BACKEND`)
+- `api-emi` → `emi-backend` (URL: `BASE_URL_EMI`)
+- `api-lgd` → `LGD-backend` (URL: `BASE_URL_LGD`)
+
+These projects use Playwright's `request` fixture — no browser is launched, so they're fast and headless by nature. They do not depend on `auth-setup`; each auth-required test uses the `authedRequest` fixture from `fixtures/api.fixture.ts`, which calls the service's `/api/v1/auth/login`, caches the bearer token for 5 minutes per worker, and injects it as `Authorization: Bearer <token>`.
+
+Commands:
+```bash
+npm run test:api                # all 3 services
+npm run test:api:backend        # only gold-loan-backend-two
+npm run test:api:emi
+npm run test:api:lgd
+```
+
+Via the runner API — trigger a mixed UI + API smoke:
+```bash
+curl -X POST http://<host>:3000/api/runs \
+  -H 'Content-Type: application/json' \
+  -H "X-API-Key: $API_KEY" \
+  -d '{"projects":["admin","api-backend"],"grep":"@smoke"}'
+```
+
+Writing a new API test:
+```typescript
+import { apiTest as test, expect } from '../../../fixtures/api.fixture';
+
+test('creates a loan @regression @api', async ({ authedRequest }) => {
+  const res = await authedRequest.post('/api/v1/loans', { data: { amount: 10_000 } });
+  expect(res.ok()).toBeTruthy();
+});
+```
 
 ## Test conventions
 
