@@ -44,7 +44,7 @@ export default defineConfig({
   },
   globalSetup: './setup/global-setup.ts',
   projects: [
-    { name: 'auth-setup', testMatch: /setup\/auth\.setup\.ts/ },
+    { name: 'auth-setup', testDir: './setup', testMatch: /auth\.setup\.ts/ },
     {
       name: 'admin',
       use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), storageState: storageStateIfExists(targetEnv, 'admin') },
