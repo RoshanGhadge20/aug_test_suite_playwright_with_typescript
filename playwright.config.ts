@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { STORAGE_STATE_PATH } from './config/constants';
-import { PANEL_URLS } from './config/urls';
+import { PANEL_URLS, API_SERVICE_URLS } from './config/urls';
 
 const isCI = !!process.env.CI;
 const headless = process.env.HEADLESS !== 'false';
@@ -53,6 +53,21 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: PANEL_URLS['new-admin'], storageState: STORAGE_STATE_PATH['new-admin'] },
       dependencies: ['auth-setup'],
       testMatch: /tests\/new-admin\/.*\.spec\.ts/,
+    },
+    {
+      name: 'api-backend',
+      use: { baseURL: API_SERVICE_URLS['api-backend'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      testMatch: /tests\/api\/backend\/.*\.spec\.ts/,
+    },
+    {
+      name: 'api-emi',
+      use: { baseURL: API_SERVICE_URLS['api-emi'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      testMatch: /tests\/api\/emi\/.*\.spec\.ts/,
+    },
+    {
+      name: 'api-lgd',
+      use: { baseURL: API_SERVICE_URLS['api-lgd'], extraHTTPHeaders: { 'Content-Type': 'application/json' } },
+      testMatch: /tests\/api\/lgd\/.*\.spec\.ts/,
     },
   ],
 });
