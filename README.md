@@ -188,8 +188,41 @@ test('creates a loan @regression @api', async ({ authedRequest }) => {
 
 ## Test conventions
 
-- Tags: `@smoke`, `@regression`, `@admin`, `@customer`, `@business`, `@new-admin`.
-- File naming: `<feature>.spec.ts` under `tests/<panel>/`.
+### Tags
+
+Every test should carry at least one suite tag and one scope tag.
+
+| Tag | Meaning | Example |
+|---|---|---|
+| `@smoke` | Fast, critical-path — runs on every deploy | `tests/admin/login.spec.ts` |
+| `@regression` | Deeper scenarios — runs before releases | `tests/admin/regression.spec.ts` |
+| `@admin` | Admin panel scope | `admin navigation @regression @admin` |
+| `@customer` | Customer panel scope | `customer profile @regression @customer` |
+| `@business` | Agent/DSA panel scope | `business agent workflow @regression @business` |
+| `@new-admin` | New admin panel scope | `new-admin settings @regression @new-admin` |
+| `@api` | Backend HTTP test (no browser) | `backend users API @regression @api` |
+| `@users`, `@loans`, `@emi`, `@lgd` | Optional feature-area filters | `@regression @api @loans` |
+
+Tags live in the `test.describe` title and can be combined: `'backend users API @regression @api @users'`.
+
+Filter by tag on the CLI or via the runner API:
+```bash
+npm run test:smoke                            # all @smoke
+npm run test:regression                       # all @regression
+npx playwright test --grep @admin             # only admin panel
+npx playwright test --grep "@regression.*@api" # API regression only
+npx playwright test --grep-invert @flaky      # exclude flakies
+```
+
+### Sample specs per tag
+
+- `@smoke` → `tests/<panel>/login.spec.ts`, `tests/api/<service>/health.spec.ts`
+- `@regression` → `tests/<panel>/regression.spec.ts`, `tests/api/<service>/regression.spec.ts`
+- `@api` (authenticated) → `tests/api/backend/auth.spec.ts`, `tests/api/backend/regression.spec.ts`
+
+### Structure
+
+- File naming: `<feature>.spec.ts` under `tests/<panel>/` or `tests/api/<service>/`.
 - Page Objects: `pages/<panel>/<feature>.page.ts`, extend `BasePage`, no assertions inside.
-- Fixtures: extend `fixtures/base.fixture.ts`; add new POMs there.
-- Auth: per-panel storage state auto-loaded via `playwright.config.ts`. Setup script runs as `auth-setup` project and is a dependency of every panel project.
+- Fixtures: extend `fixtures/base.fixture.ts` for UI, `fixtures/api.fixture.ts` for API (use `authedRequest` for auth-required calls).
+- Auth: per-panel storage state auto-loaded via `playwright.config.ts`. Setup script runs as `auth-setup` project and is a dependency of every UI panel project. API projects skip `auth-setup` and obtain bearer tokens per-test via `authedRequest`.
