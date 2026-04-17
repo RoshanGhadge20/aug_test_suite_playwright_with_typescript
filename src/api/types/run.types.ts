@@ -1,0 +1,26 @@
+export type RunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'cancelled';
+
+export type Panel = 'admin' | 'customer' | 'business' | 'new-admin';
+
+export interface RunRequest {
+  projects?: Panel[];
+  grep?: string;
+  grepInvert?: string;
+  specFiles?: string[];
+  env?: 'dev' | 'staging' | 'production';
+  workers?: number;
+  retries?: number;
+  headed?: boolean;
+}
+
+export interface RunRecord {
+  id: string;
+  status: RunStatus;
+  request: RunRequest;
+  startedAt: string;
+  finishedAt?: string;
+  exitCode?: number;
+  stdoutTail?: string;
+  stderrTail?: string;
+  artifactDir: string;
+}
