@@ -10,7 +10,6 @@ import type { TargetEnv } from './types/run.types';
 export interface ServerConfig {
   apiKey: string;
   defaultEnv: TargetEnv;
-  allowProductionRuns: boolean;
   maxConcurrentRuns?: number;
 }
 
@@ -25,7 +24,6 @@ export function createServer(config: ServerConfig): { app: Express; runManager: 
     runManager,
     executePlaywright,
     defaultEnv: config.defaultEnv,
-    allowProductionRuns: config.allowProductionRuns,
   }));
   app.use(errorMiddleware);
 

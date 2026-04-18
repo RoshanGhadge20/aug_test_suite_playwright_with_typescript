@@ -6,13 +6,14 @@ describe('RunRequestSchema', () => {
     expect(RunRequestSchema.parse({})).toEqual({});
   });
 
-  it('accepts test/uat/production env values', () => {
-    for (const e of ['test', 'uat', 'production'] as const) {
+  it('accepts test/uat env values', () => {
+    for (const e of ['test', 'uat'] as const) {
       expect(RunRequestSchema.parse({ env: e }).env).toBe(e);
     }
   });
 
-  it('rejects legacy dev/staging env values', () => {
+  it('rejects production / dev / staging env values', () => {
+    expect(() => RunRequestSchema.parse({ env: 'production' })).toThrow();
     expect(() => RunRequestSchema.parse({ env: 'dev' })).toThrow();
     expect(() => RunRequestSchema.parse({ env: 'staging' })).toThrow();
   });

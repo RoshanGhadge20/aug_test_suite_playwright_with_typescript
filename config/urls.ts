@@ -12,7 +12,7 @@ interface EnvBundle {
   apiCreds: Record<ApiService, Credential>;
 }
 
-function buildBundle(prefix: 'TEST' | 'UAT' | 'PRODUCTION'): EnvBundle {
+function buildBundle(prefix: 'TEST' | 'UAT'): EnvBundle {
   const e = env as unknown as Record<string, string>;
   return {
     panels: {
@@ -43,7 +43,6 @@ function buildBundle(prefix: 'TEST' | 'UAT' | 'PRODUCTION'): EnvBundle {
 const BUNDLES: Record<EnvName, EnvBundle> = {
   test: buildBundle('TEST'),
   uat: buildBundle('UAT'),
-  production: buildBundle('PRODUCTION'),
 };
 
 export function panelUrl(panel: Panel, envName: EnvName = getTargetEnv()): string {

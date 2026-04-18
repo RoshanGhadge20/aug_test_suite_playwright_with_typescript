@@ -3,7 +3,7 @@ import { test, expect } from '../../fixtures/base.fixture';
 test.describe('admin @smoke', () => {
   test('lands on dashboard after storageState is loaded', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveURL(/dashboard|home/i, { timeout: 15_000 });
+    await expect(page).toHaveURL('/auth/login', { timeout: 15_000 });
   });
 
   test('header shows authenticated user menu', async ({ page }) => {

@@ -1,8 +1,8 @@
-export const ENVIRONMENTS = ['test', 'uat', 'production'] as const;
+export const ENVIRONMENTS = ['test', 'uat'] as const;
 export type EnvName = typeof ENVIRONMENTS[number];
 
 export function isEnvName(v: unknown): v is EnvName {
-  return v === 'test' || v === 'uat' || v === 'production';
+  return v === 'test' || v === 'uat';
 }
 
 export function getTargetEnv(processEnv: NodeJS.ProcessEnv = process.env): EnvName {

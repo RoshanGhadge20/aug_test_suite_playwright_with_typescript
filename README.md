@@ -39,7 +39,7 @@ Request body (all fields optional):
 
 | Field        | Type       | Description                                        |
 |--------------|------------|----------------------------------------------------|
-| `env`        | string     | `test` \| `uat` \| `production` (defaults to `DEFAULT_ENV` on server) |
+| `env`        | string     | `test` \| `uat` (defaults to `DEFAULT_ENV` on server) |
 | `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin`, `api-backend`, `api-emi`, `api-lgd` |
 | `grep`       | string     | Tag/pattern, e.g. `@smoke`                         |
 | `grepInvert` | string     | Exclusion pattern                                  |
@@ -60,7 +60,6 @@ Responses:
 - `202` → run accepted, body is `RunRecord` with `id` and `status: "queued"`
 - `400` → validation failure (zod issue list)
 - `401` → missing/invalid API key
-- `403` → `env: "production"` requested but `ALLOW_PRODUCTION_RUNS=false` on the server
 - `429` → concurrency limit reached
 
 ### GET /api/runs
@@ -81,9 +80,7 @@ Returns the Playwright HTML report for that run (only once run has finished writ
 
 ## Environments
 
-Three target environments are supported: `test`, `uat`, `production`. All three URL sets + credentials are loaded from `.env` at server boot (keys are prefixed `TEST_`, `UAT_`, `PRODUCTION_`). Each `POST /api/runs` picks which env to run against via the `env` parameter; if omitted, `DEFAULT_ENV` is used.
-
-**Production safety:** requests with `env: "production"` are refused with `403 production_runs_disabled` unless the server was started with `ALLOW_PRODUCTION_RUNS=true`. This is a blast-radius safeguard — leave it off by default and flip it only for release smoke.
+Two target environments are supported: `test` and `uat`. Both URL sets + credentials are loaded from `.env` at server boot (keys are prefixed `TEST_` and `UAT_`). Each `POST /api/runs` picks which env to run against via the `env` parameter; if omitted, `DEFAULT_ENV` is used.
 
 Examples:
 
@@ -97,11 +94,6 @@ curl -X POST http://<host>:3000/api/runs \
 curl -X POST http://<host>:3000/api/runs \
   -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
   -d '{"env":"test","projects":["admin","api-backend"],"grep":"@regression"}'
-
-# Production smoke (requires ALLOW_PRODUCTION_RUNS=true on server)
-curl -X POST http://<host>:3000/api/runs \
-  -H "X-API-Key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"env":"production","projects":["api-backend"],"grep":"@smoke"}'
 ```
 
 Storage state for UI auth is namespaced per env: `storage/<env>/<panel>.json`. The `auth-setup` project re-logs-in for each env the first time it's used and reuses cached state on subsequent runs.

@@ -5,7 +5,7 @@ export const RunRequestSchema = z.object({
     'admin', 'customer', 'business', 'new-admin',
     'api-backend', 'api-emi', 'api-lgd',
   ])).optional(),
-  env: z.enum(['test', 'uat', 'production']).optional(),
+  env: z.enum(['test', 'uat']).optional(),
   grep: z.string().min(1).max(200).optional(),
   grepInvert: z.string().min(1).max(200).optional(),
   specFiles: z.array(z.string().min(1).max(500)).max(50).optional(),

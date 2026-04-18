@@ -5,7 +5,6 @@ import { logger } from '../../utils/logger/logger';
 const { app } = createServer({
   apiKey: env.API_KEY,
   defaultEnv: env.DEFAULT_ENV,
-  allowProductionRuns: env.ALLOW_PRODUCTION_RUNS,
   maxConcurrentRuns: 2,
 });
 
@@ -13,7 +12,6 @@ const server = app.listen(env.API_PORT, () => {
   logger.info('api listening', {
     port: env.API_PORT,
     defaultEnv: env.DEFAULT_ENV,
-    allowProductionRuns: env.ALLOW_PRODUCTION_RUNS,
   });
 });
 

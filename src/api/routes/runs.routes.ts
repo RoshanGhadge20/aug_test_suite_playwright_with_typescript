@@ -13,25 +13,16 @@ export interface RunsRouterDeps {
   runManager: RunManager;
   executePlaywright: ExecuteFn;
   defaultEnv: TargetEnv;
-  allowProductionRuns: boolean;
 }
 
 export function createRunsRouter(deps: RunsRouterDeps): Router {
   const router = Router();
-  const { runManager, executePlaywright, defaultEnv, allowProductionRuns } = deps;
+  const { runManager, executePlaywright, defaultEnv } = deps;
 
   router.post('/runs', (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = RunRequestSchema.parse(req.body ?? {});
       const resolvedEnv: TargetEnv = parsed.env ?? defaultEnv;
-
-      if (resolvedEnv === 'production' && !allowProductionRuns) {
-        res.status(403).json({
-          error: 'production_runs_disabled',
-          hint: 'Set ALLOW_PRODUCTION_RUNS=true on the server to enable.',
-        });
-        return;
-      }
 
       if (!runManager.canStartAnother()) {
         res.status(429).json({ error: 'concurrency_limit_reached' });

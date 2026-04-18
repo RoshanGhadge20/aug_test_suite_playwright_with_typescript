@@ -23,9 +23,7 @@ function buildEnvBlock(prefix: string): Record<string, string> {
 const valid = {
   ...buildEnvBlock('TEST'),
   ...buildEnvBlock('UAT'),
-  ...buildEnvBlock('PRODUCTION'),
   DEFAULT_ENV: 'test',
-  ALLOW_PRODUCTION_RUNS: 'false',
   HEADLESS: 'true',
   API_PORT: '3000',
   API_KEY: 'secretXYZ',
@@ -33,27 +31,24 @@ const valid = {
 };
 
 describe('loadEnv (multi-env)', () => {
-  it('parses all three environment blocks', () => {
+  it('parses both environment blocks', () => {
     const cfg = loadEnv(valid);
     expect(cfg.TEST_BASE_URL_ADMIN).toBe('http://test-admin');
     expect(cfg.UAT_BASE_URL_ADMIN).toBe('http://uat-admin');
-    expect(cfg.PRODUCTION_BASE_URL_ADMIN).toBe('http://production-admin');
     expect(cfg.DEFAULT_ENV).toBe('test');
-    expect(cfg.ALLOW_PRODUCTION_RUNS).toBe(false);
   });
 
   it('rejects invalid DEFAULT_ENV', () => {
     expect(() => loadEnv({ ...valid, DEFAULT_ENV: 'mars' })).toThrow();
   });
 
+  it('rejects production as DEFAULT_ENV', () => {
+    expect(() => loadEnv({ ...valid, DEFAULT_ENV: 'production' })).toThrow();
+  });
+
   it('fails when a UAT url is missing', () => {
     const missing = { ...valid } as Record<string, string>;
     delete missing.UAT_BASE_URL_ADMIN;
     expect(() => loadEnv(missing)).toThrow(/UAT_BASE_URL_ADMIN/);
-  });
-
-  it('coerces ALLOW_PRODUCTION_RUNS=true', () => {
-    const cfg = loadEnv({ ...valid, ALLOW_PRODUCTION_RUNS: 'true' });
-    expect(cfg.ALLOW_PRODUCTION_RUNS).toBe(true);
   });
 });

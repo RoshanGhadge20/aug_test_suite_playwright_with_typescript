@@ -14,9 +14,8 @@ function setEnv(prefix: string) {
 }
 
 beforeAll(() => {
-  setEnv('TEST'); setEnv('UAT'); setEnv('PRODUCTION');
+  setEnv('TEST'); setEnv('UAT');
   process.env.DEFAULT_ENV = 'test';
-  process.env.ALLOW_PRODUCTION_RUNS = 'false';
   process.env.API_KEY = 'secretXYZ';
 });
 
@@ -35,12 +34,11 @@ describe('urls (env-aware)', () => {
   it('panelUrl switches on explicit env param', async () => {
     const mod = await import('../../config/urls');
     expect(mod.panelUrl('admin', 'uat')).toBe('http://uat-base_url_admin');
-    expect(mod.panelUrl('admin', 'production')).toBe('http://production-base_url_admin');
   });
 
   it('apiAuthConfig returns env-specific credentials', async () => {
     const mod = await import('../../config/urls');
     expect(mod.apiAuthConfig('api-backend', 'uat').email).toBe('uat-backend@x');
-    expect(mod.apiAuthConfig('api-backend', 'production').email).toBe('production-backend@x');
+    expect(mod.apiAuthConfig('api-backend', 'test').email).toBe('test-backend@x');
   });
 });

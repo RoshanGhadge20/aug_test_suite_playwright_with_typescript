@@ -52,30 +52,7 @@ const envSchema = z.object({
   UAT_LGD_USER_EMAIL: nonEmpty,
   UAT_LGD_USER_PASSWORD: nonEmpty,
 
-  PRODUCTION_BASE_URL_ADMIN: url,
-  PRODUCTION_BASE_URL_CUSTOMER: url,
-  PRODUCTION_BASE_URL_BUSINESS: url,
-  PRODUCTION_BASE_URL_NEW_ADMIN: url,
-  PRODUCTION_BASE_URL_BACKEND: url,
-  PRODUCTION_BASE_URL_EMI: url,
-  PRODUCTION_BASE_URL_LGD: url,
-  PRODUCTION_ADMIN_USER_EMAIL: nonEmpty,
-  PRODUCTION_ADMIN_USER_PASSWORD: nonEmpty,
-  PRODUCTION_CUSTOMER_USER_EMAIL: nonEmpty,
-  PRODUCTION_CUSTOMER_USER_PASSWORD: nonEmpty,
-  PRODUCTION_BUSINESS_USER_EMAIL: nonEmpty,
-  PRODUCTION_BUSINESS_USER_PASSWORD: nonEmpty,
-  PRODUCTION_NEW_ADMIN_USER_EMAIL: nonEmpty,
-  PRODUCTION_NEW_ADMIN_USER_PASSWORD: nonEmpty,
-  PRODUCTION_BACKEND_USER_EMAIL: nonEmpty,
-  PRODUCTION_BACKEND_USER_PASSWORD: nonEmpty,
-  PRODUCTION_EMI_USER_EMAIL: nonEmpty,
-  PRODUCTION_EMI_USER_PASSWORD: nonEmpty,
-  PRODUCTION_LGD_USER_EMAIL: nonEmpty,
-  PRODUCTION_LGD_USER_PASSWORD: nonEmpty,
-
   DEFAULT_ENV: z.enum(ENVIRONMENTS).default('test'),
-  ALLOW_PRODUCTION_RUNS: z.string().default('false').transform((v) => v === 'true'),
   HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
@@ -108,10 +85,8 @@ type EnvBlockKeys<Prefix extends string> =
 
 export type AppEnv = Record<EnvBlockKeys<'TEST'>, string>
   & Record<EnvBlockKeys<'UAT'>, string>
-  & Record<EnvBlockKeys<'PRODUCTION'>, string>
   & {
     DEFAULT_ENV: EnvName;
-    ALLOW_PRODUCTION_RUNS: boolean;
     HEADLESS: boolean;
     API_PORT: number;
     API_KEY: string;

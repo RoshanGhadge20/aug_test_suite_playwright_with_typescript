@@ -6,7 +6,7 @@ import { RunManager } from '../../src/api/services/run-manager.service';
 import { errorMiddleware } from '../../src/api/middleware/error.middleware';
 import type { TargetEnv } from '../../src/api/types/run.types';
 
-const makeApp = (opts: { mgr?: RunManager; exec?: () => Promise<number>; allowProd?: boolean; defaultEnv?: TargetEnv } = {}) => {
+const makeApp = (opts: { mgr?: RunManager; exec?: () => Promise<number>; defaultEnv?: TargetEnv } = {}) => {
   const mgr = opts.mgr ?? new RunManager();
   const exec = opts.exec ?? (async () => 0);
   const app = express();
@@ -15,7 +15,6 @@ const makeApp = (opts: { mgr?: RunManager; exec?: () => Promise<number>; allowPr
     runManager: mgr,
     executePlaywright: exec,
     defaultEnv: opts.defaultEnv ?? 'test',
-    allowProductionRuns: opts.allowProd ?? false,
   }));
   app.use(errorMiddleware);
   return { app, mgr };
@@ -36,21 +35,13 @@ describe('runs routes', () => {
     expect(res.body.resolvedEnv).toBe('uat');
   });
 
-  it('POST /api/runs blocks production when gate is off', async () => {
-    const { app } = makeApp({ allowProd: false });
+  it('POST /api/runs rejects production env value', async () => {
+    const { app } = makeApp();
     const res = await request(app).post('/api/runs').send({ env: 'production' });
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe('production_runs_disabled');
+    expect(res.status).toBe(400);
   });
 
-  it('POST /api/runs allows production when gate is on', async () => {
-    const { app } = makeApp({ allowProd: true });
-    const res = await request(app).post('/api/runs').send({ env: 'production' });
-    expect(res.status).toBe(202);
-    expect(res.body.resolvedEnv).toBe('production');
-  });
-
-  it('POST /api/runs rejects invalid env value', async () => {
+  it('POST /api/runs rejects other invalid env values', async () => {
     const { app } = makeApp();
     const res = await request(app).post('/api/runs').send({ env: 'staging' });
     expect(res.status).toBe(400);
