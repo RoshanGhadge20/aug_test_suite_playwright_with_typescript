@@ -1,7 +1,7 @@
 export type RunStatus = 'queued' | 'running' | 'passed' | 'failed' | 'error' | 'cancelled';
 
 export type UiPanel = 'admin' | 'customer' | 'business' | 'new-admin';
-export type ApiService = 'api-backend' | 'api-emi' | 'api-lgd';
+export type ApiService = 'api-backend' | 'api-emi';
 export type ProjectId = UiPanel | ApiService;
 
 export type TargetEnv = 'test' | 'uat';

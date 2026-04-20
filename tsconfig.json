@@ -12,13 +12,12 @@
     "resolveJsonModule": true,
     "declaration": false,
     "sourceMap": true,
-    "baseUrl": ".",
     "paths": {
-      "@config/*": ["config/*"],
-      "@pages/*": ["pages/*"],
-      "@fixtures/*": ["fixtures/*"],
-      "@utils/*": ["utils/*"],
-      "@api/*": ["src/api/*"]
+      "@config/*": ["./config/*"],
+      "@pages/*": ["./pages/*"],
+      "@fixtures/*": ["./fixtures/*"],
+      "@utils/*": ["./utils/*"],
+      "@api/*": ["./src/api/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*", "pages/**/*", "fixtures/**/*", "setup/**/*", "config/**/*", "utils/**/*", "test/**/*", "playwright.config.ts", "vitest.config.ts"],

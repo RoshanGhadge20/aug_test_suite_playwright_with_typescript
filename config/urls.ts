@@ -30,12 +30,10 @@ function buildBundle(prefix: 'TEST' | 'UAT'): EnvBundle {
     apis: {
       'api-backend': e[`${prefix}_BASE_URL_BACKEND`],
       'api-emi': e[`${prefix}_BASE_URL_EMI`],
-      'api-lgd': e[`${prefix}_BASE_URL_LGD`],
     },
     apiCreds: {
       'api-backend': { email: e[`${prefix}_BACKEND_USER_EMAIL`], password: e[`${prefix}_BACKEND_USER_PASSWORD`] },
       'api-emi': { email: e[`${prefix}_EMI_USER_EMAIL`], password: e[`${prefix}_EMI_USER_PASSWORD`] },
-      'api-lgd': { email: e[`${prefix}_LGD_USER_EMAIL`], password: e[`${prefix}_LGD_USER_PASSWORD`] },
     },
   };
 }

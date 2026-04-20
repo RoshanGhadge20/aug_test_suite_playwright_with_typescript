@@ -12,7 +12,7 @@ type ApiFixtures = {
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 function detectApiService(projectName: string | undefined): ApiService {
-  if (projectName === 'api-backend' || projectName === 'api-emi' || projectName === 'api-lgd') return projectName;
+  if (projectName === 'api-backend' || projectName === 'api-emi') return projectName;
   throw new Error(`api fixture used in non-api project: ${projectName ?? '<unknown>'}`);
 }
 

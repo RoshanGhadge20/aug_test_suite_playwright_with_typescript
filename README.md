@@ -40,7 +40,7 @@ Request body (all fields optional):
 | Field        | Type       | Description                                        |
 |--------------|------------|----------------------------------------------------|
 | `env`        | string     | `test` \| `uat` (defaults to `DEFAULT_ENV` on server) |
-| `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin`, `api-backend`, `api-emi`, `api-lgd` |
+| `projects`   | string[]   | Subset of `admin`, `customer`, `business`, `new-admin`, `api-backend`, `api-emi` |
 | `grep`       | string     | Tag/pattern, e.g. `@smoke`                         |
 | `grepInvert` | string     | Exclusion pattern                                  |
 | `specFiles`  | string[]   | Relative paths, e.g. `tests/admin/login.spec.ts`   |
@@ -148,16 +148,14 @@ Backend HTTP tests live under `tests/api/<service>/` and run via dedicated Playw
 
 - `api-backend` → `gold-loan-backend-two` (URL: `<ENV>_BASE_URL_BACKEND`)
 - `api-emi` → `emi-backend` (URL: `<ENV>_BASE_URL_EMI`)
-- `api-lgd` → `LGD-backend` (URL: `<ENV>_BASE_URL_LGD`)
 
 These projects use Playwright's `request` fixture — no browser is launched, so they're fast and headless by nature. They do not depend on `auth-setup`; each auth-required test uses the `authedRequest` fixture from `fixtures/api.fixture.ts`, which calls the service's `/api/v1/auth/login`, caches the bearer token for 5 minutes per worker, and injects it as `Authorization: Bearer <token>`.
 
 Commands:
 ```bash
-npm run test:api                # all 3 services
+npm run test:api                # both services
 npm run test:api:backend        # only gold-loan-backend-two
 npm run test:api:emi
-npm run test:api:lgd
 ```
 
 Via the runner API — trigger a mixed UI + API smoke:
@@ -193,7 +191,7 @@ Every test should carry at least one suite tag and one scope tag.
 | `@business` | Agent/DSA panel scope | `business agent workflow @regression @business` |
 | `@new-admin` | New admin panel scope | `new-admin settings @regression @new-admin` |
 | `@api` | Backend HTTP test (no browser) | `backend users API @regression @api` |
-| `@users`, `@loans`, `@emi`, `@lgd` | Optional feature-area filters | `@regression @api @loans` |
+| `@users`, `@loans`, `@emi` | Optional feature-area filters | `@regression @api @loans` |
 
 Tags live in the `test.describe` title and can be combined: `'backend users API @regression @api @users'`.
 

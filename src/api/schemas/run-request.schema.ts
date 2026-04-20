@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const RunRequestSchema = z.object({
   projects: z.array(z.enum([
     'admin', 'customer', 'business', 'new-admin',
-    'api-backend', 'api-emi', 'api-lgd',
+    'api-backend', 'api-emi',
   ])).optional(),
   env: z.enum(['test', 'uat']).optional(),
   grep: z.string().min(1).max(200).optional(),

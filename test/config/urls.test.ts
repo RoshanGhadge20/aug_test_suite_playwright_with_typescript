@@ -5,9 +5,9 @@ const ORIGINAL_ENV = { ...process.env };
 function setEnv(prefix: string) {
   for (const key of [
     'BASE_URL_ADMIN', 'BASE_URL_CUSTOMER', 'BASE_URL_BUSINESS', 'BASE_URL_NEW_ADMIN',
-    'BASE_URL_BACKEND', 'BASE_URL_EMI', 'BASE_URL_LGD',
+    'BASE_URL_BACKEND', 'BASE_URL_EMI',
   ]) process.env[`${prefix}_${key}`] = `http://${prefix.toLowerCase()}-${key.toLowerCase()}`;
-  for (const who of ['ADMIN', 'CUSTOMER', 'BUSINESS', 'NEW_ADMIN', 'BACKEND', 'EMI', 'LGD']) {
+  for (const who of ['ADMIN', 'CUSTOMER', 'BUSINESS', 'NEW_ADMIN', 'BACKEND', 'EMI']) {
     process.env[`${prefix}_${who}_USER_EMAIL`] = `${prefix.toLowerCase()}-${who.toLowerCase()}@x`;
     process.env[`${prefix}_${who}_USER_PASSWORD`] = 'p';
   }

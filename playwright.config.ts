@@ -79,10 +79,5 @@ export default defineConfig({
       use: { baseURL: apiUrl('api-emi', targetEnv), extraHTTPHeaders: { 'Content-Type': 'application/json' } },
       testMatch: /tests\/api\/emi\/.*\.spec\.ts/,
     },
-    {
-      name: 'api-lgd',
-      use: { baseURL: apiUrl('api-lgd', targetEnv), extraHTTPHeaders: { 'Content-Type': 'application/json' } },
-      testMatch: /tests\/api\/lgd\/.*\.spec\.ts/,
-    },
   ],
 });

@@ -19,8 +19,12 @@ describe('RunRequestSchema', () => {
   });
 
   it('accepts api service projects', () => {
-    const p = RunRequestSchema.parse({ projects: ['api-backend', 'api-emi', 'api-lgd'] });
-    expect(p.projects).toEqual(['api-backend', 'api-emi', 'api-lgd']);
+    const p = RunRequestSchema.parse({ projects: ['api-backend', 'api-emi'] });
+    expect(p.projects).toEqual(['api-backend', 'api-emi']);
+  });
+
+  it('rejects api-lgd project (removed)', () => {
+    expect(() => RunRequestSchema.parse({ projects: ['api-lgd'] })).toThrow();
   });
 
   it('accepts mixed projects + env', () => {

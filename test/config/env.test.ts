@@ -9,14 +9,12 @@ function buildEnvBlock(prefix: string): Record<string, string> {
     [`${prefix}_BASE_URL_NEW_ADMIN`]: `http://${prefix.toLowerCase()}-nad`,
     [`${prefix}_BASE_URL_BACKEND`]: `http://${prefix.toLowerCase()}-back`,
     [`${prefix}_BASE_URL_EMI`]: `http://${prefix.toLowerCase()}-emi`,
-    [`${prefix}_BASE_URL_LGD`]: `http://${prefix.toLowerCase()}-lgd`,
     [`${prefix}_ADMIN_USER_EMAIL`]: 'a@x', [`${prefix}_ADMIN_USER_PASSWORD`]: 'p',
     [`${prefix}_CUSTOMER_USER_EMAIL`]: 'c@x', [`${prefix}_CUSTOMER_USER_PASSWORD`]: 'p',
     [`${prefix}_BUSINESS_USER_EMAIL`]: 'b@x', [`${prefix}_BUSINESS_USER_PASSWORD`]: 'p',
     [`${prefix}_NEW_ADMIN_USER_EMAIL`]: 'n@x', [`${prefix}_NEW_ADMIN_USER_PASSWORD`]: 'p',
     [`${prefix}_BACKEND_USER_EMAIL`]: 'bk@x', [`${prefix}_BACKEND_USER_PASSWORD`]: 'p',
     [`${prefix}_EMI_USER_EMAIL`]: 'em@x', [`${prefix}_EMI_USER_PASSWORD`]: 'p',
-    [`${prefix}_LGD_USER_EMAIL`]: 'lg@x', [`${prefix}_LGD_USER_PASSWORD`]: 'p',
   };
 }
 
