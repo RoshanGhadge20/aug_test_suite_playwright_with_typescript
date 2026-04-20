@@ -14,18 +14,18 @@ const envSchema = z.object({
   TEST_BASE_URL_NEW_ADMIN: url,
   TEST_BASE_URL_BACKEND: url,
   TEST_BASE_URL_EMI: url,
-  TEST_ADMIN_USER_EMAIL: nonEmpty,
-  TEST_ADMIN_USER_PASSWORD: nonEmpty,
-  TEST_CUSTOMER_USER_EMAIL: nonEmpty,
-  TEST_CUSTOMER_USER_PASSWORD: nonEmpty,
-  TEST_BUSINESS_USER_EMAIL: nonEmpty,
-  TEST_BUSINESS_USER_PASSWORD: nonEmpty,
-  TEST_NEW_ADMIN_USER_EMAIL: nonEmpty,
-  TEST_NEW_ADMIN_USER_PASSWORD: nonEmpty,
-  TEST_BACKEND_USER_EMAIL: nonEmpty,
-  TEST_BACKEND_USER_PASSWORD: nonEmpty,
-  TEST_EMI_USER_EMAIL: nonEmpty,
-  TEST_EMI_USER_PASSWORD: nonEmpty,
+  TEST_ADMIN_USER_MOBILE: nonEmpty,
+  TEST_ADMIN_USER_OTP: nonEmpty,
+  TEST_CUSTOMER_USER_MOBILE: nonEmpty,
+  TEST_CUSTOMER_USER_OTP: nonEmpty,
+  TEST_BUSINESS_USER_MOBILE: nonEmpty,
+  TEST_BUSINESS_USER_OTP: nonEmpty,
+  TEST_NEW_ADMIN_USER_MOBILE: nonEmpty,
+  TEST_NEW_ADMIN_USER_OTP: nonEmpty,
+  TEST_BACKEND_USER_MOBILE: nonEmpty,
+  TEST_BACKEND_USER_OTP: nonEmpty,
+  TEST_EMI_USER_MOBILE: nonEmpty,
+  TEST_EMI_USER_OTP: nonEmpty,
 
   UAT_BASE_URL_ADMIN: url,
   UAT_BASE_URL_CUSTOMER: url,
@@ -33,18 +33,18 @@ const envSchema = z.object({
   UAT_BASE_URL_NEW_ADMIN: url,
   UAT_BASE_URL_BACKEND: url,
   UAT_BASE_URL_EMI: url,
-  UAT_ADMIN_USER_EMAIL: nonEmpty,
-  UAT_ADMIN_USER_PASSWORD: nonEmpty,
-  UAT_CUSTOMER_USER_EMAIL: nonEmpty,
-  UAT_CUSTOMER_USER_PASSWORD: nonEmpty,
-  UAT_BUSINESS_USER_EMAIL: nonEmpty,
-  UAT_BUSINESS_USER_PASSWORD: nonEmpty,
-  UAT_NEW_ADMIN_USER_EMAIL: nonEmpty,
-  UAT_NEW_ADMIN_USER_PASSWORD: nonEmpty,
-  UAT_BACKEND_USER_EMAIL: nonEmpty,
-  UAT_BACKEND_USER_PASSWORD: nonEmpty,
-  UAT_EMI_USER_EMAIL: nonEmpty,
-  UAT_EMI_USER_PASSWORD: nonEmpty,
+  UAT_ADMIN_USER_MOBILE: nonEmpty,
+  UAT_ADMIN_USER_OTP: nonEmpty,
+  UAT_CUSTOMER_USER_MOBILE: nonEmpty,
+  UAT_CUSTOMER_USER_OTP: nonEmpty,
+  UAT_BUSINESS_USER_MOBILE: nonEmpty,
+  UAT_BUSINESS_USER_OTP: nonEmpty,
+  UAT_NEW_ADMIN_USER_MOBILE: nonEmpty,
+  UAT_NEW_ADMIN_USER_OTP: nonEmpty,
+  UAT_BACKEND_USER_MOBILE: nonEmpty,
+  UAT_BACKEND_USER_OTP: nonEmpty,
+  UAT_EMI_USER_MOBILE: nonEmpty,
+  UAT_EMI_USER_OTP: nonEmpty,
 
   DEFAULT_ENV: z.enum(ENVIRONMENTS).default('test'),
   HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
@@ -61,18 +61,18 @@ type EnvBlockKeys<Prefix extends string> =
   | `${Prefix}_BASE_URL_NEW_ADMIN`
   | `${Prefix}_BASE_URL_BACKEND`
   | `${Prefix}_BASE_URL_EMI`
-  | `${Prefix}_ADMIN_USER_EMAIL`
-  | `${Prefix}_ADMIN_USER_PASSWORD`
-  | `${Prefix}_CUSTOMER_USER_EMAIL`
-  | `${Prefix}_CUSTOMER_USER_PASSWORD`
-  | `${Prefix}_BUSINESS_USER_EMAIL`
-  | `${Prefix}_BUSINESS_USER_PASSWORD`
-  | `${Prefix}_NEW_ADMIN_USER_EMAIL`
-  | `${Prefix}_NEW_ADMIN_USER_PASSWORD`
-  | `${Prefix}_BACKEND_USER_EMAIL`
-  | `${Prefix}_BACKEND_USER_PASSWORD`
-  | `${Prefix}_EMI_USER_EMAIL`
-  | `${Prefix}_EMI_USER_PASSWORD`;
+  | `${Prefix}_ADMIN_USER_MOBILE`
+  | `${Prefix}_ADMIN_USER_OTP`
+  | `${Prefix}_CUSTOMER_USER_MOBILE`
+  | `${Prefix}_CUSTOMER_USER_OTP`
+  | `${Prefix}_BUSINESS_USER_MOBILE`
+  | `${Prefix}_BUSINESS_USER_OTP`
+  | `${Prefix}_NEW_ADMIN_USER_MOBILE`
+  | `${Prefix}_NEW_ADMIN_USER_OTP`
+  | `${Prefix}_BACKEND_USER_MOBILE`
+  | `${Prefix}_BACKEND_USER_OTP`
+  | `${Prefix}_EMI_USER_MOBILE`
+  | `${Prefix}_EMI_USER_OTP`;
 
 export type AppEnv = Record<EnvBlockKeys<'TEST'>, string>
   & Record<EnvBlockKeys<'UAT'>, string>

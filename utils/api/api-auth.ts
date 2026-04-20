@@ -37,19 +37,24 @@ export const globalTokenCache = new TokenCache();
 
 export interface FetchTokenArgs {
   request: APIRequestContext;
-  loginPath: string;
-  email: string;
-  password: string;
+  sendOtpPath: string;
+  verifyOtpPath: string;
+  mobile: string;
+  otp: string;
   tokenJsonPath: string;
 }
 
 export async function fetchBearerToken(args: FetchTokenArgs): Promise<string> {
-  const res = await args.request.post(args.loginPath, {
-    data: { email: args.email, password: args.password },
-  });
-  if (!res.ok()) {
-    throw new Error(`login ${args.loginPath} failed: ${res.status()} ${await res.text()}`);
+  const sendRes = await args.request.post(args.sendOtpPath, { data: { mobile: args.mobile } });
+  if (!sendRes.ok()) {
+    throw new Error(`send-otp ${args.sendOtpPath} failed: ${sendRes.status()} ${await sendRes.text()}`);
   }
-  const body = await res.json();
+  const verifyRes = await args.request.post(args.verifyOtpPath, {
+    data: { mobile: args.mobile, otp: args.otp },
+  });
+  if (!verifyRes.ok()) {
+    throw new Error(`verify-otp ${args.verifyOtpPath} failed: ${verifyRes.status()} ${await verifyRes.text()}`);
+  }
+  const body = await verifyRes.json();
   return extractToken(body, args.tokenJsonPath);
 }

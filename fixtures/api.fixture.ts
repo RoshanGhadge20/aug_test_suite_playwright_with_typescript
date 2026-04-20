@@ -26,12 +26,13 @@ export const apiTest = base.extend<ApiFixtures>({
     const auth = apiAuthConfig(apiService, envName);
     const loginCtx = await pwRequest.newContext({ baseURL });
     const token = await globalTokenCache.get(
-      `${envName}:${apiService}:${auth.email}`,
+      `${envName}:${apiService}:${auth.mobile}`,
       () => fetchBearerToken({
         request: loginCtx,
-        loginPath: auth.loginPath,
-        email: auth.email,
-        password: auth.password,
+        sendOtpPath: auth.sendOtpPath,
+        verifyOtpPath: auth.verifyOtpPath,
+        mobile: auth.mobile,
+        otp: auth.otp,
         tokenJsonPath: auth.tokenJsonPath,
       }),
       FIVE_MINUTES,

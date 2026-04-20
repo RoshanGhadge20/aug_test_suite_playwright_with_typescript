@@ -4,19 +4,23 @@ import { BasePage } from '../shared/base.page';
 export class AdminLoginPage extends BasePage {
   constructor(page: Page) { super(page); }
 
-  private readonly emailInput = () => this.page.getByLabel(/email/i);
-  private readonly passwordInput = () => this.page.getByLabel(/password/i);
-  private readonly submitButton = () => this.page.getByRole('button', { name: /log ?in|sign ?in/i });
+  private readonly mobileInput = () => this.page.getByLabel(/mobile|phone/i);
+  private readonly sendOtpButton = () => this.page.getByRole('button', { name: /send otp|get otp|continue|next/i });
+  private readonly verifyOtpButton = () => this.page.getByRole('button', { name: /verify|submit|sign ?in|log ?in/i });
 
   async open(): Promise<void> {
     await this.goto('/login');
   }
 
-  async login(email: string, password: string): Promise<void> {
+  async login(mobile: string, otp: string): Promise<void> {
     await this.open();
-    await this.emailInput().fill(email);
-    await this.passwordInput().fill(password);
-    await this.submitButton().click();
+    await this.mobileInput().fill(mobile);
+    await this.sendOtpButton().click();
+    await this.fillOtp(otp);
+    const verify = this.verifyOtpButton();
+    if (await verify.first().isVisible().catch(() => false)) {
+      await verify.first().click();
+    }
     await this.waitForUrl(/dashboard|home/i);
   }
 }

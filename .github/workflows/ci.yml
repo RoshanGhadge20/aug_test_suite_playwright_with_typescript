@@ -39,26 +39,37 @@ jobs:
         run: docker build -t augmont-test-suite:ci .
       - name: Run regression
         env:
-          BASE_URL_ADMIN: ${{ secrets.BASE_URL_ADMIN }}
-          BASE_URL_CUSTOMER: ${{ secrets.BASE_URL_CUSTOMER }}
-          BASE_URL_BUSINESS: ${{ secrets.BASE_URL_BUSINESS }}
-          BASE_URL_NEW_ADMIN: ${{ secrets.BASE_URL_NEW_ADMIN }}
-          ADMIN_USER_EMAIL: ${{ secrets.ADMIN_USER_EMAIL }}
-          ADMIN_USER_PASSWORD: ${{ secrets.ADMIN_USER_PASSWORD }}
-          CUSTOMER_USER_EMAIL: ${{ secrets.CUSTOMER_USER_EMAIL }}
-          CUSTOMER_USER_PASSWORD: ${{ secrets.CUSTOMER_USER_PASSWORD }}
-          BUSINESS_USER_EMAIL: ${{ secrets.BUSINESS_USER_EMAIL }}
-          BUSINESS_USER_PASSWORD: ${{ secrets.BUSINESS_USER_PASSWORD }}
-          NEW_ADMIN_USER_EMAIL: ${{ secrets.NEW_ADMIN_USER_EMAIL }}
-          NEW_ADMIN_USER_PASSWORD: ${{ secrets.NEW_ADMIN_USER_PASSWORD }}
+          TARGET_ENV: test
+          TEST_BASE_URL_ADMIN: ${{ secrets.TEST_BASE_URL_ADMIN }}
+          TEST_BASE_URL_CUSTOMER: ${{ secrets.TEST_BASE_URL_CUSTOMER }}
+          TEST_BASE_URL_BUSINESS: ${{ secrets.TEST_BASE_URL_BUSINESS }}
+          TEST_BASE_URL_NEW_ADMIN: ${{ secrets.TEST_BASE_URL_NEW_ADMIN }}
+          TEST_BASE_URL_BACKEND: ${{ secrets.TEST_BASE_URL_BACKEND }}
+          TEST_BASE_URL_EMI: ${{ secrets.TEST_BASE_URL_EMI }}
+          TEST_ADMIN_USER_MOBILE: ${{ secrets.TEST_ADMIN_USER_MOBILE }}
+          TEST_ADMIN_USER_OTP: ${{ secrets.TEST_ADMIN_USER_OTP }}
+          TEST_CUSTOMER_USER_MOBILE: ${{ secrets.TEST_CUSTOMER_USER_MOBILE }}
+          TEST_CUSTOMER_USER_OTP: ${{ secrets.TEST_CUSTOMER_USER_OTP }}
+          TEST_BUSINESS_USER_MOBILE: ${{ secrets.TEST_BUSINESS_USER_MOBILE }}
+          TEST_BUSINESS_USER_OTP: ${{ secrets.TEST_BUSINESS_USER_OTP }}
+          TEST_NEW_ADMIN_USER_MOBILE: ${{ secrets.TEST_NEW_ADMIN_USER_MOBILE }}
+          TEST_NEW_ADMIN_USER_OTP: ${{ secrets.TEST_NEW_ADMIN_USER_OTP }}
+          TEST_BACKEND_USER_MOBILE: ${{ secrets.TEST_BACKEND_USER_MOBILE }}
+          TEST_BACKEND_USER_OTP: ${{ secrets.TEST_BACKEND_USER_OTP }}
+          TEST_EMI_USER_MOBILE: ${{ secrets.TEST_EMI_USER_MOBILE }}
+          TEST_EMI_USER_OTP: ${{ secrets.TEST_EMI_USER_OTP }}
           API_KEY: regression-ci
         run: |
           docker run --rm \
-            -e BASE_URL_ADMIN -e BASE_URL_CUSTOMER -e BASE_URL_BUSINESS -e BASE_URL_NEW_ADMIN \
-            -e ADMIN_USER_EMAIL -e ADMIN_USER_PASSWORD \
-            -e CUSTOMER_USER_EMAIL -e CUSTOMER_USER_PASSWORD \
-            -e BUSINESS_USER_EMAIL -e BUSINESS_USER_PASSWORD \
-            -e NEW_ADMIN_USER_EMAIL -e NEW_ADMIN_USER_PASSWORD \
+            -e TARGET_ENV \
+            -e TEST_BASE_URL_ADMIN -e TEST_BASE_URL_CUSTOMER -e TEST_BASE_URL_BUSINESS -e TEST_BASE_URL_NEW_ADMIN \
+            -e TEST_BASE_URL_BACKEND -e TEST_BASE_URL_EMI \
+            -e TEST_ADMIN_USER_MOBILE -e TEST_ADMIN_USER_OTP \
+            -e TEST_CUSTOMER_USER_MOBILE -e TEST_CUSTOMER_USER_OTP \
+            -e TEST_BUSINESS_USER_MOBILE -e TEST_BUSINESS_USER_OTP \
+            -e TEST_NEW_ADMIN_USER_MOBILE -e TEST_NEW_ADMIN_USER_OTP \
+            -e TEST_BACKEND_USER_MOBILE -e TEST_BACKEND_USER_OTP \
+            -e TEST_EMI_USER_MOBILE -e TEST_EMI_USER_OTP \
             -e API_KEY -e HEADLESS=true -e CI=true \
             -v "$GITHUB_WORKSPACE/reports:/app/reports" \
             augmont-test-suite:ci \

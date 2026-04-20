@@ -8,8 +8,8 @@ function setEnv(prefix: string) {
     'BASE_URL_BACKEND', 'BASE_URL_EMI',
   ]) process.env[`${prefix}_${key}`] = `http://${prefix.toLowerCase()}-${key.toLowerCase()}`;
   for (const who of ['ADMIN', 'CUSTOMER', 'BUSINESS', 'NEW_ADMIN', 'BACKEND', 'EMI']) {
-    process.env[`${prefix}_${who}_USER_EMAIL`] = `${prefix.toLowerCase()}-${who.toLowerCase()}@x`;
-    process.env[`${prefix}_${who}_USER_PASSWORD`] = 'p';
+    process.env[`${prefix}_${who}_USER_MOBILE`] = `${prefix.toLowerCase()}-${who.toLowerCase()}-mobile`;
+    process.env[`${prefix}_${who}_USER_OTP`] = '1234';
   }
 }
 
@@ -36,9 +36,18 @@ describe('urls (env-aware)', () => {
     expect(mod.panelUrl('admin', 'uat')).toBe('http://uat-base_url_admin');
   });
 
-  it('apiAuthConfig returns env-specific credentials', async () => {
+  it('panelCreds returns mobile+otp per env', async () => {
     const mod = await import('../../config/urls');
-    expect(mod.apiAuthConfig('api-backend', 'uat').email).toBe('uat-backend@x');
-    expect(mod.apiAuthConfig('api-backend', 'test').email).toBe('test-backend@x');
+    expect(mod.panelCreds('admin', 'test')).toEqual({ mobile: 'test-admin-mobile', otp: '1234' });
+    expect(mod.panelCreds('admin', 'uat')).toEqual({ mobile: 'uat-admin-mobile', otp: '1234' });
+  });
+
+  it('apiAuthConfig returns env-specific credentials + OTP endpoints', async () => {
+    const mod = await import('../../config/urls');
+    const cfg = mod.apiAuthConfig('api-backend', 'uat');
+    expect(cfg.mobile).toBe('uat-backend-mobile');
+    expect(cfg.otp).toBe('1234');
+    expect(cfg.sendOtpPath).toBe('/api/v1/auth/send-otp');
+    expect(cfg.verifyOtpPath).toBe('/api/v1/auth/verify-otp');
   });
 });

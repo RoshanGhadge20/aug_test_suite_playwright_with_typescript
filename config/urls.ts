@@ -3,7 +3,7 @@ import type { Panel, ApiService } from './constants';
 import type { EnvName } from './environments';
 import { getTargetEnv } from './environments';
 
-interface Credential { email: string; password: string; }
+export interface Credential { mobile: string; otp: string; }
 
 interface EnvBundle {
   panels: Record<Panel, string>;
@@ -22,18 +22,18 @@ function buildBundle(prefix: 'TEST' | 'UAT'): EnvBundle {
       'new-admin': e[`${prefix}_BASE_URL_NEW_ADMIN`],
     },
     panelCreds: {
-      admin: { email: e[`${prefix}_ADMIN_USER_EMAIL`], password: e[`${prefix}_ADMIN_USER_PASSWORD`] },
-      customer: { email: e[`${prefix}_CUSTOMER_USER_EMAIL`], password: e[`${prefix}_CUSTOMER_USER_PASSWORD`] },
-      business: { email: e[`${prefix}_BUSINESS_USER_EMAIL`], password: e[`${prefix}_BUSINESS_USER_PASSWORD`] },
-      'new-admin': { email: e[`${prefix}_NEW_ADMIN_USER_EMAIL`], password: e[`${prefix}_NEW_ADMIN_USER_PASSWORD`] },
+      admin: { mobile: e[`${prefix}_ADMIN_USER_MOBILE`], otp: e[`${prefix}_ADMIN_USER_OTP`] },
+      customer: { mobile: e[`${prefix}_CUSTOMER_USER_MOBILE`], otp: e[`${prefix}_CUSTOMER_USER_OTP`] },
+      business: { mobile: e[`${prefix}_BUSINESS_USER_MOBILE`], otp: e[`${prefix}_BUSINESS_USER_OTP`] },
+      'new-admin': { mobile: e[`${prefix}_NEW_ADMIN_USER_MOBILE`], otp: e[`${prefix}_NEW_ADMIN_USER_OTP`] },
     },
     apis: {
       'api-backend': e[`${prefix}_BASE_URL_BACKEND`],
       'api-emi': e[`${prefix}_BASE_URL_EMI`],
     },
     apiCreds: {
-      'api-backend': { email: e[`${prefix}_BACKEND_USER_EMAIL`], password: e[`${prefix}_BACKEND_USER_PASSWORD`] },
-      'api-emi': { email: e[`${prefix}_EMI_USER_EMAIL`], password: e[`${prefix}_EMI_USER_PASSWORD`] },
+      'api-backend': { mobile: e[`${prefix}_BACKEND_USER_MOBILE`], otp: e[`${prefix}_BACKEND_USER_OTP`] },
+      'api-emi': { mobile: e[`${prefix}_EMI_USER_MOBILE`], otp: e[`${prefix}_EMI_USER_OTP`] },
     },
   };
 }
@@ -60,18 +60,20 @@ export function apiCreds(service: ApiService, envName: EnvName = getTargetEnv())
 }
 
 export interface ApiServiceAuthConfig {
-  loginPath: string;
-  email: string;
-  password: string;
+  sendOtpPath: string;
+  verifyOtpPath: string;
+  mobile: string;
+  otp: string;
   tokenJsonPath: string;
 }
 
 export function apiAuthConfig(service: ApiService, envName: EnvName = getTargetEnv()): ApiServiceAuthConfig {
   const creds = apiCreds(service, envName);
   return {
-    loginPath: '/api/v1/auth/login',
-    email: creds.email,
-    password: creds.password,
+    sendOtpPath: '/api/v1/auth/send-otp',
+    verifyOtpPath: '/api/v1/auth/verify-otp',
+    mobile: creds.mobile,
+    otp: creds.otp,
     tokenJsonPath: 'data.token',
   };
 }

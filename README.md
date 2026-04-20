@@ -149,7 +149,7 @@ Backend HTTP tests live under `tests/api/<service>/` and run via dedicated Playw
 - `api-backend` → `gold-loan-backend-two` (URL: `<ENV>_BASE_URL_BACKEND`)
 - `api-emi` → `emi-backend` (URL: `<ENV>_BASE_URL_EMI`)
 
-These projects use Playwright's `request` fixture — no browser is launched, so they're fast and headless by nature. They do not depend on `auth-setup`; each auth-required test uses the `authedRequest` fixture from `fixtures/api.fixture.ts`, which calls the service's `/api/v1/auth/login`, caches the bearer token for 5 minutes per worker, and injects it as `Authorization: Bearer <token>`.
+These projects use Playwright's `request` fixture — no browser is launched, so they're fast and headless by nature. They do not depend on `auth-setup`; each auth-required test uses the `authedRequest` fixture from `fixtures/api.fixture.ts`, which POSTs the user's mobile to `/api/v1/auth/send-otp`, then submits `{ mobile, otp }` to `/api/v1/auth/verify-otp`, caches the returned bearer token for 5 minutes per worker, and injects it as `Authorization: Bearer <token>`. The OTP is a fixed "backdoor" value the test env accepts — configured per-user via `<ENV>_<SERVICE>_USER_OTP` in `.env`.
 
 Commands:
 ```bash
