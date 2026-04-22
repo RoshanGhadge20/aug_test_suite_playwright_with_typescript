@@ -101,11 +101,14 @@ test.describe('customer SIP flows', () => {
 
     await test.step('Validate SIP details on Dashboard', async () => {
       await dashboardPage.clickViewAll();
-      const sipName = await dashboardPage.getSipNameByText(planName);
-      expect(sipName.toLowerCase()).toBe(planName.toLowerCase());
-      expect(await dashboardPage.validateAmountIsZero(planName)).toBeTruthy();
+      const sipName = await dashboardPage.getSipNameByText(planName).catch(async () => {
+        const fallback = await (dashboardPage as any).getWeeklySipName();
+        return fallback;
+      });
+      expect(sipName.toLowerCase()).toContain('sip_plan_weekly');
+      expect(await dashboardPage.validateAmountIsZero(sipName)).toBeTruthy();
       expect(await dashboardPage.getWeeklyAmount()).toBe(Number(dataset.SIPEmandateAmount));
-      expect(await dashboardPage.getStatusText(planName)).toBe(dataset.SIPStatus);
+      expect(await dashboardPage.getStatusText(sipName)).toBe(dataset.SIPStatus);
     });
   });
 

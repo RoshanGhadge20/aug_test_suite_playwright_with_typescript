@@ -58,6 +58,19 @@ export default defineConfig({
       testMatch: /tests\/customer\/.*\.spec\.ts/,
     },
     {
+      name: 'customer-fast',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: panelUrl('customer', targetEnv),
+        storageState: storageStateIfExists(targetEnv, 'customer'),
+        trace: 'off',
+        video: 'off',
+        screenshot: 'only-on-failure',
+      },
+      // Intentionally no auth-setup dependency for faster local iteration.
+      testMatch: /tests\/customer\/.*\.spec\.ts/,
+    },
+    {
       name: 'business',
       use: { ...devices['Desktop Chrome'], baseURL: panelUrl('business', targetEnv), storageState: storageStateIfExists(targetEnv, 'business') },
       dependencies: ['auth-setup'],
