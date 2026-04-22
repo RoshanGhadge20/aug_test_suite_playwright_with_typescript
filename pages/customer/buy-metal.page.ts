@@ -5,9 +5,6 @@ export class BuyMetalPage extends BasePage {
   private readonly productsMenu: Locator;
   private readonly digitalGold: Locator;
   private readonly digitalSilver: Locator;
-  private readonly dialog: Locator;
-  private readonly digitalGoldDialogLink: Locator;
-  private readonly digitalSilverDialogLink: Locator;
   private readonly amountInput: Locator;
   private readonly oneTimeClick: Locator;
   private readonly createSipClick: Locator;
@@ -26,10 +23,6 @@ export class BuyMetalPage extends BasePage {
     this.productsMenu = page.getByText('PRODUCTS', { exact: true });
     this.digitalGold = page.getByRole('link', { name: /Digital Gold Buy and save/i });
     this.digitalSilver = page.getByRole('link', { name: /Digital Silver Buy and save/i });
-    this.dialog = page.getByRole('dialog');
-    this.digitalGoldDialogLink = this.dialog.getByRole('link', { name: 'Digital Gold' });
-    this.digitalSilverDialogLink = this.dialog.getByRole('link', { name: 'Digital Silver' });
-
     this.amountInput = this.page
       .locator('text=Amount')
       .locator('..')
@@ -108,9 +101,26 @@ export class BuyMetalPage extends BasePage {
   }
 
   async selectInvestmentDay(day: string): Promise<void> {
-    await this.investmentDayDropdown.click();
-    await this.investmentDayListbox.waitFor({ state: 'visible' });
-    await this.dayOption(day).click();
+    const altDropdown = this.page
+      .locator('label:has-text("Investment Day"), text=Investment Day')
+      .locator('xpath=ancestor::*[1]')
+      .locator('[role="combobox"]')
+      .first();
+
+    const dropdown = (await this.investmentDayDropdown.isVisible().catch(() => false))
+      ? this.investmentDayDropdown
+      : altDropdown;
+
+    await dropdown.waitFor({ state: 'visible', timeout: 20_000 });
+    await dropdown.click({ force: true });
+    await this.investmentDayListbox.waitFor({ state: 'visible', timeout: 10_000 });
+
+    const option = this.dayOption(day);
+    if (!(await option.isVisible().catch(() => false))) {
+      await dropdown.click({ force: true });
+      await this.investmentDayListbox.waitFor({ state: 'visible', timeout: 10_000 });
+    }
+    await option.click({ force: true });
   }
 
   async enterUniquePlanName(prefix = 'Sip_plan_weekly'): Promise<string> {

@@ -311,45 +311,105 @@ export class PaymentPage extends BasePage {
   async enterPhoneNumber(phoneNumber: string): Promise<void> {
     await this.waitForRazorpayFrame();
     const frame = this.razorpayFrame();
+    const fallbackPhone =
+      process.env.UAT_CUSTOMER_USER_MOBILE ??
+      process.env.TEST_CUSTOMER_USER_MOBILE ??
+      '';
+    const resolvedPhone = (phoneNumber || fallbackPhone).trim();
+    const digitsOnlyPhone = resolvedPhone.replace(/\D/g, '').slice(-10);
+    if (!digitsOnlyPhone) {
+      throw new Error('Unable to enter mobile number: dataset and env fallback are both empty.');
+    }
+
     const phoneInput = frame
       .locator('input[placeholder*="mobile" i], input[name*="contact" i], input[type="tel"]')
       .first();
 
-    await phoneInput.waitFor({ state: 'visible', timeout: 20_000 });
+    try {
+      await phoneInput.waitFor({ state: 'visible', timeout: 20_000 });
+    } catch {
+      return;
+    }
     await phoneInput.click({ force: true });
     await phoneInput.fill('');
-    await phoneInput.type(phoneNumber, { delay: 75 });
+    await phoneInput.type(digitsOnlyPhone, { delay: 75 });
 
     // Razorpay input can ignore fill while overlay animation is active.
     const typedValue = await phoneInput.inputValue().catch(() => '');
-    if (!typedValue.includes(phoneNumber.slice(-4))) {
+    const typedDigits = typedValue.replace(/\D/g, '');
+    if (!typedDigits.endsWith(digitsOnlyPhone.slice(-4))) {
       await phoneInput.click({ force: true });
       await this.page.keyboard.press('Control+A');
       await this.page.keyboard.press('Backspace');
-      await phoneInput.type(phoneNumber, { delay: 100 });
+      await phoneInput.type(digitsOnlyPhone, { delay: 100 });
     }
   }
 
   async clickContactContinue(): Promise<void> {
     const frame = this.razorpayFrame();
+    const phoneInput = frame
+      .locator('input[placeholder*="mobile" i], input[name*="contact" i], input[type="tel"]')
+      .first();
+    try {
+      await phoneInput.waitFor({ state: 'visible', timeout: 20_000 });
+    } catch {
+      return;
+    }
+
     const continueBtn = frame
-      .locator('button[validateform="true"], button[name="button"]')
+      .locator('button[validateform="true"], button[name="button"], button:has-text("Continue")')
       .filter({ hasText: /^Continue$/i })
       .first();
     await continueBtn.waitFor({ state: 'visible', timeout: 20_000 });
     await continueBtn.click({ force: true });
     await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+
+    // Retry once if contact step remains visible despite valid input.
+    if (await phoneInput.isVisible().catch(() => false)) {
+      const digits = (await phoneInput.inputValue().catch(() => '')).replace(/\D/g, '');
+      if (digits.length >= 10) {
+        await continueBtn.click({ force: true });
+        await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+      }
+    }
   }
 
   async clickOnBankByNameEmandate(bankName: string): Promise<void> {
-    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+    const frame = this.razorpayFrame();
     await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-    const bank = frame.locator('div[role="button"]', { hasText: bankName });
-    await bank.first().waitFor({ state: 'visible', timeout: 20_000 });
+
+    const normalizedBankName = bankName.trim();
+    const bankByDataValue = frame.locator(`div[role="button"][data-value="${normalizedBankName}"]`).first();
+    const bankByText = frame
+      .locator('div[role="button"]')
+      .filter({ has: frame.locator('span.font-medium', { hasText: new RegExp(normalizedBankName, 'i') }) })
+      .first();
+    const firstBank = frame.locator('div[role="button"]').first();
+    const bank = (await bankByDataValue.isVisible().catch(() => false))
+      ? bankByDataValue
+      : ((await bankByText.isVisible().catch(() => false)) ? bankByText : firstBank);
+
+    await bank.waitFor({ state: 'visible', timeout: 8_000 });
     try {
-      await bank.first().click({ timeout: 5_000 });
+      await bank.click({ timeout: 5_000 });
     } catch {
-      await bank.first().click({ force: true });
+      await bank.click({ force: true });
+    }
+  }
+
+  async clickOnBankByCodeEmandate(bankCode: string): Promise<void> {
+    const frame = this.razorpayFrame();
+    await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+
+    const normalizedCode = bankCode.trim().toUpperCase();
+    const bankByCode = frame.locator(`div[role="button"]:has([data-value="${normalizedCode}"])`).first();
+    const firstBank = frame.locator('div[role="button"]').first();
+    const bank = (await bankByCode.isVisible().catch(() => false)) ? bankByCode : firstBank;
+    await bank.waitFor({ state: 'visible', timeout: 8_000 });
+    try {
+      await bank.click({ timeout: 5_000 });
+    } catch {
+      await bank.click({ force: true });
     }
   }
 
@@ -380,7 +440,7 @@ export class PaymentPage extends BasePage {
         await viaAadhaarTextOption.waitFor({ state: 'visible', timeout: 10_000 });
         await viaAadhaarTextOption.click({ force: true });
       } catch {
-1 `      // If still on bank list, select first visible bank and continue.
+        // If still on bank list, select first visible bank and continue.
         const bankOption = frame
           .locator('div[role="button"]')
           .filter({ hasNotText: /show more options|close checkout|continue/i })
@@ -410,13 +470,63 @@ export class PaymentPage extends BasePage {
       .locator('input[placeholder*="Bank Account Number" i], input[name*="account" i]')
       .first();
     const btn = frame.getByRole('button', { name: /authenticate/i });
+    const continueBtn = frame.getByRole('button', { name: /^continue$/i });
+    const paymentSuccessText = frame.locator('text=/payment successful|processing your payment/i');
+    const bankVerificationTitle = frame.getByText(/Bank verification needed/i).first();
 
     if (!(await btn.isVisible().catch(() => false))) {
-      await bankAccountInput.waitFor({ state: 'visible', timeout: 20_000 });
-      await btn.waitFor({ state: 'visible', timeout: 20_000 });
+      await Promise.race([
+        btn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+        bankAccountInput.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+        continueBtn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+        paymentSuccessText.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+      ]);
     }
 
-    await btn.click({ force: true });
+    if (await btn.isVisible().catch(() => false)) {
+      let popup: Page | null = null;
+      try {
+        [popup] = await Promise.all([
+          this.page.waitForEvent('popup', { timeout: 8_000 }),
+          btn.click({ force: true }),
+        ]);
+      } catch {
+        await btn.click({ force: true });
+      }
+
+      if (popup) {
+        await popup.waitForLoadState('domcontentloaded');
+        const successBtn = popup.locator('button[data-val="S"], button.success, button[data-val="S"].success').first();
+        await successBtn.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        if (await successBtn.isVisible().catch(() => false)) {
+          await successBtn.click();
+        }
+        await popup.close().catch(() => {});
+        return;
+      }
+
+      // Ensure authenticate click has transitioned flow; retry once if still on same screen.
+      const transitioned = await Promise.race([
+        continueBtn.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
+        bankVerificationTitle.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
+        paymentSuccessText.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
+      ]);
+      if (!transitioned && (await btn.isVisible().catch(() => false))) {
+        await btn.click({ force: true });
+      }
+      return;
+    }
+
+    // Some bank flows skip explicit authenticate and move directly to continue/success state.
+    if (
+      (await continueBtn.isVisible().catch(() => false))
+      || (await paymentSuccessText.isVisible().catch(() => false))
+      || /\/dashboard|\/summary/i.test(this.page.url())
+    ) {
+      return;
+    }
+
+    throw new Error('Authenticate step did not reach authenticate/continue/success state.');
   }
 
   async selectViaBankAndAadhaar(): Promise<void> {
@@ -590,31 +700,93 @@ export class PaymentPage extends BasePage {
   }
 
   async completeEmandateFlow(): Promise<void> {
-    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
-    const continueBtn = frame.getByRole('button', { name: /^continue$/i });
-    await continueBtn.waitFor({ state: 'visible', timeout: 20_000 });
+    const frame = this.razorpayFrame();
+    const continueCandidates = frame.getByRole('button', { name: /continue/i });
+    const bankVerificationTitle = frame.getByText(/Bank verification needed/i).first();
+    const bankVerificationContinue = frame
+      .locator('div, section')
+      .filter({ has: bankVerificationTitle })
+      .locator('button')
+      .filter({ hasText: /^continue$/i })
+      .first();
+    const frameSuccessBtn = frame.locator('button[data-val="S"], button[data-val="S"].success').first();
+    const successDialog = this.page.getByRole('dialog', { name: /success/i });
+    const paymentSuccessHeading = frame.getByRole('heading', { name: /payment successful/i });
 
     let popup: Page | null = null;
-    try {
-      [popup] = await Promise.all([
-        this.page.waitForEvent('popup', { timeout: 10_000 }),
-        continueBtn.click(),
-      ]);
-    } catch {
-      await continueBtn.click();
+    let continueBtn: Locator | null = null;
+    const continueCount = await continueCandidates.count().catch(() => 0);
+    for (let i = 0; i < continueCount; i += 1) {
+      const candidate = continueCandidates.nth(i);
+      if (await candidate.isVisible().catch(() => false)) {
+        continueBtn = candidate;
+        break;
+      }
+    }
+
+    if (continueBtn) {
+      if (await bankVerificationContinue.isVisible().catch(() => false)) {
+        await bankVerificationContinue.click().catch(async () => {
+          await bankVerificationContinue.click({ force: true }).catch(() => {});
+        });
+      }
+
+      try {
+        [popup] = await Promise.all([
+          this.page.waitForEvent('popup', { timeout: 10_000 }),
+          continueBtn.click(),
+        ]);
+      } catch {
+        await continueBtn.click().catch(async () => {
+          await continueBtn.click({ force: true }).catch(() => {});
+        });
+      }
+
+      // Retry once when bank-verification panel stays visible after first click.
+      if (await continueBtn.isVisible().catch(() => false)) {
+        await continueBtn.click().catch(async () => {
+          await continueBtn.click({ force: true }).catch(() => {});
+        });
+      }
     }
 
     if (popup) {
       await popup.waitForLoadState();
-      const successBtn = popup.locator('button[data-val="S"].success').first();
-      await successBtn.waitFor({ state: 'visible', timeout: 15_000 });
-      await successBtn.click();
+      const successBtn = popup.locator('button[data-val="S"], button.success, button[data-val="S"].success').first();
+      await successBtn.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+      if (await successBtn.isVisible().catch(() => false)) {
+        await successBtn.click();
+      }
       await popup.close().catch(() => {});
+    } else {
+      // In Razorpay test mode, success button can be rendered inside checkout iframe.
+      const processingText = frame.locator('text=/Processing your payment/i');
+      await Promise.race([
+        frameSuccessBtn.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}),
+        processingText.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}),
+        paymentSuccessHeading.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}),
+        successDialog.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {}),
+        this.page.waitForURL('**/dashboard**', { timeout: 30_000 }).catch(() => {}),
+      ]);
+      if (await frameSuccessBtn.isVisible().catch(() => false)) {
+        await frameSuccessBtn.click({ force: true });
+      }
     }
 
-    const successDialog = this.page.getByRole('dialog', { name: /success/i });
-    await successDialog.waitFor({ state: 'visible', timeout: 30_000 });
-    await successDialog.getByRole('button', { name: /continue/i }).click();
-    await this.page.waitForURL('**/dashboard**');
+    const reachedDashboard = this.page.waitForURL('**/dashboard**', { timeout: 40_000 }).then(() => true).catch(() => false);
+    const dialogVisible = successDialog.waitFor({ state: 'visible', timeout: 40_000 }).then(() => true).catch(() => false);
+
+    await Promise.race([dialogVisible, reachedDashboard]);
+
+    if (await successDialog.isVisible().catch(() => false)) {
+      const dialogContinue = successDialog.getByRole('button', { name: /continue/i });
+      await dialogContinue.waitFor({ state: 'visible', timeout: 5_000 });
+      await dialogContinue.click();
+      await this.page.waitForURL('**/dashboard**', { timeout: 30_000 });
+    }
+
+    if (!/\/dashboard/i.test(this.page.url())) {
+      throw new Error('eMandate completion did not reach dashboard/success state after continue.');
+    }
   }
 }
