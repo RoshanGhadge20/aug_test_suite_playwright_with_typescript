@@ -311,60 +311,34 @@ export class PaymentPage extends BasePage {
   async enterPhoneNumber(phoneNumber: string): Promise<void> {
     await this.waitForRazorpayFrame();
     const frame = this.razorpayFrame();
-    const targetEnvPrefix = (process.env.TARGET_ENV || 'uat').toUpperCase();
-    const fallbackPhone = process.env[`${targetEnvPrefix}_CUSTOMER_USER_MOBILE`] ?? '';
-    const resolvedPhone = (phoneNumber || fallbackPhone).trim();
-    const normalizedPhone = resolvedPhone.replace(/\D/g, '').slice(-10);
-    if (normalizedPhone.length < 10) {
-      throw new Error(`Invalid phone number for eMandate flow: "${phoneNumber}"`);
-    }
-
     const phoneInput = frame
       .locator('input[placeholder*="mobile" i], input[name*="contact" i], input[type="tel"]')
       .first();
 
-    const contactFieldVisible = await phoneInput.isVisible().catch(() => false);
-    if (!contactFieldVisible) return;
-
-    await phoneInput.waitFor({ state: 'visible', timeout: 10_000 });
+    await phoneInput.waitFor({ state: 'visible', timeout: 20_000 });
     await phoneInput.click({ force: true });
     await phoneInput.fill('');
-    await phoneInput.type(normalizedPhone, { delay: 75 });
+    await phoneInput.type(phoneNumber, { delay: 75 });
 
     // Razorpay input can ignore fill while overlay animation is active.
     const typedValue = await phoneInput.inputValue().catch(() => '');
-    const typedDigits = typedValue.replace(/\D/g, '');
-    if (!typedDigits.endsWith(normalizedPhone.slice(-4)) || typedDigits.length < 10) {
+    if (!typedValue.includes(phoneNumber.slice(-4))) {
       await phoneInput.click({ force: true });
       await this.page.keyboard.press('Control+A');
       await this.page.keyboard.press('Backspace');
-      await phoneInput.type(normalizedPhone, { delay: 100 });
+      await phoneInput.type(phoneNumber, { delay: 100 });
     }
   }
 
   async clickContactContinue(): Promise<void> {
     const frame = this.razorpayFrame();
-    const contactInput = frame
-      .locator('input[placeholder*="mobile" i], input[name*="contact" i], input[type="tel"]')
-      .first();
-    const isContactStepVisible = await contactInput.isVisible().catch(() => false);
-    if (!isContactStepVisible) return;
-
     const continueBtn = frame
-      .locator('button[validateform="true"], button[name="button"], button:has-text("Continue")')
+      .locator('button[validateform="true"], button[name="button"]')
+      .filter({ hasText: /^Continue$/i })
       .first();
-    await continueBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await continueBtn.waitFor({ state: 'visible', timeout: 20_000 });
     await continueBtn.click({ force: true });
     await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-
-    // If contact form is still visible due transient validation state, retry once.
-    if (await contactInput.isVisible().catch(() => false)) {
-      const currentDigits = (await contactInput.inputValue().catch(() => '')).replace(/\D/g, '');
-      if (currentDigits.length >= 10) {
-        await continueBtn.click({ force: true });
-        await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-      }
-    }
   }
 
   async clickOnBankByNameEmandate(bankName: string): Promise<void> {
@@ -406,7 +380,7 @@ export class PaymentPage extends BasePage {
         await viaAadhaarTextOption.waitFor({ state: 'visible', timeout: 10_000 });
         await viaAadhaarTextOption.click({ force: true });
       } catch {
-        // If still on bank list, select first visible bank and continue.
+1 `      // If still on bank list, select first visible bank and continue.
         const bankOption = frame
           .locator('div[role="button"]')
           .filter({ hasNotText: /show more options|close checkout|continue/i })
@@ -424,17 +398,25 @@ export class PaymentPage extends BasePage {
       }
     }
 
-    await bankAccountInput.waitFor({ state: 'visible', timeout: 20_000 });
+    await Promise.race([
+      bankAccountInput.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {}),
+      frame.getByRole('button', { name: /authenticate/i }).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {}),
+    ]);
   }
 
   async clickAuthenticate(): Promise<void> {
-    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
-    await frame
+    const frame = this.razorpayFrame();
+    const bankAccountInput = frame
       .locator('input[placeholder*="Bank Account Number" i], input[name*="account" i]')
-      .first()
-      .waitFor({ state: 'visible', timeout: 20_000 });
+      .first();
     const btn = frame.getByRole('button', { name: /authenticate/i });
-    await btn.click();
+
+    if (!(await btn.isVisible().catch(() => false))) {
+      await bankAccountInput.waitFor({ state: 'visible', timeout: 20_000 });
+      await btn.waitFor({ state: 'visible', timeout: 20_000 });
+    }
+
+    await btn.click({ force: true });
   }
 
   async selectViaBankAndAadhaar(): Promise<void> {
