@@ -42,11 +42,15 @@ export abstract class BasePage {
       throw new Error('OTP input fields not found on page. Update selectors in BasePage.otpInputLocator().');
     }
     if (count === 1) {
-      await inputs.first().fill(otp);
+      const box = inputs.first();
+      await box.click();
+      await box.fill(otp);
       return;
     }
     for (let i = 0; i < otp.length && i < count; i++) {
-      await inputs.nth(i).fill(otp[i]);
+      const box = inputs.nth(i);
+      await box.click();
+      await box.fill(otp[i]);
     }
   }
 }

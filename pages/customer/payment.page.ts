@@ -308,6 +308,14 @@ export class PaymentPage extends BasePage {
     await this.page.waitForURL('**/dashboard**');
   }
 
+  // Old implementation kept for reference.
+  // async enterPhoneNumber(phoneNumber: string): Promise<void> {
+  //   await this.waitForRazorpayFrame();
+  //   const frame = this.razorpayFrame();
+  //   const phoneInput = frame.getByPlaceholder('Mobile number');
+  //   await phoneInput.waitFor({ state: 'visible', timeout: 20_000 });
+  //   await phoneInput.fill(phoneNumber);
+  // }
   async enterPhoneNumber(phoneNumber: string): Promise<void> {
     await this.waitForRazorpayFrame();
     const frame = this.razorpayFrame();
@@ -420,114 +428,26 @@ export class PaymentPage extends BasePage {
     return (await price.first().innerText()).trim();
   }
 
-  async clickAadhaarEmandate(): Promise<void> {
-    await this.waitForRazorpayFrame();
-    const frame = this.razorpayFrame();
-    await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-
-    const aadhaarOption = frame.locator('[data-value="aadhaar"]').first();
-    const viaAadhaarTextOption = frame.locator('text=/Aadhaar details|Aadhaar/i').first();
-    const bankAccountInput = frame
-      .locator('input[placeholder*="Bank Account Number" i], input[name*="account" i]')
-      .first();
-
-    // Flaky Razorpay transitions can render Aadhaar options a few seconds late.
-    try {
-      await aadhaarOption.waitFor({ state: 'visible', timeout: 10_000 });
-      await aadhaarOption.click({ force: true });
-    } catch {
-      try {
-        await viaAadhaarTextOption.waitFor({ state: 'visible', timeout: 10_000 });
-        await viaAadhaarTextOption.click({ force: true });
-      } catch {
-        // If still on bank list, select first visible bank and continue.
-        const bankOption = frame
-          .locator('div[role="button"]')
-          .filter({ hasNotText: /show more options|close checkout|continue/i })
-          .first();
-        if (await bankOption.isVisible().catch(() => false)) {
-          await bankOption.click({ force: true });
-          await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-        }
-
-        if (await aadhaarOption.isVisible().catch(() => false)) {
-          await aadhaarOption.click({ force: true });
-        } else if (await viaAadhaarTextOption.isVisible().catch(() => false)) {
-          await viaAadhaarTextOption.click({ force: true });
-        }
-      }
-    }
-
-    await Promise.race([
-      bankAccountInput.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {}),
-      frame.getByRole('button', { name: /authenticate/i }).waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {}),
-    ]);
+  async clickAadhaarEmandate() {
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+  
+    const aadhaarOption = frame.locator('[data-value="aadhaar"]');
+  
+    await aadhaarOption.waitFor({ state: 'visible', timeout: 20000 });
+    await aadhaarOption.click();
   }
-
-  async clickAuthenticate(): Promise<void> {
-    const frame = this.razorpayFrame();
-    const bankAccountInput = frame
-      .locator('input[placeholder*="Bank Account Number" i], input[name*="account" i]')
-      .first();
+  async clickAuthenticate() {
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+  
+    // ensure form is loaded before clicking
+    await frame.getByPlaceholder('Bank Account Number')
+      .waitFor({ state: 'visible', timeout: 20000 });
+  
     const btn = frame.getByRole('button', { name: /authenticate/i });
-    const continueBtn = frame.getByRole('button', { name: /^continue$/i });
-    const paymentSuccessText = frame.locator('text=/payment successful|processing your payment/i');
-    const bankVerificationTitle = frame.getByText(/Bank verification needed/i).first();
-
-    if (!(await btn.isVisible().catch(() => false))) {
-      await Promise.race([
-        btn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-        bankAccountInput.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-        continueBtn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-        paymentSuccessText.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-      ]);
-    }
-
-    if (await btn.isVisible().catch(() => false)) {
-      let popup: Page | null = null;
-      try {
-        [popup] = await Promise.all([
-          this.page.waitForEvent('popup', { timeout: 8_000 }),
-          btn.click({ force: true }),
-        ]);
-      } catch {
-        await btn.click({ force: true });
-      }
-
-      if (popup) {
-        await popup.waitForLoadState('domcontentloaded');
-        const successBtn = popup.locator('button[data-val="S"], button.success, button[data-val="S"].success').first();
-        await successBtn.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
-        if (await successBtn.isVisible().catch(() => false)) {
-          await successBtn.click();
-        }
-        await popup.close().catch(() => {});
-        return;
-      }
-
-      // Ensure authenticate click has transitioned flow; retry once if still on same screen.
-      const transitioned = await Promise.race([
-        continueBtn.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
-        bankVerificationTitle.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
-        paymentSuccessText.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false),
-      ]);
-      if (!transitioned && (await btn.isVisible().catch(() => false))) {
-        await btn.click({ force: true });
-      }
-      return;
-    }
-
-    // Some bank flows skip explicit authenticate and move directly to continue/success state.
-    if (
-      (await continueBtn.isVisible().catch(() => false))
-      || (await paymentSuccessText.isVisible().catch(() => false))
-      || /\/dashboard|\/summary/i.test(this.page.url())
-    ) {
-      return;
-    }
-
-    throw new Error('Authenticate step did not reach authenticate/continue/success state.');
+  
+    await btn.click();
   }
+
 
   async selectViaBankAndAadhaar(): Promise<void> {
     await this.waitForRazorpayFrame();
@@ -698,110 +618,49 @@ export class PaymentPage extends BasePage {
     await successBtn.waitFor({ state: 'visible', timeout: 30_000 });
     await successBtn.click();
   }
-
-  async completeEmandateFlow(): Promise<void> {
-    const frame = this.razorpayFrame();
-    const continueCandidates = frame.getByRole('button', { name: /continue/i });
-    const bankVerificationTitle = frame.getByText(/Bank verification needed/i).first();
-    const bankVerificationContinue = frame
-      .locator('div, section')
-      .filter({ has: bankVerificationTitle })
-      .locator('button')
-      .filter({ hasText: /^continue$/i })
-      .first();
-    const frameSuccessBtn = frame.locator('button[data-val="S"], button[data-val="S"].success').first();
-    const successDialog = this.page.getByRole('dialog', { name: /success/i });
-    const paymentSuccessHeading = frame.getByRole('heading', { name: /payment successful/i });
-    const processingText = frame.locator('text=/Processing your payment/i');
-
-    let popup: Page | null = null;
-    let clickedContinue = false;
-    let continueBtn: Locator | null = null;
-    const continueCount = await continueCandidates.count().catch(() => 0);
-    for (let i = 0; i < continueCount; i += 1) {
-      const candidate = continueCandidates.nth(i);
-      if (await candidate.isVisible().catch(() => false)) {
-        continueBtn = candidate;
-        break;
-      }
+  async completeEmandateFlow() {
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+  
+    // 1️⃣ Wait for Continue button inside iframe
+    const continueBtn = frame.getByRole('button', { name: /^continue$/i });
+  
+    await continueBtn.waitFor({ state: 'visible', timeout: 10000 });
+  
+    // 2️⃣ Click Continue + handle optional popup
+    let popup = null;
+  
+    try {
+      [popup] = await Promise.all([
+        this.page.waitForEvent('popup', { timeout: 10000 }),
+        continueBtn.click(),
+      ]);
+    } catch {
+      // No popup → normal flow
+      await continueBtn.click();
     }
-
-    if (continueBtn) {
-      if (await bankVerificationContinue.isVisible().catch(() => false)) {
-        await bankVerificationContinue.click().catch(async () => {
-          await bankVerificationContinue.click({ force: true }).catch(() => {});
-        });
-        clickedContinue = true;
-      }
-
-      try {
-        [popup] = await Promise.all([
-          this.page.waitForEvent('popup', { timeout: 20_000 }),
-          continueBtn.click(),
-        ]);
-        clickedContinue = true;
-      } catch {
-        await continueBtn.click().catch(async () => {
-          await continueBtn.click({ force: true }).catch(() => {});
-        });
-        clickedContinue = true;
-      }
-
-      // Retry once when bank-verification panel stays visible after first click.
-      if (await continueBtn.isVisible().catch(() => false)) {
-        await continueBtn.click().catch(async () => {
-          await continueBtn.click({ force: true }).catch(() => {});
-        });
-        clickedContinue = true;
-      }
-
-      // Last retry path: explicit bank verification continue can remain visible separately.
-      if (await bankVerificationContinue.isVisible().catch(() => false)) {
-        await bankVerificationContinue.click().catch(async () => {
-          await bankVerificationContinue.click({ force: true }).catch(() => {});
-        });
-        clickedContinue = true;
-      }
-    }
-
+  
+    // 3️⃣ If popup appears → handle success
     if (popup) {
       await popup.waitForLoadState();
-      const successBtn = popup.locator('button[data-val="S"], button.success, button[data-val="S"].success').first();
-      await successBtn.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
-      if (await successBtn.isVisible().catch(() => false)) {
-        await successBtn.click();
-      }
+  
+      const successBtn = popup.locator('button[data-val="S"].success').first();
+  
+      await successBtn.waitFor({ state: 'visible', timeout: 15000 });
+      await successBtn.click();
+  
       await popup.close().catch(() => {});
-    } else {
-      // In Razorpay test mode, success button can be rendered inside checkout iframe.
-      await Promise.race([
-        frameSuccessBtn.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {}),
-        processingText.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {}),
-        paymentSuccessHeading.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {}),
-        successDialog.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {}),
-        this.page.waitForURL('**/dashboard**', { timeout: 45_000 }).catch(() => {}),
-      ]);
-      if (await frameSuccessBtn.isVisible().catch(() => false)) {
-        await frameSuccessBtn.click({ force: true });
-      }
     }
-
-    const reachedDashboard = this.page.waitForURL('**/dashboard**', { timeout: 40_000 }).then(() => true).catch(() => false);
-    const dialogVisible = successDialog.waitFor({ state: 'visible', timeout: 40_000 }).then(() => true).catch(() => false);
-
-    await Promise.race([dialogVisible, reachedDashboard]);
-
-    if (await successDialog.isVisible().catch(() => false)) {
-      const dialogContinue = successDialog.getByRole('button', { name: /continue/i });
-      await dialogContinue.waitFor({ state: 'visible', timeout: 5_000 });
-      await dialogContinue.click();
-      await this.page.waitForURL('**/dashboard**', { timeout: 30_000 });
-    }
-
-    if (!/\/dashboard/i.test(this.page.url()) && clickedContinue) {
-      // Backend mandate setup can complete asynchronously after processing state.
-      await this.page.waitForTimeout(8_000);
-      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    }
+  
+    // 4️⃣ Wait for success dialog on main page
+    const successDialog = this.page.getByRole('dialog', { name: /success/i });
+  
+    await successDialog.waitFor({ state: 'visible', timeout: 30000 });
+  
+    // 5️⃣ Click Continue on success dialog
+    await successDialog.getByRole('button', { name: /continue/i }).click();
+  
+    // 6️⃣ Verify redirect
+    await this.page.waitForURL('**/dashboard**');
   }
+  
 }

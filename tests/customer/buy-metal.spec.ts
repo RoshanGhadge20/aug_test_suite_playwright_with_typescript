@@ -1,19 +1,8 @@
 import { type Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/base.fixture';
+import { getBuyMetalDataset } from '../../utils/data/customer-excel-data';
 
-const dataset = {
-  profileName: 'Hi',
-  oneTimeGoldAmount: '5000',
-  oneTimeSilverAmount: '5000',
-  contactNumber: '9561273901',
-  cardHolderName: 'Test User',
-  metalGold: 'Gold',
-  metalSilver: 'Silver',
-  cardNumber: '6521818104823671',
-  cardExpiry: '12/26',
-  cardCvv: '123',
-  cardOtp: '123456',
-};
+const dataset = getBuyMetalDataset();
 
 function calculateAmounts(total: number, buyingRate: number, paidFromWallet: number) {
   const taxable = Number((total / 1.03).toFixed(2));

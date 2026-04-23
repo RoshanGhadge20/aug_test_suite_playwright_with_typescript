@@ -10,12 +10,18 @@ import { BusinessLoginPage } from '../pages/business/login.page';
 import { NewAdminLoginPage } from '../pages/new-admin/login.page';
 
 const targetEnv = getTargetEnv();
+const targetPanel = process.env.TARGET_PANEL;
+
+function shouldAuthenticate(panel: 'admin' | 'customer' | 'business' | 'new-admin'): boolean {
+  return !targetPanel || targetPanel === panel;
+}
 
 function ensureStorageDir(storagePath: string): void {
   fs.mkdirSync(path.dirname(storagePath), { recursive: true });
 }
 
 setup('authenticate admin', async ({ browser }) => {
+  setup.skip(!shouldAuthenticate('admin'), 'Skipped due to TARGET_PANEL filter');
   const storagePath = storageStatePath(targetEnv, 'admin');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('admin', targetEnv) });
@@ -28,6 +34,7 @@ setup('authenticate admin', async ({ browser }) => {
 });
 
 setup('authenticate customer', async ({ browser }) => {
+  //setup.skip(!shouldAuthenticate('customer'), 'Skipped due to TARGET_PANEL filter');
   const storagePath = storageStatePath(targetEnv, 'customer');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('customer', targetEnv) });
@@ -40,6 +47,7 @@ setup('authenticate customer', async ({ browser }) => {
 });
 
 setup('authenticate business', async ({ browser }) => {
+  setup.skip(!shouldAuthenticate('business'), 'Skipped due to TARGET_PANEL filter');
   const storagePath = storageStatePath(targetEnv, 'business');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('business', targetEnv) });
@@ -52,6 +60,7 @@ setup('authenticate business', async ({ browser }) => {
 });
 
 setup('authenticate new-admin', async ({ browser }) => {
+  setup.skip(!shouldAuthenticate('new-admin'), 'Skipped due to TARGET_PANEL filter');
   const storagePath = storageStatePath(targetEnv, 'new-admin');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('new-admin', targetEnv) });
@@ -62,3 +71,96 @@ setup('authenticate new-admin', async ({ browser }) => {
   await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

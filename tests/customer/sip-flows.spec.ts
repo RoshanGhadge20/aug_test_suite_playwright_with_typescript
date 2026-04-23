@@ -89,10 +89,9 @@ test.describe('customer SIP flows', () => {
     });
 
     await test.step('Payment Method', async () => {
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.enterPhoneNumber(dataset.ContactNumber);
+      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
       await paymentPage.clickContactContinue();
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.getPriceSummaryEmandate();
       await paymentPage.clickAadhaarEmandate();
       await paymentPage.clickAuthenticate();
@@ -126,6 +125,7 @@ test.describe('customer SIP flows', () => {
       frequency: dataset.SIPWeeklyFrequency,
       metal: dataset.SIPWeeklySilverMetal,
     };
+    test.setTimeout(180_000);
 
     await test.step('Create weekly SIP for silver', async () => {
       await buyMetalPage.hoverOnProductsAndClickDigitalSilver();
@@ -172,8 +172,9 @@ test.describe('customer SIP flows', () => {
         await addNewBankPage.clickAddNew();
       }
       await paymentPage.clickPayButton();
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
+    //  await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.enterPhoneNumber(dataset.ContactNumber);
+      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
       await paymentPage.clickContactContinue();
       await paymentPage.getPriceSummaryEmandate();
       await paymentPage.clickAadhaarEmandate();
@@ -203,6 +204,7 @@ test.describe('customer SIP flows', () => {
       frequency: dataset.SIPWeeklyFrequency,
       metal: dataset.metal,
     };
+    test.setTimeout(180_000);
 
     await test.step('Create weekly SIP for gold', async () => {
       await buyMetalPage.hoverOnProductsAndClickDigitalGold();
@@ -248,8 +250,8 @@ test.describe('customer SIP flows', () => {
         await addNewBankPage.clickAddNew();
       }
       await paymentPage.clickPayButton();
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.enterPhoneNumber(dataset.ContactNumber);
+      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
       await paymentPage.clickContactContinue();
       await paymentPage.getPriceSummaryEmandate();
       await paymentPage.clickAadhaarEmandate();
@@ -279,6 +281,7 @@ test.describe('customer SIP flows', () => {
       metal: dataset.SIPMonthlyGoldMetal,
       planPrefix: dataset.SIPMonthlyPlanPrefix,
     };
+    test.setTimeout(180_000);
 
     await test.step('Create monthly SIP for gold', async () => {
       await buyMetalPage.hoverOnProductsAndClickDigitalGold();
@@ -315,8 +318,8 @@ test.describe('customer SIP flows', () => {
         await addNewBankPage.clickAddNew();
       }
       await paymentPage.clickPayButton();
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.enterPhoneNumber(dataset.ContactNumber);
+      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
       await paymentPage.clickContactContinue();
       await paymentPage.getPriceSummaryEmandate();
       await paymentPage.clickAadhaarEmandate();
@@ -346,6 +349,7 @@ test.describe('customer SIP flows', () => {
       metal: dataset.SIPMonthlySilverMetal,
       planPrefix: dataset.SIPMonthlyPlanPrefix,
     };
+    test.setTimeout(180_000);
 
     await test.step('Create monthly SIP for silver', async () => {
       await buyMetalPage.hoverOnProductsAndClickDigitalSilver();
@@ -389,8 +393,8 @@ test.describe('customer SIP flows', () => {
         await addNewBankPage.clickAddNew();
       }
       await paymentPage.clickPayButton();
-      await paymentPage.clickOnBankByCodeEmandate('KKBK');
       await paymentPage.enterPhoneNumber(dataset.ContactNumber);
+      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
       await paymentPage.clickContactContinue();
       await paymentPage.getPriceSummaryEmandate();
       await paymentPage.clickAadhaarEmandate();

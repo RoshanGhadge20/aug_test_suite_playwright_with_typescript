@@ -23,7 +23,7 @@ function storageStateIfExists(env: EnvName, panel: Panel): string | undefined {
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 5_000 },
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
@@ -36,8 +36,8 @@ export default defineConfig({
   outputDir: 'reports/test-artifacts',
   use: {
     headless,
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: 10_000,
+   // navigationTimeout: 30_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -55,19 +55,6 @@ export default defineConfig({
       name: 'customer',
       use: { ...devices['Desktop Chrome'], baseURL: panelUrl('customer', targetEnv), storageState: storageStateIfExists(targetEnv, 'customer') },
       dependencies: ['auth-setup'],
-      testMatch: /tests\/customer\/.*\.spec\.ts/,
-    },
-    {
-      name: 'customer-fast',
-      use: {
-        ...devices['Desktop Chrome'],
-        baseURL: panelUrl('customer', targetEnv),
-        storageState: storageStateIfExists(targetEnv, 'customer'),
-        trace: 'off',
-        video: 'off',
-        screenshot: 'only-on-failure',
-      },
-      // Intentionally no auth-setup dependency for faster local iteration.
       testMatch: /tests\/customer\/.*\.spec\.ts/,
     },
     {
