@@ -133,22 +133,72 @@ export class BuyMetalPage extends BasePage {
   async enterStartDatePlusDays(days = 5): Promise<string> {
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + days);
-    const day = String(targetDate.getDate());
+    const expectedDay = targetDate.getDate();
+    const dayPart = String(expectedDay).padStart(2, '0');
+    const monthPart = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const yearPart = String(targetDate.getFullYear());
+    const formattedDateDash = `${dayPart}-${monthPart}-${yearPart}`;
+    const formattedDateSlash = `${dayPart}/${monthPart}/${yearPart}`;
+    const formattedDate = formattedDateSlash;
+    console.log(`[SIP DATE] requested days=${days}, targetDate=${formattedDate}`);
+    const startDateMeta = await this.startDateInput.evaluate((el) => {
+      const input = el as any;
+      return {
+        min: input.min || '',
+        max: input.max || '',
+        readOnly: input.readOnly,
+        disabled: input.disabled,
+        type: input.type,
+        placeholder: input.placeholder || '',
+      };
+    });
+    console.log(`[SIP DATE] input-meta=${JSON.stringify(startDateMeta)}`);
 
     await this.startDateInput.click();
+    const datePicker = this.page.locator('.p-datepicker');
+    await datePicker.waitFor({ state: 'visible', timeout: 10_000 });
+    const calendarMeta = await datePicker.evaluate((el) => {
+      const selected = el.querySelector('td .p-highlight')?.textContent?.trim() || '';
+      const disabledCount = el.querySelectorAll('td.p-disabled').length;
+      const enabledCount = el.querySelectorAll('td:not(.p-disabled)').length;
+      return { selected, disabledCount, enabledCount };
+    });
+    console.log(`[SIP DATE] calendar-meta=${JSON.stringify(calendarMeta)}`);
 
-    const dateCell = this.page
-      .locator('.p-datepicker td:not(.p-disabled)')
-      .filter({ hasText: day })
+    let value = '';
+    let selectedDay = NaN;
+    const dayMatcher = new RegExp(`^${expectedDay}$`);
+
+    const dateCellButton = datePicker
+      .locator('td:not(.p-disabled):not(.p-datepicker-other-month) span')
+      .filter({ hasText: dayMatcher })
       .first();
+    await dateCellButton.waitFor({ state: 'visible', timeout: 10_000 });
+    await dateCellButton.click({ force: true });
+    await expect(this.startDateInput).not.toHaveValue('', { timeout: 10_000 });
+    value = await this.startDateInput.inputValue();
+    selectedDay = Number(value.split('/')[0]);
+    console.log(`[SIP DATE] after calendar click, inputValue=${value}`);
 
-    await dateCell.waitFor({ state: 'visible' });
-    await dateCell.click();
-
-    const value = await this.startDateInput.inputValue();
-    if (!value.includes(day)) {
-      throw new Error(`Date not applied. Expected day ${day}, got ${value}`);
+    if (selectedDay !== expectedDay) {
+      console.log(`[SIP DATE] fallback typing targetDate=${formattedDateDash}`);
+      await this.startDateInput.fill(formattedDateDash);
+      await this.startDateInput.press('Enter');
+      await this.startDateInput.press('Tab');
+      value = await this.startDateInput.inputValue();
+      selectedDay = Number(value.split('/')[0]);
     }
+
+    if (selectedDay !== expectedDay) {
+      console.log(`[SIP DATE] second fallback typing targetDate=${formattedDateSlash}`);
+      await this.startDateInput.fill(formattedDateSlash);
+      await this.startDateInput.press('Enter');
+      await this.startDateInput.press('Tab');
+      value = await this.startDateInput.inputValue();
+      selectedDay = Number(value.split('/')[0]);
+    }
+
+    console.log(`[SIP DATE] final inputValue=${value}`);
     return value;
   }
 

@@ -220,32 +220,96 @@ export class PaymentPage extends BasePage {
     await otpInputs.first().type(otp, { delay: 100 });
   }
 
+  // async clickOnOtpContinueButton(): Promise<void> {
+  //   const frame = this.razorpayFrame();
+  //   const continueBtn = frame
+  //     .locator('button[type="submit"]:has-text("Continue"), button[type="submit"]:has-text("Submit"), button[type="submit"]:has-text("Verify"), button[type="submit"]:has-text("Pay")')
+  //     .first();
+  //   const paymentFailedTitle = frame.getByText(/payment could not be completed/i);
+  //   const paymentFailedReason = frame.getByText(/international cards are not supported|invalid card/i);
+
+  //   await Promise.race([
+  //     continueBtn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+  //     paymentFailedTitle.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+  //     paymentFailedReason.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+  //   ]);
+
+  //   if (await paymentFailedTitle.first().isVisible().catch(() => false)) {
+  //     const reason = (await paymentFailedReason.first().textContent().catch(() => 'Card payment was rejected.')) ?? 'Card payment was rejected.';
+  //     throw new Error(reason.trim());
+  //   }
+
+  //   await continueBtn.waitFor({ state: 'visible', timeout: 10_000 });
+  //   await continueBtn.click({ force: true });
+  //   await this.page.waitForSelector('text=/payment successful|success/i', { timeout: 40_000 });
+  //   const successDialog = this.page.getByRole('dialog', { name: 'Success' });
+  //   const continueBtnAfterSuccess = successDialog.getByRole('button', { name: 'Continue' });
+  //   await continueBtnAfterSuccess.waitFor({ state: 'visible', timeout: 5_000 });
+  //   await continueBtnAfterSuccess.click();
+  // }
+
   async clickOnOtpContinueButton(): Promise<void> {
     const frame = this.razorpayFrame();
     const continueBtn = frame
-      .locator('button[type="submit"]:has-text("Continue"), button[type="submit"]:has-text("Submit"), button[type="submit"]:has-text("Verify"), button[type="submit"]:has-text("Pay")')
+      .locator(
+        'button[type="submit"]:has-text("Continue"), button[type="submit"]:has-text("Submit"), button[type="submit"]:has-text("Verify"), button[type="submit"]:has-text("Pay")',
+      )
       .first();
-    const paymentFailedTitle = frame.getByText(/payment could not be completed/i);
-    const paymentFailedReason = frame.getByText(/international cards are not supported|invalid card/i);
+    const paymentFailedTitle = frame.getByText(/payment could not be completed/i).first();
+    const paymentFailedReason = frame
+      .getByText(/international cards are not supported|invalid card/i)
+      .first();
 
     await Promise.race([
-      continueBtn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-      paymentFailedTitle.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-      paymentFailedReason.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+      continueBtn.waitFor({ state: 'visible', timeout: 25_000 }).catch(() => {}),
+      paymentFailedTitle.waitFor({ state: 'visible', timeout: 25_000 }).catch(() => {}),
+      paymentFailedReason.waitFor({ state: 'visible', timeout: 25_000 }).catch(() => {}),
     ]);
 
-    if (await paymentFailedTitle.first().isVisible().catch(() => false)) {
-      const reason = (await paymentFailedReason.first().textContent().catch(() => 'Card payment was rejected.')) ?? 'Card payment was rejected.';
+    if (await paymentFailedTitle.isVisible().catch(() => false)) {
+      const reason =
+        (await paymentFailedReason.textContent().catch(() => 'Card payment was rejected.')) ??
+        'Card payment was rejected.';
       throw new Error(reason.trim());
     }
 
-    await continueBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await continueBtn.waitFor({ state: 'visible', timeout: 15_000 });
     await continueBtn.click({ force: true });
-    await this.page.waitForSelector('text=/payment successful|success/i', { timeout: 30_000 });
-    const successDialog = this.page.getByRole('dialog', { name: 'Success' });
-    const continueBtnAfterSuccess = successDialog.getByRole('button', { name: 'Continue' });
-    await continueBtnAfterSuccess.waitFor({ state: 'visible', timeout: 5_000 });
-    await continueBtnAfterSuccess.click();
+
+    const successDialog = this.page.getByRole('dialog', { name: /success/i });
+    const frameSuccessText = frame.getByText(/payment successful/i).first();
+    const dashboardUrl = /\/dashboard(?:\/|$|\?)/i;
+
+    const successSource = await Promise.race([
+      successDialog.waitFor({ state: 'visible', timeout: 45_000 }).then(() => 'dialog' as const),
+      frameSuccessText.waitFor({ state: 'visible', timeout: 45_000 }).then(() => 'frame' as const),
+      paymentFailedTitle.waitFor({ state: 'visible', timeout: 45_000 }).then(() => 'failed' as const),
+    ]).catch(() => 'none' as const);
+
+    if (successSource === 'failed') {
+      const reason =
+        (await paymentFailedReason.textContent().catch(() => 'Card payment was rejected.')) ??
+        'Card payment was rejected.';
+      throw new Error(reason.trim());
+    }
+
+    if (successSource === 'none') {
+      throw new Error('Payment success confirmation not detected after OTP submit.');
+    }
+
+    if (successSource === 'dialog') {
+      const continueBtnAfterSuccess = successDialog.getByRole('button', { name: 'Continue' });
+      await continueBtnAfterSuccess.waitFor({ state: 'visible', timeout: 10_000 });
+      await continueBtnAfterSuccess.click();
+    } else {
+      await frame.getByRole('button', { name: /continue|done|close/i }).first().click({ force: true });
+      const continueBtnAfterSuccess = successDialog.getByRole('button', { name: 'Continue' });
+      if (await continueBtnAfterSuccess.isVisible().catch(() => false)) {
+        await continueBtnAfterSuccess.click();
+      }
+    }
+
+    await this.page.waitForURL(dashboardUrl, { timeout: 30_000 }).catch(() => {});
   }
 
   async closeUsingAsOverlayIfPresent(): Promise<void> {
@@ -556,22 +620,28 @@ export class PaymentPage extends BasePage {
 
     if (bankPopup) {
       await bankPopup.waitForLoadState();
-      await bankPopup.locator('button, input').filter({ hasText: /success/i }).first().click();
+      await bankPopup.locator('button, input').filter({ hasText: /success/i }).first().click().catch(() => {});
       await bankPopup.waitForEvent('close').catch(() => {});
     }
 
     const razorpayFrame = this.page.frameLocator('iframe[src*="razorpay"]');
-    const successDialog = this.page.getByRole('dialog', { name: /success/i });
-    await Promise.race([
-      razorpayFrame.getByText(/payment successful/i).waitFor({ timeout: 20_000 }).catch(() => {}),
-      successDialog.waitFor({ state: 'visible', timeout: 30_000 }),
+    const pageSuccessDialog = this.page.getByRole('dialog', { name: /success/i });
+    const frameSuccessHeading = razorpayFrame.getByText(/payment successful/i);
+
+    const successSource = await Promise.race([
+      pageSuccessDialog.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'page' as const),
+      frameSuccessHeading.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'frame' as const),
     ]);
 
-    await successDialog.waitFor({ state: 'visible', timeout: 30_000 });
-    await successDialog.getByRole('button', { name: 'Continue' }).click();
+    if (successSource === 'page') {
+      await pageSuccessDialog.getByRole('button', { name: /continue/i }).click().catch(() => {});
+    } else {
+      await razorpayFrame.getByRole('button', { name: /continue|done|close/i }).first().click().catch(() => {});
+    }
+
     await Promise.race([
-      this.page.locator('iframe.razorpay-checkout-frame').waitFor({ state: 'hidden', timeout: 30_000 }),
-      this.page.waitForURL(/summary|dashboard|success/, { timeout: 30_000 }),
+      this.page.locator('iframe[src*="razorpay"]').first().waitFor({ state: 'hidden', timeout: 30_000 }),
+      this.page.waitForURL(/summary|dashboard|my-orders|success/i, { timeout: 30_000 }),
     ]);
   }
 

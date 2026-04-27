@@ -2,14 +2,17 @@ import { Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
 export class MyOrderVerificationPage extends BasePage {
-  private readonly orderBlock: Locator;
+  private readonly orderRows: Locator;
+  private readonly noRecordLabel: Locator;
+  private selectedOrderRow: Locator | null = null;
 
   constructor(page: Page) {
     super(page);
 
-    this.orderBlock = page
-      .locator('div.p-4.flex.flex-wrap.lg\\:flex-nowrap.justify-center.lg\\:justify-between.items-center.gap-6')
-      .first();
+    this.orderRows = page.locator('div.p-4').filter({
+      has: page.locator('div.text-10:has-text("Transaction ID")'),
+    });
+    this.noRecordLabel = page.locator('text=No Record Found');
   }
 
   async clickProfileName(text: string): Promise<void> {
@@ -30,42 +33,49 @@ export class MyOrderVerificationPage extends BasePage {
     await this.page.waitForURL('**/my-orders');
   }
 
-  async getDate(): Promise<string> {
-    return (await this.orderBlock
-      .locator('div.text-10:has-text("Date")')
+  private async getFieldValue(label: string): Promise<string> {
+    const valueLocator = this.getLatestOrderRow()
+      .locator(`div.text-10:has-text("${label}")`)
+      .first()
       .locator('xpath=following-sibling::div[1]')
-      .textContent())?.trim() ?? '';
+      .first();
+
+    await valueLocator.waitFor({ state: 'visible', timeout: 20_000 });
+    return (await valueLocator.textContent())?.trim() ?? '';
+  }
+
+  async getDate(): Promise<string> {
+    return await this.getFieldValue('Date');
   }
 
   async getTransactionId(): Promise<string> {
-    return (await this.orderBlock
-      .locator('div.text-10:has-text("Transaction ID")')
-      .locator('xpath=following-sibling::div[1]')
-      .textContent())?.trim() ?? '';
+    return await this.getFieldValue('Transaction ID');
   }
 
   async getTimeOfPurchase(): Promise<string> {
-    return (await this.orderBlock
-      .locator('div.text-10:has-text("Time of Purchase")')
-      .locator('xpath=following-sibling::div[1]')
-      .textContent())?.trim() ?? '';
+    return await this.getFieldValue('Time of Purchase');
   }
 
   async getAmount(): Promise<number> {
-    const text = await this.orderBlock
+    const text = await this.getLatestOrderRow()
       .locator('div.text-10:has-text("Amount")')
+      .first()
       .locator('xpath=following-sibling::div[1]')
+      .first()
       .innerText();
 
     return Number(text.replace(/,/g, '').trim());
   }
 
   async getNarration(): Promise<string> {
-    return (await this.orderBlock
-      .locator('div.text-10:has-text("Narration")')
-      .locator('xpath=following-sibling::div[1]')
-      .innerText())
-      .trim();
+    return (
+      await this.getLatestOrderRow()
+        .locator('div.text-10:has-text("Narration")')
+        .first()
+        .locator('xpath=following-sibling::div[1]')
+        .first()
+        .innerText()
+    ).trim();
   }
 
   async getNarrationQuantity(): Promise<number | null> {
@@ -75,16 +85,28 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   async waitForOrderRow(): Promise<void> {
+    this.selectedOrderRow = null;
     await this.page
       .locator('text=No Record Found')
       .waitFor({ state: 'detached' })
       .catch(() => {});
 
-    await this.orderBlock.waitFor({ state: 'visible' });
+    await this.getLatestOrderRow().waitFor({ state: 'visible', timeout: 30_000 });
+  }
+
+  async waitForOrderRowByText(text: string, timeout = 45_000): Promise<void> {
+    await this.page
+      .locator('text=No Record Found')
+      .waitFor({ state: 'detached' })
+      .catch(() => {});
+
+    const row = this.orderRows.filter({ hasText: new RegExp(text, 'i') }).first();
+    await row.waitFor({ state: 'visible', timeout });
+    this.selectedOrderRow = row;
   }
 
   getLatestOrderRow(): Locator {
-    return this.orderBlock;
+    return this.selectedOrderRow ?? this.orderRows.first();
   }
 
   async clickDownloadInvoiceAndGetUrl(): Promise<string> {

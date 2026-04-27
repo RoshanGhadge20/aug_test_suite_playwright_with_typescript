@@ -6,7 +6,6 @@ export class DashBoardPage extends BasePage {
   private readonly mySipsHeading: Locator;
   private readonly sipTextBlocks: Locator;
   private readonly statusBadges: Locator;
-  private readonly totalGoldValue: Locator;
   private readonly goldFDValue: Locator;
   private readonly walletBalance: Locator;
   private readonly totalSilver: Locator;
@@ -31,10 +30,6 @@ export class DashBoardPage extends BasePage {
 
     this.statusBadges = page.locator(
       'div.rounded-2xl.border.text-14.font-gilroybold',
-    );
-
-    this.totalGoldValue = page.locator(
-      "//p[text()='Total Gold(g)']/preceding-sibling::p",
     );
 
     this.goldFDValue = page.locator('p', {
@@ -185,13 +180,35 @@ export class DashBoardPage extends BasePage {
   }
 
   async getTotalGoldValue(): Promise<number> {
-    const text = await this.totalGoldValue.innerText();
-    return parseFloat(text.replace('g', '').trim());
+    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
+    const goldLabel = portfolioCard.locator('p', { hasText: /^Total Gold\(g\)$/ }).first();
+    await goldLabel.waitFor({ state: 'visible', timeout: 20_000 });
+
+    const valueNode = goldLabel.locator('xpath=preceding-sibling::p[1]');
+    await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
+
+    const text = (await valueNode.textContent())?.trim() ?? '';
+    const value = Number(text.replace(/[^\d.]/g, ''));
+    if (Number.isNaN(value)) {
+      throw new Error(`Unable to parse Total Gold value from: "${text}"`);
+    }
+    return value;
   }
 
   async getTotalSilverValue(): Promise<number> {
-    const text = (await this.totalSilver.textContent()) ?? '';
-    return Number(text.replace('g', '').trim());
+    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
+    const silverLabel = portfolioCard.locator('p', { hasText: /^Total Silver\(g\)$/ }).first();
+    await silverLabel.waitFor({ state: 'visible', timeout: 20_000 });
+
+    const valueNode = silverLabel.locator('xpath=preceding-sibling::p[1]');
+    await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
+
+    const text = (await valueNode.textContent())?.trim() ?? '';
+    const value = Number(text.replace(/[^\d.]/g, ''));
+    if (Number.isNaN(value)) {
+      throw new Error(`Unable to parse Total Silver value from: "${text}"`);
+    }
+    return value;
   }
 
   async getWalletBalance(): Promise<number> {
