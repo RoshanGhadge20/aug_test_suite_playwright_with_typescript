@@ -225,6 +225,18 @@ export class WithdrawalPage extends BasePage {
     return parseFloat(text.replace('gm', '').trim());
   }
 
+  async getMetalValueFromDetails(metalType: 'Gold' | 'Silver'): Promise<number> {
+    const metalValue = this.page.locator(
+      `//div[normalize-space()="${metalType}"]/following-sibling::div`
+    );
+    await metalValue.waitFor({ state: 'visible' });
+    const text = await metalValue.textContent();
+    if (!text) {
+      throw new Error(`${metalType} value not found`);
+    }
+    return parseFloat(text.replace('gm', '').trim());
+  }
+
   async getAmountFromAccountDetails(): Promise<number> {
     const text = (await this.page.locator('text=Amount').locator('..').locator('div').nth(1).textContent()) ?? '';
     return parseFloat(text.replace(/[₹,]/g, '').trim());

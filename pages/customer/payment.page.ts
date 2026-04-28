@@ -688,6 +688,26 @@ export class PaymentPage extends BasePage {
     await successBtn.waitFor({ state: 'visible', timeout: 30_000 });
     await successBtn.click();
   }
+
+  async getSuccessMessageAndContinueToDashboard(): Promise<string> {
+    const successDialog = this.page.getByRole('dialog', { name: /success/i });
+    await successDialog.waitFor({ state: 'visible', timeout: 30_000 });
+
+    const successMessage = successDialog
+      .locator('app-dialog .text-16, app-dialog div')
+      .filter({ hasText: /successfully/i })
+      .first();
+    await successMessage.waitFor({ state: 'visible', timeout: 15_000 });
+    const messageText = (await successMessage.textContent())?.trim() ?? '';
+    console.log('Success Message:', messageText);
+    const continueButton = successDialog.getByRole('button', { name: /^continue$/i });
+    await continueButton.waitFor({ state: 'visible', timeout: 15_000 });
+    await continueButton.click();
+
+    await this.page.waitForURL(/\/dashboard(?:\/|$|\?)/i, { timeout: 30_000 });
+    return messageText;
+  }
+
   async completeEmandateFlow() {
     const frame = this.page.frameLocator('iframe[src*="razorpay"]');
   

@@ -244,4 +244,355 @@ export class DashBoardPage extends BasePage {
     await this.withdrawInvestmentButton.waitFor({ state: 'visible' });
     await this.withdrawInvestmentButton.click();
   }
+
+  async getApprovedSipNameWithZeroInvestment(): Promise<string> {
+    const sipCards = this.page.locator(
+      'app-sip-card, div.border.border-stroke.rounded-xl'
+    );
+    const nextPageButton = this.page
+      .locator(
+        '.p-paginator-next, button[aria-label*="Next"], button:has(.pi-angle-right), button[aria-label*="next"]'
+      )
+      .first();
+
+    while (true) {
+      await sipCards.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+      const cardCount = await sipCards.count();
+
+      for (let i = 0; i < cardCount; i += 1) {
+        const card = sipCards.nth(i);
+        const cardText = (await card.innerText()).replace(/\s+/g, ' ').trim();
+        const isApproved = /\bapproved\b/i.test(cardText);
+        const investmentMatch = cardText.match(/Total Investment\s*₹\s*([0-9,]+(?:\.[0-9]+)?)/i);
+        const investmentValue = investmentMatch ? Number(investmentMatch[1].replace(/,/g, '')) : NaN;
+        const isZeroInvestment = !Number.isNaN(investmentValue) && investmentValue === 0;
+
+        if (isApproved && isZeroInvestment) {
+          const sipNameNode = card.locator('div.text-24.font-cabinetgroteskbold').first();
+          await sipNameNode.waitFor({ state: 'visible', timeout: 10_000 });
+          return (await sipNameNode.textContent())?.trim() ?? '';
+        }
+      }
+
+      const hasNext = await nextPageButton.isVisible().catch(() => false);
+      if (!hasNext) break;
+
+      const ariaDisabled = await nextPageButton.getAttribute('aria-disabled');
+      const disabledAttr = await nextPageButton.getAttribute('disabled');
+      const classAttr = (await nextPageButton.getAttribute('class')) ?? '';
+      const isDisabled =
+        ariaDisabled === 'true' ||
+        disabledAttr !== null ||
+        /\bp-disabled\b|\bdisabled\b/i.test(classAttr);
+
+      if (isDisabled) break;
+
+      await nextPageButton.click();
+      await this.page.waitForTimeout(1_000);
+    }
+
+    throw new Error('No SIP found with Approved status and Total Investment ₹0.');
+  }
+
+  async getApprovedSipNameWithPositiveInvestment(): Promise<string> {
+    const sipCards = this.page.locator('app-sip-card');
+    const nextPageButton = this.page
+      .locator(
+        '.p-paginator-next, button[aria-label*="Next"], button:has(.pi-angle-right), button[aria-label*="next"]'
+      )
+      .first();
+    let pageNumber = 1;
+
+    while (true) {
+      await sipCards.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+      const cardCount = await sipCards.count();
+
+      for (let i = 0; i < cardCount; i += 1) {
+        const card = sipCards.nth(i);
+        const cardText = (await card.innerText()).replace(/\s+/g, ' ').trim();
+        const isApproved = /\bapproved\b/i.test(cardText);
+        const investmentMatch = cardText.match(/Total Investment\s*₹\s*([0-9,]+(?:\.[0-9]+)?)/i);
+        const investmentValue = investmentMatch ? Number(investmentMatch[1].replace(/,/g, '')) : NaN;
+        const isPositiveInvestment = !Number.isNaN(investmentValue) && investmentValue > 0;
+        if (isApproved && isPositiveInvestment) {
+          const sipNameNode = card.locator('div.text-24.font-cabinetgroteskbold').first();
+          await sipNameNode.waitFor({ state: 'visible', timeout: 10_000 });
+          console.log(`[SIP SEARCH] Condition satisfied on page ${pageNumber}`);
+          return (await sipNameNode.textContent())?.trim() ?? '';
+        }
+      }
+
+      const hasNext = await nextPageButton.isVisible().catch(() => false);
+      if (!hasNext) break;
+
+      const ariaDisabled = await nextPageButton.getAttribute('aria-disabled');
+      const disabledAttr = await nextPageButton.getAttribute('disabled');
+      const classAttr = (await nextPageButton.getAttribute('class')) ?? '';
+      const isDisabled =
+        ariaDisabled === 'true' ||
+        disabledAttr !== null ||
+        /\bp-disabled\b|\bdisabled\b/i.test(classAttr);
+
+      if (isDisabled) break;
+
+      await nextPageButton.click();
+      await this.page.waitForTimeout(1_000);
+      pageNumber += 1;
+    }
+
+    throw new Error('No SIP found with Approved status and Total Investment greater than ₹0.');
+  }
+
+  async printGoldValueAndClickProceedBySipName(
+    sipName?: string
+  ): Promise<{ sipName: string; goldValue: string; metalType: 'Gold' | 'Silver' }> {
+    const sipCards = this.page
+      .locator('app-sip-card, div.border.border-stroke.rounded-xl')
+      .filter({
+        has: this.page.locator('div.text-24.font-cabinetgroteskbold'),
+      })
+      .filter({
+        has: this.page.getByRole('button', { name: /^Proceed$/i }),
+      });
+    const targetSipName = sipName?.trim() ?? '';
+    const normalizedTargetSipName = targetSipName.toLowerCase();
+    const hasProvidedSipName = normalizedTargetSipName.length > 0;
+    let previousScrollHeight = 0;
+    let noMovementCount = 0;
+    let scanCycles = 0;
+    const startedAt = Date.now();
+
+    // On some list loads, SIP cards render only after the first viewport movement.
+    await this.page.evaluate(() => {
+      const scopedGlobal = globalThis as {
+        scrollBy?: (x: number, y: number) => void;
+        innerHeight?: number;
+      };
+      const viewportHeight = scopedGlobal.innerHeight ?? 0;
+      scopedGlobal.scrollBy?.(0, Math.max(120, Math.floor(viewportHeight * 0.5)));
+    });
+    await this.page.waitForTimeout(700);
+
+    while (true) {
+      scanCycles += 1;
+      if (Date.now() - startedAt > 45_000) {
+        throw new Error(
+          `SIP scan timed out after 45s (cycles=${scanCycles}). No eligible SIP card matched the conditions.`
+        );
+      }
+
+      const cardCount = await sipCards.count();
+      if (scanCycles === 1) {
+        console.log(`[SIP SCAN] initial SIP card count: ${cardCount}`);
+      }
+      if (cardCount === 0 && scanCycles === 1) {
+        console.log('[SIP SCAN] No SIP cards visible on initial scan, will scroll and retry.');
+      }
+      if (scanCycles % 5 === 0) {
+        console.log(`[SIP SCAN] cycle=${scanCycles}, visibleCards=${cardCount}, target=${normalizedTargetSipName || 'auto'}`);
+      }
+      for (let i = 0; i < cardCount; i += 1) {
+        const candidateCard = sipCards.nth(i);
+        const rawTitleText = ((await candidateCard
+          .locator('div.text-24.font-cabinetgroteskbold')
+          .first()
+          .textContent()
+          .catch(() => '')) ?? '')
+          .trim();
+        const cardText = (await candidateCard.innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+        const derivedNameFromCardText = cardText
+          .replace(/Total (Gold|Silver|Investment)\b[\s\S]*$/i, '')
+          .replace(/\b(Approved|Pending)\b[\s\S]*$/i, '')
+          .trim();
+        const effectiveSipName = rawTitleText || derivedNameFromCardText || 'selected-sip';
+        const titleText = rawTitleText.trim().toLowerCase();
+
+        const nameMatched = normalizedTargetSipName ? titleText === normalizedTargetSipName : true;
+        if (!nameMatched) {
+          continue;
+        }
+
+        const isVaultCard = /^(gold|silver)\s+vault$/i.test(rawTitleText.trim());
+        if (isVaultCard) {
+          continue;
+        }
+
+        const isVisible = await candidateCard.isVisible().catch(() => false);
+        if (!isVisible) {
+          continue;
+        }
+
+        const totalGoldNode = candidateCard
+          .locator('div.text-14.font-gilroymedium', { hasText: /^Total Gold$/i })
+          .locator('xpath=following-sibling::div[1]')
+          .first();
+        const totalSilverNode = candidateCard
+          .locator('div.text-14.font-gilroymedium', { hasText: /^Total Silver$/i })
+          .locator('xpath=following-sibling::div[1]')
+          .first();
+        const fallbackGoldNode = candidateCard
+          .locator('div.text-18.font-gilroybold')
+          .filter({ hasText: /gm/i })
+          .first();
+
+        const planTypeText = ((await candidateCard
+          .locator('div.text-16.font-gilroymedium')
+          .first()
+          .textContent()
+          .catch(() => '')) ?? '')
+          .trim();
+        const planMentionsGold = /\bgold\b/i.test(planTypeText);
+        const planMentionsSilver = /\bsilver\b/i.test(planTypeText);
+        const cardMentionsTotalGold = /\bTotal Gold\b/i.test(cardText);
+        const cardMentionsTotalSilver = /\bTotal Silver\b/i.test(cardText);
+
+        let metalLabel: 'Gold' | 'Silver' | 'Unknown' = 'Unknown';
+        if (planMentionsGold) {
+          metalLabel = 'Gold';
+        } else if (planMentionsSilver) {
+          metalLabel = 'Silver';
+        } else if (cardMentionsTotalGold) {
+          metalLabel = 'Gold';
+        } else if (cardMentionsTotalSilver) {
+          metalLabel = 'Silver';
+        }
+        let totalGoldText = '';
+        if (await totalGoldNode.isVisible().catch(() => false)) {
+          totalGoldText = (await totalGoldNode.textContent())?.trim() ?? '';
+          metalLabel = 'Gold';
+        }
+
+        if (!totalGoldText && await totalSilverNode.isVisible().catch(() => false)) {
+          totalGoldText = (await totalSilverNode.textContent())?.trim() ?? '';
+          metalLabel = 'Silver';
+        }
+
+        if (!totalGoldText && await fallbackGoldNode.isVisible().catch(() => false)) {
+          totalGoldText = (await fallbackGoldNode.textContent())?.trim() ?? '';
+        }
+
+        if (!totalGoldText) {
+          // Keep this fallback generic because card styles/labels can vary across builds.
+          const labelledGoldMatch = cardText.match(/Total Gold\s*([0-9]+(?:\.[0-9]+)?\s*gm)/i);
+          const labelledSilverMatch = cardText.match(/Total Silver\s*([0-9]+(?:\.[0-9]+)?\s*gm)/i);
+          const anyGoldMatch = cardText.match(/([0-9]+(?:\.[0-9]+)?\s*gm)\b/i);
+          totalGoldText = (labelledGoldMatch?.[1] ?? labelledSilverMatch?.[1] ?? anyGoldMatch?.[1] ?? '').trim();
+          if (labelledGoldMatch?.[1]) {
+            metalLabel = 'Gold';
+          } else if (labelledSilverMatch?.[1]) {
+            metalLabel = 'Silver';
+          }
+        }
+
+        // Click only the Proceed button that belongs to this exact matched SIP card.
+        const proceedButton = candidateCard
+          .getByRole('button', { name: /^Proceed$/i })
+          .first();
+        const isProceedVisible = await proceedButton.isVisible().catch(() => false);
+        const isProceedEnabled = await proceedButton.isEnabled().catch(() => false);
+        const hasProceed = isProceedVisible && isProceedEnabled;
+
+        const numericValue = Number(totalGoldText.replace(/[^\d.]/g, ''));
+        const hasPositiveValue = !Number.isNaN(numericValue) && numericValue > 0;
+        console.log(
+          `[SIP CHECK] name="${effectiveSipName}" metalType="${metalLabel}" value="${totalGoldText || 'N/A'}" valueGreaterThanZero=${hasPositiveValue}`
+        );
+
+        console.log(`SIP Name: ${effectiveSipName}`);
+        console.log(`Metal Type for SIP "${effectiveSipName}": ${metalLabel}`);
+        console.log(`Total ${metalLabel} for SIP "${effectiveSipName}": ${totalGoldText || 'N/A'}`);
+        console.log(`Proceed available for SIP "${effectiveSipName}": ${hasProceed}`);
+
+        const hasSupportedMetal = metalLabel === 'Gold' || metalLabel === 'Silver';
+        if (!hasSupportedMetal || !hasPositiveValue || !hasProceed) {
+          const reason = `metalSupported=${hasSupportedMetal}, positiveValue=${hasPositiveValue}, proceedAvailable=${hasProceed}`;
+          throw new Error(`Target SIP "${effectiveSipName}" does not satisfy required conditions (${reason}).`);
+        }
+        const resolvedMetalType: 'Gold' | 'Silver' = metalLabel === 'Gold' ? 'Gold' : 'Silver';
+
+        await proceedButton.scrollIntoViewIfNeeded();
+        await proceedButton.click();
+
+        return {
+          sipName: effectiveSipName,
+          goldValue: totalGoldText || 'N/A',
+          metalType: resolvedMetalType,
+        };
+      }
+
+      const currentScrollHeight = await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as {
+          document?: { body?: { scrollHeight?: number } };
+        };
+        return scopedGlobal.document?.body?.scrollHeight ?? 0;
+      });
+      const listContainerMoved = await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as {
+          document?: {
+            querySelector?: (selector: string) => {
+              parentElement?: unknown;
+            } | null;
+          };
+          getComputedStyle?: (el: unknown) => { overflowY?: string };
+        };
+        type ScrollEl = {
+          scrollTop: number;
+          scrollHeight: number;
+          clientHeight: number;
+          parentElement?: ScrollEl | null;
+        };
+
+        const cardTitleNode = scopedGlobal.document?.querySelector?.(
+          'div.text-24.font-cabinetgroteskbold'
+        );
+        let container = (cardTitleNode?.parentElement as ScrollEl | null) ?? null;
+
+        while (container) {
+          const style = scopedGlobal.getComputedStyle?.(container);
+          const isScrollableY = /(auto|scroll)/i.test(style?.overflowY ?? '');
+          const canScroll = isScrollableY && container.scrollHeight > container.clientHeight;
+          if (canScroll) {
+            const before = container.scrollTop;
+            container.scrollTop = Math.min(
+              container.scrollHeight,
+              container.scrollTop + Math.floor(container.clientHeight * 0.85)
+            );
+            return container.scrollTop > before;
+          }
+          container = container.parentElement ?? null;
+        }
+
+        return false;
+      });
+
+      if (currentScrollHeight === previousScrollHeight && !listContainerMoved) {
+        noMovementCount += 1;
+      } else {
+        noMovementCount = 0;
+      }
+
+      if (noMovementCount >= 3) {
+        break;
+      }
+
+      previousScrollHeight = currentScrollHeight;
+      await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as {
+          scrollBy?: (x: number, y: number) => void;
+          innerHeight?: number;
+        };
+        const viewportHeight = scopedGlobal.innerHeight ?? 0;
+        scopedGlobal.scrollBy?.(0, Math.floor(viewportHeight * 0.85));
+      });
+      await this.page.waitForTimeout(800);
+    }
+
+    if (normalizedTargetSipName) {
+      if (hasProvidedSipName) {
+        throw new Error(`SIP "${sipName}" was not found after scrolling the page.`);
+      }
+      throw new Error(`Selected SIP "${targetSipName}" was not found with Proceed enabled before end of list.`);
+    }
+    throw new Error('No eligible SIP found (excluding Gold Vault/Silver Vault) with Gold value > 0.');
+  }
 }
