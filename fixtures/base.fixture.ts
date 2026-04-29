@@ -7,6 +7,7 @@ import { DashBoardPage } from '../pages/customer/dashboard.page';
 import { MyOrderVerificationPage } from '../pages/customer/my-order-verification.page';
 import { PaymentPage } from '../pages/customer/payment.page';
 import { WithdrawalPage } from '../pages/customer/withdrawal.page';
+import { AddNewBankWithdrawalPage } from '../pages/customer/add-new-bank-withdrawal.page';
 
 type PageObjectFixtures = {
   customerLogin: CustomerLoginPage;
@@ -17,6 +18,7 @@ type PageObjectFixtures = {
   myOrderVerificationPage: MyOrderVerificationPage;
   paymentPage: PaymentPage;
   withdrawalPage: WithdrawalPage;
+  addNewBankWithdrawalPage: AddNewBankWithdrawalPage;
   // customerLogin: CustomerLoginPage;
   // businessLogin: BusinessLoginPage;
   // newAdminLogin: NewAdminLoginPage;
@@ -31,6 +33,7 @@ export const test = base.extend<PageObjectFixtures>({
   myOrderVerificationPage: async ({ page }, use) => { await use(new MyOrderVerificationPage(page)); },
   paymentPage: async ({ page }, use) => { await use(new PaymentPage(page)); },
   withdrawalPage: async ({ page }, use) => { await use(new WithdrawalPage(page)); },
+  addNewBankWithdrawalPage: async ({ page }, use) => { await use(new AddNewBankWithdrawalPage(page)); },
   // customerLogin: async ({ page }, use) => { await use(new CustomerLoginPage(page)); },
   // businessLogin: async ({ page }, use) => { await use(new BusinessLoginPage(page)); },
   // newAdminLogin: async ({ page }, use) => { await use(new NewAdminLoginPage(page)); },

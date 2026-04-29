@@ -7,7 +7,9 @@ export class WithdrawalPage extends BasePage {
   private readonly depositOption: Locator;
   private readonly depositProceedButton: Locator;
   private readonly goldVaultSection: Locator;
+  private readonly silverVaultSection: Locator;
   private readonly totalGoldVault: Locator;
+  private readonly totalSilverVault: Locator;
   private readonly totalGold: Locator;
   private readonly totalSilver: Locator;
   private readonly totalInvestment: Locator;
@@ -41,8 +43,17 @@ export class WithdrawalPage extends BasePage {
       .locator('xpath=ancestor::div[contains(@class,"border") or contains(@class,"card")]')
       .first();
 
+    this.silverVaultSection = page
+      .getByText('Silver Vault', { exact: true })
+      .locator('xpath=ancestor::div[contains(@class,"border") or contains(@class,"card")]')
+      .first();
+
     this.totalGoldVault = this.goldVaultSection
       .locator('xpath=.//div[normalize-space()="Total Gold"]/following-sibling::div[1]')
+      .first();
+
+    this.totalSilverVault = this.silverVaultSection
+      .locator('xpath=.//div[normalize-space()="Total Silver"]/following-sibling::div[1]')
       .first();
 
     this.totalGold = page.locator(
@@ -126,6 +137,11 @@ export class WithdrawalPage extends BasePage {
 
   async getGoldVaultValue(): Promise<number> {
     const text = (await this.totalGoldVault.textContent()) ?? '';
+    const cleaned = text.replace(/[^\d.]/g, '');
+    return cleaned ? parseFloat(cleaned) : 0;
+  }
+  async getSilverVaultValue(): Promise<number> {
+    const text = (await this.totalSilverVault.textContent()) ?? '';
     const cleaned = text.replace(/[^\d.]/g, '');
     return cleaned ? parseFloat(cleaned) : 0;
   }
@@ -248,7 +264,18 @@ export class WithdrawalPage extends BasePage {
   }
 
   async selectBankAccount(): Promise<void> {
-    await this.page.getByText('Bank Account').click();
+    const blockingOverlay = this.page.locator('div.p-blockui[aria-busy="true"]');
+    if (await blockingOverlay.isVisible().catch(() => false)) {
+      await blockingOverlay.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+    }
+
+    const bankAccountLabel = this.page.locator('label[for="Bank Account"]').first();
+    if (await bankAccountLabel.isVisible().catch(() => false)) {
+      await bankAccountLabel.click({ force: true });
+      return;
+    }
+
+    await this.page.getByText('Bank Account', { exact: true }).first().click({ force: true });
   }
 
   async getTotalWithdrawAmount(): Promise<number> {

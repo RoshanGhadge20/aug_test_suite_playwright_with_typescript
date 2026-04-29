@@ -132,3 +132,42 @@ export function getSipFlowsDataset(): SipFlowsDataset {
     SIPMonthlySilverMetal: normalizeCell(firstRow.SIPMonthlySilverMetal),
   };
 }
+
+export interface WithdrawalTc003Dataset {
+  invalidIfscAccountNumber: string;
+  invalidIfscCode: string;
+  expectedInvalidIfscMessage: string;
+  invalidAccountNumber: string;
+  invalidAccountIfscCode: string;
+  expectedInvalidAccountMessage: string;
+  validAccountNumber: string;
+  validAccountInvalidIfscCode: string;
+  expectedToastErrorMessage: string;
+  expectedVerifiedAccountMessage: string;
+  verifiedAccountNumber: string;
+  verifiedAccountIfscCode: string;
+}
+
+export function getWithdrawalTc003Dataset(): WithdrawalTc003Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('withdrawal');
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "withdrawal" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    invalidIfscAccountNumber: normalizeCell(firstRow.WithdrawalInvalidIfscAccountNumber ?? '1234567890'),
+    invalidIfscCode: normalizeCell(firstRow.WithdrawalInvalidIfscCode ?? '1234567890'),
+    expectedInvalidIfscMessage: normalizeCell(firstRow.WithdrawalExpectedInvalidIfscMessage ?? 'Enter a valid IFSC Code'),
+    invalidAccountNumber: normalizeCell(firstRow.WithdrawalInvalidAccountNumber ?? '123'),
+    invalidAccountIfscCode: normalizeCell(firstRow.WithdrawalInvalidAccountIfscCode ?? 'ICIC0006134'),
+    expectedInvalidAccountMessage: normalizeCell(firstRow.WithdrawalExpectedInvalidAccountMessage ?? 'Enter a valid Account Number'),
+    validAccountNumber: normalizeCell(firstRow.WithdrawalValidAccountNumber ?? '5312730447'),
+    validAccountInvalidIfscCode: normalizeCell(firstRow.WithdrawalValidAccountInvalidIfscCode ?? 'ICIC0006244'),
+    expectedToastErrorMessage: normalizeCell(firstRow.WithdrawalExpectedToastErrorMessage ?? 'TRANSACTION NOT ALLOWED AS INVALID ACCOUNT'),
+    expectedVerifiedAccountMessage: normalizeCell(
+      firstRow.WithdrawalExpectedVerifiedAccountMessage ?? firstRow.WithdrawalExpectedToastErrorMessage ?? 'TRANSACTION NOT ALLOWED AS INVALID ACCOUNT',
+    ),
+    verifiedAccountNumber: normalizeCell(firstRow.WithdrawalVerifiedAccountNumber ?? '3048155145'),
+    verifiedAccountIfscCode: normalizeCell(firstRow.WithdrawalVerifiedAccountIfscCode ?? 'KKBK0001422'),
+  };
+}

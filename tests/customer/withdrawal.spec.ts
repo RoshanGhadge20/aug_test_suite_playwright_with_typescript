@@ -1,7 +1,10 @@
 import { test, expect } from '../../fixtures/base.fixture';
+import { getWithdrawalTc003Dataset } from '../../utils/data/customer-excel-data';
+
+const tc003Dataset = getWithdrawalTc003Dataset();
 
 test.describe('customer withdrawal @customer-flows', () => {
-  test('TC_001-withdrawal from Gold Vault(Deposits) and transfer to bank account', async ({ page, dashboardPage, withdrawalPage, paymentPage }) => {
+  test('TC_001-withdrawal from Gold Vault(Deposits) and transfer to bank account', async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage }) => {
     let portfolioValue = 0;
     let totalGoldBeforePurchase = 0;
     let totalSilverBeforePurchase = 0;
@@ -427,5 +430,215 @@ test.describe('customer withdrawal @customer-flows', () => {
         });
     
         
+});
+
+});
+
+test(
+  'TC_003 - Withdraw from Silver Vault with Add Bank validation and error message checks',
+  async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage }) => {
+  let portfolioValue = 0;
+  let totalGoldBeforePurchase = 0;
+  let totalSilverBeforePurchase = 0;
+  let goldFD = '';
+  let currentUrl = '';
+  let goldVault = 0;
+  let silverVault = 0;
+  let sellingPrice = 0;
+  let validQty = 0;
+  let invalidQty = 0;
+  let totalGoldInvestment = 0;
+
+  await test.step('Get and validate portfolio values', async () => {
+    await page.goto('/dashboard');
+
+    portfolioValue = await dashboardPage.getPortfolioValueNumber();
+    console.log('Total Portfolio Value (Rs):', portfolioValue);
+
+    totalGoldBeforePurchase = await dashboardPage.getTotalGoldValue();
+    console.log('Total Gold (g):', totalGoldBeforePurchase);
+    expect(totalGoldBeforePurchase).toBeGreaterThan(0);
+
+    totalSilverBeforePurchase = await dashboardPage.getTotalSilverValue();
+    console.log('Total Silver (g):', totalSilverBeforePurchase);
+
+    goldFD = await dashboardPage.getGoldFDValue();
+    console.log('Gold FD+ Value:', goldFD);
+    expect(goldFD).not.toBe('');
+  });
+
+  await test.step('Click Proceed and verify navigation', async () => {
+    await dashboardPage.clickWithdrawInvestment();
+    await withdrawalPage.clickProceed();
+    await expect(page).not.toHaveURL(currentUrl);
+  });
+
+  await test.step('Deposit flow', async () => {
+    await withdrawalPage.clickDeposit();
+    await withdrawalPage.clickDepositProceed();
+  });
+
+  await test.step('Validate investment details with values', async () => {
+    const totalInvestment = await withdrawalPage.getTotalInvestmentValue();
+    console.log('Total Investment:', totalInvestment);
+
+     totalGoldInvestment = await withdrawalPage.getTotalGoldValue();
+    console.log('Total Investment Gold:', totalGoldInvestment);
+
+    const totalSilver = await withdrawalPage.getTotalSilverValue();
+    console.log('Total Investment Silver:', totalSilver);
+
+    goldVault = await withdrawalPage.getGoldVaultValue();
+    console.log('Total Investment Gold Vault:', goldVault);
+
+    silverVault = await withdrawalPage.getSilverVaultValue();
+    console.log('Total Investment Silver Vault:', silverVault);
+    await withdrawalPage.clickVaultProceed('Silver Vault');
+  });
+
+  await test.step('Verify withdrawal details', async () => {
+    const withdrawing = await withdrawalPage.getWithdrawingValue();
+    console.log('Withdrawing value before Withdrawal:', withdrawing);
+
+    const remaining = await withdrawalPage.getRemainingValue();
+    console.log('Remaining value before Withdrawal:', remaining);
+
+    sellingPrice = await withdrawalPage.getSellingPrice();
+    console.log('Selling Price:', sellingPrice);
+  });
+
+  await test.step('Enter quantity less than gold vault and validate Proceed enabled', async () => {
+    if (silverVault <= 0.01) {
+      throw new Error(`Silver vault value is too low for withdrawal test: ${silverVault}`);
+    }
+    validQty = Number((silverVault - 0.01-silverVault+1).toFixed(4));
+    await withdrawalPage.enterQuantity(validQty);
+    console.log('Entered valid quantity:', validQty);
+
+    const isEnabled = await withdrawalPage.isProceedButtonEnabled();
+    expect(isEnabled).toBe(true);
+  });
+
+
+  await test.step('Validate withdrawing and remaining after valid quantity', async () => {
+    await withdrawalPage.enterQuantity(validQty);
+
+    const withdrawingValue = await withdrawalPage.getWithdrawingValue();
+    const remainingValue = await withdrawalPage.getRemainingValue();
+
+    console.log('Entered:', validQty);
+    console.log('Withdrawing:', withdrawingValue);
+    console.log('Remaining:', remainingValue);
+
+    expect(withdrawingValue).toBeCloseTo(validQty, 2);
+    const expectedRemaining = silverVault - validQty;
+    expect(remainingValue).toBeCloseTo(expectedRemaining, 2);
+
+    await Promise.all([
+      page.waitForURL('**/withdraw/account-details'),
+      withdrawalPage.clickProceed(),
+    ]);
+    console.log('Proceed button clicked');
+  });
+
+  await test.step('Validate account details', async () => {
+    const silverValue = await withdrawalPage.getMetalValueFromDetails('Silver');
+    const amount = await withdrawalPage.getAmountFromAccountDetails();
+    const totalAmount = await withdrawalPage.getTotalAmountFromAccountDetails();
+
+    console.log('Silver:', silverValue);
+    console.log('Amount:', amount);
+    console.log('Total:', totalAmount);
+    console.log('Selling price:', sellingPrice);
+
+    const expectedAmount = silverValue * sellingPrice;
+    expect(totalAmount).toBeCloseTo(expectedAmount, 2);
+    expect(amount).toBeCloseTo(expectedAmount, 2);
+
+  });
+
+  await test.step('Add New Bank with Invalid IFSCCode and verify transaction', async () => {
+    const accountNumber = tc003Dataset.invalidIfscAccountNumber;
+    const ifscCode = tc003Dataset.invalidIfscCode;
+    const expectedIfscErrorMessage = tc003Dataset.expectedInvalidIfscMessage;
+    console.log(`[${test.info().title}] Input values`, {
+      step: 'Invalid IFSC',
+      accountNumber,
+      ifscCode,
+    });
+    await withdrawalPage.selectBankAccount();
+    await addNewBankWithdrawalPage.clickAddBankDetails();
+    await addNewBankWithdrawalPage.enterAccountNumber(accountNumber);
+    await addNewBankWithdrawalPage.enterIFSCCode(ifscCode);
+    const errorMessage = await addNewBankWithdrawalPage.getIFSCFieldErrorMessage();
+    console.log('IFSC validation error message:', errorMessage);
+    expect(errorMessage).toBe(expectedIfscErrorMessage);
+    await addNewBankWithdrawalPage.clickCancel();
+  });
+  await test.step('add new bank with invalid account number and verify transaction', async () => {
+    const accountNumber = tc003Dataset.invalidAccountNumber;
+    const ifscCode = tc003Dataset.invalidAccountIfscCode;
+    const expectedAccountNumberErrorMessage = tc003Dataset.expectedInvalidAccountMessage;
+    console.log(`[${test.info().title}] Input values`, {
+      step: 'Invalid Account Number',
+      accountNumber,
+      ifscCode,
+    });
+    await withdrawalPage.selectBankAccount();
+    await addNewBankWithdrawalPage.clickAddBankDetails();
+    await addNewBankWithdrawalPage.enterAccountNumber(accountNumber);
+    await addNewBankWithdrawalPage.enterIFSCCode(ifscCode);
+    const canSave = await addNewBankWithdrawalPage.isSaveBankEnabled();
+    console.log('Is Save Bank enabled:', canSave);
+    if (canSave) {
+      await addNewBankWithdrawalPage.clickSaveBank();
+    }
+
+    const errorMessage = await addNewBankWithdrawalPage.getAnyValidationErrorMessage();
+    console.log('Account number validation error message:', errorMessage);
+    expect(errorMessage).toBe(expectedAccountNumberErrorMessage);
+    await addNewBankWithdrawalPage.clickCancel();
+
+  });
+
+  await test.step('add new bank with Valid account number and invalid ifsc code and verify transaction', async () => {
+    const accountNumber = tc003Dataset.validAccountNumber;
+    const ifscCode = tc003Dataset.validAccountInvalidIfscCode;
+    const expectedToastErrorMessage = tc003Dataset.expectedToastErrorMessage;
+    console.log(`[${test.info().title}] Input values`, {
+      step: 'Invalid IFSC',
+      accountNumber,
+      ifscCode,
+    });
+
+    await withdrawalPage.selectBankAccount();
+    await addNewBankWithdrawalPage.clickAddBankDetails();
+    await addNewBankWithdrawalPage.enterAccountNumber(accountNumber);
+    await addNewBankWithdrawalPage.enterIFSCCode(ifscCode);
+    await addNewBankWithdrawalPage.clickSaveBank();
+    const errorMessage = await addNewBankWithdrawalPage.getInvalidAccountToastMessage();
+    console.log('Toast validation error message:', errorMessage);
+    expect(errorMessage).toBe(expectedToastErrorMessage);
+    await addNewBankWithdrawalPage.clickCancel();
+  });
+
+  await test.step('add bank detais with already verified account and verify transaction', async () => {
+    const accountNumber = tc003Dataset.verifiedAccountNumber;
+    const ifscCode = tc003Dataset.verifiedAccountIfscCode;
+    const expectedVerifiedAccountMessage = tc003Dataset.expectedVerifiedAccountMessage;
+    console.log(`[${test.info().title}] Input values`, {
+      step: 'Already Verified Account',
+      accountNumber,
+      ifscCode,
+    });
+  
+  await withdrawalPage.selectBankAccount();
+  await addNewBankWithdrawalPage.clickAddBankDetails();
+  await addNewBankWithdrawalPage.enterAccountNumber(accountNumber);
+  await addNewBankWithdrawalPage.enterIFSCCode(ifscCode);
+  await addNewBankWithdrawalPage.clickSaveBank();
+  const errorMessage = await addNewBankWithdrawalPage.getAnyValidationErrorMessage();
+  console.log('Account validation error message:', errorMessage);
+  expect(errorMessage).toBe(expectedVerifiedAccountMessage);
 });
 });
