@@ -86,9 +86,36 @@ export class AddNewBankWithdrawalPage extends BasePage {
     return (await this.toastErrorSummary.textContent())?.trim() ?? '';
   }
 
-  async getInvalidAccountToastMessage(): Promise<string> {
-    await this.invalidAccountToast.waitFor({ state: 'visible' });
-    return (await this.invalidAccountToast.locator('p.font-gilroy').textContent())?.trim() ?? '';
+  async getInvalidAccountToastMessage(timeoutMs = 12_000): Promise<string> {
+    const expectedText = /TRANSACTION NOT ALLOWED AS INVALID ACCOUNT/i;
+    const pollMs = 250;
+    const maxTries = Math.ceil(timeoutMs / pollMs);
+
+    for (let i = 0; i < maxTries; i++) {
+      if (await this.invalidAccountToast.isVisible().catch(() => false)) {
+        const strictToastMessage =
+          (await this.invalidAccountToast.locator('p.font-gilroy').first().textContent())?.trim() ?? '';
+        if (expectedText.test(strictToastMessage)) {
+          return strictToastMessage;
+        }
+      }
+
+      if (await this.toastErrorDetail.isVisible().catch(() => false)) {
+        const toastDetailMessage = (await this.toastErrorDetail.textContent())?.trim() ?? '';
+        if (expectedText.test(toastDetailMessage)) {
+          return toastDetailMessage;
+        }
+      }
+
+      const genericErrorMessage = this.page.getByText(expectedText).first();
+      if (await genericErrorMessage.isVisible().catch(() => false)) {
+        return (await genericErrorMessage.textContent())?.trim() ?? '';
+      }
+
+      await this.page.waitForTimeout(pollMs);
+    }
+
+    throw new Error(`Invalid account error message did not appear within ${timeoutMs}ms`);
   }
 
   async closeToast(): Promise<void> {
