@@ -38,10 +38,39 @@ export class PaymentPage extends BasePage {
   async getPriceSummaryAmountFromFrame(): Promise<number> {
     try {
       await this.waitForRazorpayFrame();
-      const amountLocator = this.page.frameLocator('iframe[src*="razorpay"]').locator('h3.number-flip');
-      await amountLocator.waitFor({ state: 'visible', timeout: 15_000 });
-      const amountAttr = await amountLocator.getAttribute('data-value');
-      return Number(amountAttr);
+      const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+      const amountCandidates: Locator[] = [
+        frame.locator('h3.number-flip'),
+        frame.locator('h3[data-value]'),
+        frame.locator('[data-testid="amount"]'),
+        frame.locator('h3, h2, .number-flip').filter({ hasText: /₹|INR|[0-9]+(?:\.[0-9]+)?/i }).first(),
+      ];
+
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        for (const amountLocator of amountCandidates) {
+          const isVisible = await amountLocator
+            .first()
+            .waitFor({ state: 'visible', timeout: 6_000 })
+            .then(() => true)
+            .catch(() => false);
+          if (!isVisible) {
+            continue;
+          }
+
+          const amountAttr = (await amountLocator.first().getAttribute('data-value').catch(() => null)) ?? '';
+          const amountText = ((await amountLocator.first().textContent().catch(() => null)) ?? '').trim();
+          const attrNumeric = Number((amountAttr.match(/[\d.]+/)?.[0] ?? '').trim());
+          if (Number.isFinite(attrNumeric) && attrNumeric > 0) {
+            return attrNumeric;
+          }
+          const textNumeric = Number((amountText.match(/[\d,]+(?:\.\d+)?/)?.[0] ?? '').replace(/,/g, ''));
+          if (Number.isFinite(textNumeric) && textNumeric > 0) {
+            return textNumeric;
+          }
+        }
+        await this.page.waitForTimeout(800);
+      }
+      throw new Error('Amount not found in Razorpay frame via known selectors.');
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       console.error('Failed to read Razorpay amount from iframe:', msg);
@@ -643,6 +672,471 @@ export class PaymentPage extends BasePage {
       this.page.locator('iframe[src*="razorpay"]').first().waitFor({ state: 'hidden', timeout: 30_000 }),
       this.page.waitForURL(/summary|dashboard|my-orders|success/i, { timeout: 30_000 }),
     ]);
+  }
+
+  /**
+   * Withdrawal/jewellery netbanking: dismiss overlay → bank → **Continue & Pay** → **bank again** (some Razorpay flows), then same completion as {@link completeNetbankingPayment}.
+   * All withdrawal-only steps live in this method only (no separate private helpers on the class).
+   */
+  async completeNetbankingPaymentWithdrwal(
+    bankName: string,
+    options?: { tc005Mode?: boolean },
+  ): Promise<void> {
+    const isTc005Mode = options?.tc005Mode === true;
+    const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const dismissFeeBearerOverlay = async (): Promise<void> => {
+      const overlayRoot = this.page.locator('[data-testid="overlay-fee-bearer"], #overlay-backdrop').first();
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (!(await overlayRoot.isVisible().catch(() => false))) {
+          return;
+        }
+        const inOverlay = this.page.locator('[data-testid="overlay-fee-bearer"]').locator('button, [role="button"], a');
+        const n = await inOverlay.count();
+        for (let i = 0; i < n; i += 1) {
+          await inOverlay.nth(i).click({ timeout: 1500, force: true }).catch(() => {});
+        }
+        await this.page
+          .getByRole('button', { name: /continue|proceed|confirm|pay now|ok|i understand|got it/i })
+          .first()
+          .click({ timeout: 2000, force: true })
+          .catch(() => {});
+        await overlayRoot.click({ position: { x: 2, y: 2 }, force: true }).catch(() => {});
+        await this.page.keyboard.press('Escape');
+        await this.page.waitForTimeout(300);
+        if (await overlayRoot.isVisible().catch(() => false)) {
+          await this.page
+            .evaluate(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+              () => (globalThis as any).document?.querySelector?.('[data-testid="overlay-fee-bearer"]')?.remove(),
+            )
+            .catch(() => {});
+          await this.page
+            .evaluate(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
+              () => (globalThis as any).document?.getElementById?.('overlay-backdrop')?.remove(),
+            )
+            .catch(() => {});
+        }
+      }
+    };
+
+    const clickContinueAndPayIfVisible = async (razorpayFrame: FrameLocator): Promise<void> => {
+      await dismissFeeBearerOverlay();
+
+      const label = /Continue\s*(?:and|&)\s*Pay/i;
+      const union = razorpayFrame
+        .getByRole('button', { name: label })
+        .or(razorpayFrame.getByRole('button', { name: 'Continue & Pay', exact: true }))
+        .or(razorpayFrame.locator('button, [role="button"], a').filter({ hasText: label }));
+
+      const feeBreakupOpen = await razorpayFrame.getByText(/fee breakup/i).first().isVisible({ timeout: 2_500 }).catch(() => false);
+      const target = feeBreakupOpen ? union.last() : union.first();
+
+      await target.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+
+      if (!(await target.isVisible().catch(() => false))) {
+        return;
+      }
+
+      await target.scrollIntoViewIfNeeded();
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (attempt > 0) {
+          await dismissFeeBearerOverlay();
+        }
+        const clicked = await target
+          .click({ force: true, timeout: 12_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (clicked) {
+          return;
+        }
+        await this.page.waitForTimeout(400);
+      }
+    };
+
+    const confirmDemoBankSuccess = async (preOpenedPopup: Page | null): Promise<void> => {
+      const tryClickSuccess = async (p: Page | null): Promise<boolean> => {
+        if (!p || p.isClosed()) return false;
+        await p.waitForLoadState('domcontentloaded').catch(() => {});
+        const byAttr = p.locator('button[data-val="S"]');
+        const byRole = p.getByRole('button', { name: /^success$/i });
+        if (await byAttr.first().isVisible({ timeout: 2_000 }).catch(() => false)) {
+          if (isTc005Mode) {
+            console.log('[PAYMENT SUCCESS] Clicking popup success button via data-val="S"');
+            await byAttr.first().click({ force: true }).catch(async () => {
+              await byAttr.first().dispatchEvent('click').catch(() => {});
+            });
+            console.log('[PAYMENT SUCCESS] Clicked popup success button');
+          } else {
+            await byAttr.first().click();
+          }
+          await p.waitForEvent('close', { timeout: 20_000 }).catch(() => {});
+          return true;
+        }
+        if (await byRole.first().isVisible({ timeout: 2_000 }).catch(() => false)) {
+          if (isTc005Mode) {
+            console.log('[PAYMENT SUCCESS] Clicking popup success button via role/name');
+            await byRole.first().click({ force: true }).catch(async () => {
+              await byRole.first().dispatchEvent('click').catch(() => {});
+            });
+            console.log('[PAYMENT SUCCESS] Clicked popup success button');
+          } else {
+            await byRole.first().click();
+          }
+          await p.waitForEvent('close', { timeout: 20_000 }).catch(() => {});
+          return true;
+        }
+        return false;
+      };
+
+      if (await tryClickSuccess(preOpenedPopup)) return;
+
+      for (const p of this.page.context().pages()) {
+        if (p === this.page) continue;
+        if (await tryClickSuccess(p)) return;
+      }
+
+      const latePopup = await this.page.waitForEvent('popup', { timeout: 6_000 }).catch(() => null);
+      if (await tryClickSuccess(latePopup)) return;
+
+      const rzFrame = this.page.frameLocator('iframe[src*="razorpay"]');
+      const inFrameSuccess = rzFrame.locator('button[data-val="S"]');
+      const processing = rzFrame.getByText(/processing your payment/i);
+      await Promise.race([
+        inFrameSuccess.waitFor({ state: 'visible', timeout: 12_000 }),
+        processing.waitFor({ state: 'visible', timeout: 12_000 }),
+      ]).catch(() => {});
+      if (isTc005Mode) {
+        const frameSuccessVisible = await inFrameSuccess.isVisible().catch(() => false);
+        if (frameSuccessVisible) {
+          console.log('[PAYMENT SUCCESS] Clicking in-frame success button');
+          await inFrameSuccess
+            .click({ timeout: 8_000, force: true })
+            .catch(async () => {
+              await inFrameSuccess.dispatchEvent('click').catch(() => {});
+            });
+          console.log('[PAYMENT SUCCESS] Clicked in-frame success button');
+        } else {
+          console.log('[PAYMENT SUCCESS] In-frame success button not visible at fallback click stage');
+        }
+      } else {
+        await inFrameSuccess.click({ timeout: 8_000 }).catch(() => {});
+      }
+    };
+
+    const successAlreadyVisible = async (): Promise<boolean> => {
+      if (this.page.isClosed()) return false;
+      try {
+        if (/summary|dashboard|my-orders|success/i.test(this.page.url())) return true;
+      } catch {
+        return false;
+      }
+      const pageSuccessDialog = this.page.getByRole('dialog', { name: /success/i });
+      if (await pageSuccessDialog.isVisible({ timeout: 700 }).catch(() => false)) return true;
+      const rf = this.page.frameLocator('iframe[src*="razorpay"]');
+      const frameHeading = rf
+        .getByText(/payment successful/i)
+        .or(rf.getByText(/your payment was successful/i))
+        .first();
+      if (await frameHeading.isVisible({ timeout: 700 }).catch(() => false)) return true;
+      return false;
+    };
+
+    const waitSuccessOutcome = async (timeoutMs: number): Promise<'page' | 'frame' | 'url'> => {
+      const razorpayFrame = this.page.frameLocator('iframe[src*="razorpay"]');
+      const pageSuccessDialog = this.page.getByRole('dialog', { name: /success/i });
+      const frameSuccessHeading = razorpayFrame
+        .getByText(/payment successful/i)
+        .or(razorpayFrame.getByText(/your payment was successful/i))
+        .first();
+
+      return await Promise.any([
+        pageSuccessDialog.waitFor({ state: 'visible', timeout: timeoutMs }).then(() => 'page' as const),
+        frameSuccessHeading.waitFor({ state: 'visible', timeout: timeoutMs }).then(() => 'frame' as const),
+        this.page.waitForURL(/summary|dashboard|my-orders|success/i, { timeout: timeoutMs }).then(() => 'url' as const),
+      ]).catch(() => {
+        throw new Error(
+          'Razorpay (withdrawal): success UI / navigation did not occur — check sandbox payment or extend timeouts.',
+        );
+      });
+    };
+
+    const dismissSuccessChrome = async (source: 'page' | 'frame' | 'url'): Promise<void> => {
+      if (source === 'url') {
+        await this.page.locator('iframe[src*="razorpay"]').first().waitFor({ state: 'hidden', timeout: 20_000 }).catch(() => {});
+        return;
+      }
+      const razorpayFrame = this.page.frameLocator('iframe[src*="razorpay"]');
+      if (source === 'page') {
+        await this.page.getByRole('dialog', { name: /success/i }).getByRole('button', { name: /continue/i }).click().catch(() => {});
+      } else {
+        await razorpayFrame.getByRole('button', { name: /continue|done|close/i }).first().click().catch(() => {});
+      }
+      await Promise.any([
+        this.page.locator('iframe[src*="razorpay"]').first().waitFor({ state: 'hidden', timeout: 45_000 }),
+        this.page.waitForURL(/summary|dashboard|my-orders|success/i, { timeout: 45_000 }),
+      ]).catch(() => {});
+    };
+
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+    let bankPopup: Page | null = null;
+    const bankPopupWaitMs = 12_000;
+
+    try {
+      [bankPopup] = await Promise.all([
+        this.page.waitForEvent('popup', { timeout: bankPopupWaitMs }),
+        frame.getByRole('button', { name: new RegExp(bankName, 'i') }).first().click({ force: true }),
+      ]);
+    } catch {
+      await frame.getByRole('button', { name: new RegExp(bankName, 'i') }).first().click({ force: true });
+    }
+
+    await clickContinueAndPayIfVisible(frame);
+
+    await frame
+      .getByRole('button', { name: new RegExp(bankName, 'i') })
+      .first()
+      .click({ force: true })
+      .catch(() => {});
+
+    await sleepMs(400);
+    await clickContinueAndPayIfVisible(frame);
+
+    await Promise.race([
+      frame.getByText(/processing your payment/i).first().waitFor({ state: 'visible', timeout: 30_000 }),
+      this.page.waitForEvent('popup', { timeout: 12_000 }).then(() => {}),
+    ]).catch(() => {});
+
+    await confirmDemoBankSuccess(bankPopup);
+    await sleepMs(500);
+    await confirmDemoBankSuccess(null);
+
+    if (await successAlreadyVisible()) {
+      await dismissSuccessChrome(await waitSuccessOutcome(15_000));
+      return;
+    }
+
+    await clickContinueAndPayIfVisible(frame);
+    await sleepMs(350);
+    await clickContinueAndPayIfVisible(frame);
+
+    if (await successAlreadyVisible()) {
+      await dismissSuccessChrome(await waitSuccessOutcome(15_000));
+      return;
+    }
+
+    await dismissSuccessChrome(await waitSuccessOutcome(60_000));
+  }
+
+  /**
+   * Withdrawal/jewellery netbanking FAILURE path (NEW — does not modify {@link completeNetbankingPaymentWithdrwal}).
+   *
+   * Same Razorpay navigation as the success flow (bank → **Continue & Pay** → bank again),
+   * but in the demo-bank popup it clicks **Failure** (`data-val="F"`) instead of Success.
+   * Polls popups + in-frame for ~45s, captures and returns the failure message text shown
+   * by the Razorpay frame / app dialog / toast (or empty string if none).
+   */
+  async failNetbankingPaymentWithdrawal(bankName: string): Promise<string> {
+    const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+    const dismissFeeBearerOverlay = async (): Promise<void> => {
+      const overlayRoot = this.page
+        .locator('[data-testid="overlay-fee-bearer"], #overlay-backdrop')
+        .first();
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (!(await overlayRoot.isVisible().catch(() => false))) return;
+        const inOverlay = this.page
+          .locator('[data-testid="overlay-fee-bearer"]')
+          .locator('button, [role="button"], a');
+        const n = await inOverlay.count();
+        for (let i = 0; i < n; i += 1) {
+          await inOverlay.nth(i).click({ timeout: 1500, force: true }).catch(() => {});
+        }
+        await this.page
+          .getByRole('button', { name: /continue|proceed|confirm|pay now|ok|i understand|got it/i })
+          .first()
+          .click({ timeout: 2000, force: true })
+          .catch(() => {});
+        await overlayRoot.click({ position: { x: 2, y: 2 }, force: true }).catch(() => {});
+        await this.page.keyboard.press('Escape').catch(() => {});
+        await this.page.waitForTimeout(300);
+      }
+    };
+
+    const clickContinueAndPayIfVisible = async (rzFrame: FrameLocator): Promise<void> => {
+      await dismissFeeBearerOverlay();
+      const label = /Continue\s*(?:and|&)\s*Pay/i;
+      const union = rzFrame
+        .getByRole('button', { name: label })
+        .or(rzFrame.getByRole('button', { name: 'Continue & Pay', exact: true }))
+        .or(rzFrame.locator('button, [role="button"], a').filter({ hasText: label }));
+
+      const feeBreakupOpen = await rzFrame
+        .getByText(/fee breakup/i)
+        .first()
+        .isVisible({ timeout: 2_500 })
+        .catch(() => false);
+      const target = feeBreakupOpen ? union.last() : union.first();
+
+      await target.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+      if (!(await target.isVisible().catch(() => false))) return;
+
+      await target.scrollIntoViewIfNeeded().catch(() => {});
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        if (attempt > 0) await dismissFeeBearerOverlay();
+        const ok = await target
+          .click({ force: true, timeout: 12_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (ok) return;
+        await this.page.waitForTimeout(400);
+      }
+    };
+
+    const tryClickFailureInPopup = async (p: Page | null): Promise<boolean> => {
+      if (!p || p.isClosed()) return false;
+      await p.waitForLoadState('domcontentloaded').catch(() => {});
+      const byAttr = p.locator('button[data-val="F"]').first();
+      const byRole = p.getByRole('button', { name: /^failure$/i }).first();
+      const byText = p
+        .locator('button, input[type="submit"], input[type="button"]')
+        .filter({ hasText: /failure|fail/i })
+        .first();
+      for (const candidate of [byAttr, byRole, byText]) {
+        if (await candidate.isVisible({ timeout: 1_000 }).catch(() => false)) {
+          console.log('[PAYMENT FAILURE] Clicking demo-bank Failure button on popup');
+          await candidate.click({ force: true }).catch(async () => {
+            await candidate.dispatchEvent('click').catch(() => {});
+          });
+          await p.waitForEvent('close', { timeout: 20_000 }).catch(() => {});
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const tryInFrameFailure = async (rzFrame: FrameLocator): Promise<boolean> => {
+      const inFrameFailure = rzFrame.locator('button[data-val="F"]').first();
+      if (!(await inFrameFailure.isVisible({ timeout: 1_000 }).catch(() => false))) {
+        return false;
+      }
+      console.log('[PAYMENT FAILURE] Clicking in-frame Failure button (data-val="F")');
+      const ok = await inFrameFailure
+        .click({ force: true, timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (ok) return true;
+      await inFrameFailure.dispatchEvent('click').catch(() => {});
+      return true;
+    };
+
+    const pollForFailureClick = async (
+      preOpenedPopup: Page | null,
+      rzFrame: FrameLocator,
+      totalTimeoutMs: number,
+    ): Promise<boolean> => {
+      const start = Date.now();
+      while (Date.now() - start < totalTimeoutMs) {
+        if (preOpenedPopup && !preOpenedPopup.isClosed()) {
+          if (await tryClickFailureInPopup(preOpenedPopup)) return true;
+        }
+        for (const p of this.page.context().pages()) {
+          if (p === this.page) continue;
+          if (await tryClickFailureInPopup(p)) return true;
+        }
+        const latePopup = await this.page.waitForEvent('popup', { timeout: 2_000 }).catch(() => null);
+        if (latePopup && (await tryClickFailureInPopup(latePopup))) return true;
+
+        if (await tryInFrameFailure(rzFrame)) return true;
+
+        await sleepMs(500);
+      }
+      return false;
+    };
+
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+    let bankPopup: Page | null = null;
+
+    try {
+      [bankPopup] = await Promise.all([
+        this.page.waitForEvent('popup', { timeout: 12_000 }),
+        frame.getByRole('button', { name: new RegExp(bankName, 'i') }).first().click({ force: true }),
+      ]);
+    } catch {
+      await frame.getByRole('button', { name: new RegExp(bankName, 'i') }).first().click({ force: true });
+    }
+
+    await clickContinueAndPayIfVisible(frame);
+
+    await frame
+      .getByRole('button', { name: new RegExp(bankName, 'i') })
+      .first()
+      .click({ force: true })
+      .catch(() => {});
+
+    await sleepMs(400);
+    await clickContinueAndPayIfVisible(frame);
+
+    await Promise.race([
+      frame.getByText(/processing your payment/i).first().waitFor({ state: 'visible', timeout: 30_000 }),
+      this.page.waitForEvent('popup', { timeout: 12_000 }).then(() => {}),
+    ]).catch(() => {});
+
+    const failureClicked = await pollForFailureClick(bankPopup, frame, 45_000);
+    if (!failureClicked) {
+      throw new Error(
+        'Razorpay (withdrawal failure): demo-bank Failure button was not found / clickable within 45s.',
+      );
+    }
+
+    const failurePatterns =
+      /payment\s*(?:was\s*)?(?:failed|unsuccessful|not\s*(?:completed|successful))|payment\s*could\s*not\s*be\s*completed|transaction\s*(?:has\s*)?failed|something\s*went\s*wrong|payment\s*(?:has\s*)?failed/i;
+
+    const razorpayFrame = this.page.frameLocator('iframe[src*="razorpay"]');
+    const frameFailure = razorpayFrame.getByText(failurePatterns).first();
+    const pageFailureDialog = this.page.getByRole('dialog').filter({ hasText: failurePatterns }).first();
+    const pageFailureToast = this.page
+      .locator('div.p-toast-message, p-toast .p-toast-detail, .p-toast-summary, [role="alert"], app-dialog')
+      .filter({ hasText: failurePatterns })
+      .first();
+    const pageFailureText = this.page.getByText(failurePatterns).first();
+
+    const failureSource = await Promise.race([
+      frameFailure.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'frame' as const),
+      pageFailureDialog.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'dialog' as const),
+      pageFailureToast.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'toast' as const),
+      pageFailureText.waitFor({ state: 'visible', timeout: 30_000 }).then(() => 'text' as const),
+    ]).catch(() => 'none' as const);
+
+    console.log('[PAYMENT FAILURE] UI source:', failureSource);
+
+    let capturedFailureMessage = '';
+    if (failureSource === 'frame') {
+      capturedFailureMessage = ((await frameFailure.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    } else if (failureSource === 'dialog') {
+      capturedFailureMessage = ((await pageFailureDialog.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    } else if (failureSource === 'toast') {
+      capturedFailureMessage = ((await pageFailureToast.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    } else if (failureSource === 'text') {
+      capturedFailureMessage = ((await pageFailureText.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+    }
+
+    const dismiss = this.page
+      .getByRole('button', { name: /^(?:retry|try again|close|ok|cancel|continue|done)$/i })
+      .first();
+    if (await dismiss.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await dismiss.click({ force: true }).catch(() => {});
+    }
+    await razorpayFrame
+      .getByRole('button', { name: /^(?:close|cancel|done|go back)$/i })
+      .first()
+      .click({ force: true })
+      .catch(() => {});
+
+    await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+
+    return capturedFailureMessage;
   }
 
   async selectBank(): Promise<void> {

@@ -8,7 +8,9 @@
   "scripts": {
     "test": "playwright test",
     "test:admin": "playwright test --project=admin",
-    "test:customer": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer --no-deps",
+    "test:customer": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer",
+    "test:customer:run": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer",
+    "test:customer:tc004": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer tests/customer/withdrawal.spec.ts --grep TC_004-withdrwal",
     "test:business": "playwright test --project=business",
     "test:new-admin": "playwright test --project=new-admin",
     "test:api": "playwright test --project=api-backend --project=api-emi",

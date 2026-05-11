@@ -37,6 +37,53 @@ function readSheetRows<T extends Record<string, unknown>>(
   });
 }
 
+function updateFirstDataRowCellByHeader(
+  sheetName: string,
+  headerName: string,
+  value: string,
+  filePath = CUSTOMER_DATA_WORKBOOK,
+): void {
+  const workbook = getWorkbook(filePath);
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet || !sheet['!ref']) {
+    throw new Error(`Sheet "${sheetName}" not found in ${filePath}`);
+  }
+
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  const headerRowIndex = range.s.r;
+  const firstDataRowIndex = headerRowIndex + 1;
+
+  let targetColumnIndex = -1;
+  for (let col = range.s.c; col <= range.e.c; col += 1) {
+    const headerCellAddress = XLSX.utils.encode_cell({ r: headerRowIndex, c: col });
+    const headerValue = normalizeCell(sheet[headerCellAddress]?.v);
+    if (headerValue === headerName) {
+      targetColumnIndex = col;
+      break;
+    }
+  }
+
+  if (targetColumnIndex === -1) {
+    // Auto-create missing header at the end of the header row.
+    targetColumnIndex = range.e.c + 1;
+    const newHeaderCellAddress = XLSX.utils.encode_cell({ r: headerRowIndex, c: targetColumnIndex });
+    sheet[newHeaderCellAddress] = { t: 's', v: headerName };
+    range.e.c = targetColumnIndex;
+  }
+
+  const targetCellAddress = XLSX.utils.encode_cell({ r: firstDataRowIndex, c: targetColumnIndex });
+  sheet[targetCellAddress] = { t: 's', v: value };
+
+  // Keep the sheet range valid in case first data row did not previously exist.
+  if (firstDataRowIndex > range.e.r) {
+    range.e.r = firstDataRowIndex;
+    sheet['!ref'] = XLSX.utils.encode_range(range);
+  }
+
+  XLSX.writeFile(workbook, filePath);
+  workbookCache.set(filePath, XLSX.readFile(filePath));
+}
+
 export interface BuyMetalDataset {
   oneTimeGoldAmount: string;
   oneTimeSilverAmount: string;
@@ -144,6 +191,7 @@ export interface WithdrawalTc003Dataset {
   validAccountInvalidIfscCode: string;
   expectedToastErrorMessage: string;
   expectedVerifiedAccountMessage: string;
+  expectedVerifiedAccountTransactionErrorMessage: string;
   verifiedAccountNumber: string;
   verifiedAccountIfscCode: string;
 }
@@ -167,7 +215,65 @@ export function getWithdrawalTc003Dataset(): WithdrawalTc003Dataset {
     expectedVerifiedAccountMessage: normalizeCell(
       firstRow.WithdrawalExpectedVerifiedAccountMessage ?? firstRow.WithdrawalExpectedToastErrorMessage ?? 'TRANSACTION NOT ALLOWED AS INVALID ACCOUNT',
     ),
+    expectedVerifiedAccountTransactionErrorMessage: normalizeCell(
+      firstRow.WithdrawalExpectedVerifiedAccountTransactionErrorMessage ??
+        firstRow.WithdrawalExpectedVerifiedAccountMessage ??
+        firstRow.WithdrawalExpectedToastErrorMessage ??
+        'TRANSACTION NOT ALLOWED AS INVALID ACCOUNT',
+    ),
     verifiedAccountNumber: normalizeCell(firstRow.WithdrawalVerifiedAccountNumber ?? '3048155145'),
     verifiedAccountIfscCode: normalizeCell(firstRow.WithdrawalVerifiedAccountIfscCode ?? 'KKBK0001422'),
   };
+}
+
+export interface WithdrawalTc004Dataset {
+  /** TC004 gold vault → coin product list selection (`WithdrawalTc004ProductName` column). */
+  productName: string;
+  /** TC005 SIP silver convert flow — product list selection (`WithdrawalTc005ProductName` column). */
+  tc005ProductName: string;
+  /** TC006 gold jewellery product list selection (`WithdrawalTc006ProductName` column). */
+  tc006ProductName: string;
+}
+
+export function getWithdrawalTc004Dataset(): WithdrawalTc004Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('withdrawal');
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "withdrawal" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    productName: normalizeCell(firstRow.WithdrawalTc004ProductName ?? 'Augmont 1Gm Gold Coin (916 Purity)'),
+    tc005ProductName: normalizeCell(
+      firstRow.WithdrawalTc005ProductName ?? 'Augmont 1GM Silver Coin 999 Purity',
+    ),
+    tc006ProductName: normalizeCell(
+      firstRow.WithdrawalTc006ProductName ?? 'Augmont Classic Om Pendant',
+    ),
+  };
+}
+
+export function saveWithdrawalTc003VerifiedAccountActualErrorMessage(actualErrorMessage: string): void {
+  updateFirstDataRowCellByHeader(
+    'withdrawal',
+    'WithdrawalVerifiedAccountActualErrorMessage',
+    normalizeCell(actualErrorMessage),
+  );
+}
+
+/** Persist TC005 silver product selection on the `withdrawal` sheet (`WithdrawalTc005ProductName` header, first data row). */
+export function saveWithdrawalTc005ProductName(productName: string): void {
+  updateFirstDataRowCellByHeader(
+    'withdrawal',
+    'WithdrawalTc005ProductName',
+    normalizeCell(productName),
+  );
+}
+
+/** Persist TC006 gold jewellery product selection on the `withdrawal` sheet (`WithdrawalTc006ProductName` header, first data row). */
+export function saveWithdrawalTc006ProductName(productName: string): void {
+  updateFirstDataRowCellByHeader(
+    'withdrawal',
+    'WithdrawalTc006ProductName',
+    normalizeCell(productName),
+  );
 }
