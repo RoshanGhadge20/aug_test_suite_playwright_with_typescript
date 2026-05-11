@@ -242,7 +242,24 @@ export class DashBoardPage extends BasePage {
 
   async clickWithdrawInvestment(): Promise<void> {
     await this.withdrawInvestmentButton.waitFor({ state: 'visible' });
-    await this.withdrawInvestmentButton.click();
+    const blockingOverlay = this.page.locator('div.p-blockui[aria-busy="true"]');
+    if (await blockingOverlay.isVisible().catch(() => false)) {
+      await blockingOverlay.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined);
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const clicked = await this.withdrawInvestmentButton
+        .click({ timeout: 5_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (clicked) {
+        return;
+      }
+      await blockingOverlay.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => undefined);
+      await this.page.waitForTimeout(250);
+    }
+
+    await this.withdrawInvestmentButton.click({ force: true });
   }
 
   async getApprovedSipNameWithZeroInvestment(): Promise<string> {
@@ -343,8 +360,244 @@ export class DashBoardPage extends BasePage {
     throw new Error('No SIP found with Approved status and Total Investment greater than ₹0.');
   }
 
+  async deliveryScrollUpAndClickProceedByMatchingSipMetalValue(
+    sipName: string,
+    expectedMetalValueInGm: number,
+    options?: { onlyMetalType?: 'Gold' | 'Silver' },
+  ): Promise<{ sipName: string; metalValue: number; metalType: 'Gold' | 'Silver' }> {
+    const onlyMetalType = options?.onlyMetalType;
+    const normalizedTargetSipName = sipName.trim().toLowerCase();
+    if (!normalizedTargetSipName) {
+      throw new Error('SIP name is required for delivery value matching.');
+    }
+    if (!Number.isFinite(expectedMetalValueInGm) || expectedMetalValueInGm <= 0) {
+      throw new Error(`Invalid expected SIP metal value "${expectedMetalValueInGm}".`);
+    }
+
+    const sipCards = this.page
+      .locator('app-sip-card, div.border.border-stroke.rounded-xl')
+      .filter({ has: this.page.locator('div.text-24.font-cabinetgroteskbold') });
+
+    const getCardMeta = async (
+      card: Locator,
+      metaOptions?: { preferSilver: boolean },
+    ): Promise<{ sipName: string; metalValue: number; metalType: 'Gold' | 'Silver' | 'Unknown' }> => {
+      const preferSilver = metaOptions?.preferSilver === true;
+      const rawTitleText = ((await card.locator('div.text-24.font-cabinetgroteskbold').first().textContent()) ?? '').trim();
+      const cardText = ((await card.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
+
+      const totalGoldNode = card
+        .locator('div.text-14.font-gilroymedium', { hasText: /Total Gold/i })
+        .first();
+      const totalSilverNode = card
+        .locator('div.text-14.font-gilroymedium', { hasText: /Total Silver/i })
+        .first();
+
+      let valueText = '';
+      let metalType: 'Gold' | 'Silver' | 'Unknown' = 'Unknown';
+
+      const readFromVisibleNodes = async () => {
+        if (preferSilver) {
+          if (await totalSilverNode.isVisible().catch(() => false)) {
+            const silverLine = ((await totalSilverNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            valueText = (silverMatch?.[1] ?? silverLine).trim();
+            metalType = 'Silver';
+            return;
+          }
+          if (await totalGoldNode.isVisible().catch(() => false)) {
+            const goldLine = ((await totalGoldNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            valueText = (goldMatch?.[1] ?? goldLine).trim();
+            metalType = 'Gold';
+            return;
+          }
+        } else {
+          if (await totalGoldNode.isVisible().catch(() => false)) {
+            const goldLine = ((await totalGoldNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            valueText = (goldMatch?.[1] ?? goldLine).trim();
+            metalType = 'Gold';
+            return;
+          }
+          if (await totalSilverNode.isVisible().catch(() => false)) {
+            const silverLine = ((await totalSilverNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            valueText = (silverMatch?.[1] ?? silverLine).trim();
+            metalType = 'Silver';
+            return;
+          }
+        }
+      };
+
+      await readFromVisibleNodes();
+
+      if (metalType === 'Unknown') {
+        const labelledGoldMatch = cardText.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?/i);
+        const labelledSilverMatch = cardText.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?/i);
+        if (preferSilver) {
+          if (labelledSilverMatch?.[1]) {
+            valueText = labelledSilverMatch[1];
+            metalType = 'Silver';
+          } else if (labelledGoldMatch?.[1]) {
+            valueText = labelledGoldMatch[1];
+            metalType = 'Gold';
+          }
+        } else {
+          if (labelledGoldMatch?.[1]) {
+            valueText = labelledGoldMatch[1];
+            metalType = 'Gold';
+          } else if (labelledSilverMatch?.[1]) {
+            valueText = labelledSilverMatch[1];
+            metalType = 'Silver';
+          }
+        }
+        if (metalType === 'Unknown') {
+          const genericMetalMatch = cardText.match(/Total\s*(Gold|Silver)\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?/i);
+          if (genericMetalMatch?.[1] && genericMetalMatch?.[2]) {
+            metalType = /gold/i.test(genericMetalMatch[1]) ? 'Gold' : 'Silver';
+            valueText = genericMetalMatch[2];
+          }
+        }
+      }
+
+      const metalValue = Number((valueText.match(/[\d.]+/)?.[0] ?? '0').trim());
+      if (metalType === 'Silver') {
+        console.log(`[DELIVERY SIP VALUE] ${rawTitleText} -> Total Silver: ${metalValue} gm`);
+      } else if (metalType === 'Gold') {
+        console.log(`[DELIVERY SIP VALUE] ${rawTitleText} -> Total Gold: ${metalValue} gm`);
+      }
+      return { sipName: rawTitleText, metalValue, metalType };
+    };
+
+    // First scroll up, then start scanning cards.
+    await this.page.evaluate(() => {
+      const scopedGlobal = globalThis as { scrollTo?: (x: number, y: number) => void };
+      scopedGlobal.scrollTo?.(0, 0);
+    });
+    await this.page.waitForTimeout(700);
+    await this.page.evaluate(() => {
+      const scopedGlobal = globalThis as { scrollBy?: (x: number, y: number) => void; innerHeight?: number };
+      const viewportHeight = scopedGlobal.innerHeight ?? 0;
+      scopedGlobal.scrollBy?.(0, Math.max(120, Math.floor(viewportHeight * 0.45)));
+      scopedGlobal.scrollBy?.(0, -Math.max(120, Math.floor(viewportHeight * 0.45)));
+    });
+    await this.page.waitForTimeout(700);
+
+    const startedAt = Date.now();
+    let previousScrollY = -1;
+    let noMovementCount = 0;
+
+    for (let cycle = 1; cycle <= 25; cycle += 1) {
+      if (Date.now() - startedAt > 30_000) {
+        const metalHint =
+          onlyMetalType === 'Silver'
+            ? 'Silver SIP '
+            : onlyMetalType === 'Gold'
+              ? 'Gold SIP '
+              : '';
+        throw new Error(
+          `SIP scan timed out after 30s. Could not find ${metalHint}card with value >= ${expectedMetalValueInGm} gm.`,
+        );
+      }
+
+      const cardCount = await sipCards.count();
+      if (cardCount === 0) {
+        await this.page.evaluate(() => {
+          const scopedGlobal = globalThis as { scrollBy?: (x: number, y: number) => void; innerHeight?: number };
+          const viewportHeight = scopedGlobal.innerHeight ?? 0;
+          scopedGlobal.scrollBy?.(0, Math.floor(viewportHeight * 0.75));
+        });
+        await this.page.waitForTimeout(700);
+        continue;
+      }
+      for (let i = 0; i < cardCount; i += 1) {
+        const candidate = sipCards.nth(i);
+        const meta = await getCardMeta(candidate, { preferSilver: onlyMetalType === 'Silver' });
+        const isVaultCard = /^(gold|silver)\s+vault$/i.test(meta.sipName.trim());
+        if (isVaultCard) {
+          continue;
+        }
+
+        if (onlyMetalType === 'Silver' && meta.metalType !== 'Silver') {
+          continue;
+        }
+        if (onlyMetalType === 'Gold' && meta.metalType !== 'Gold') {
+          continue;
+        }
+
+        const sameSip = meta.sipName.trim().toLowerCase() === normalizedTargetSipName;
+        const isEligibleByValue = meta.metalValue + 0.0001 >= expectedMetalValueInGm;
+        if (!isEligibleByValue) {
+          continue;
+        }
+
+        await candidate.scrollIntoViewIfNeeded().catch(() => undefined);
+
+        const resolvedMetalType: 'Gold' | 'Silver' =
+          meta.metalType === 'Gold' ? 'Gold' : 'Silver';
+
+        if (sameSip) {
+          console.log(
+            `[DELIVERY SIP MATCH] ${meta.sipName || sipName} -> ${meta.metalType}: ${meta.metalValue} gm (required >= ${expectedMetalValueInGm} gm)`,
+          );
+          return {
+            sipName: meta.sipName || sipName,
+            metalValue: meta.metalValue,
+            metalType: resolvedMetalType,
+          };
+        }
+        console.log(
+          `[DELIVERY SIP MATCH] ${meta.sipName || sipName} -> ${meta.metalType}: ${meta.metalValue} gm (required >= ${expectedMetalValueInGm} gm)`,
+        );
+        return {
+          sipName: meta.sipName || sipName,
+          metalValue: meta.metalValue,
+          metalType: resolvedMetalType,
+        };
+      }
+
+      await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as { scrollBy?: (x: number, y: number) => void; innerHeight?: number };
+        const viewportHeight = scopedGlobal.innerHeight ?? 0;
+        scopedGlobal.scrollBy?.(0, Math.floor(viewportHeight * 0.8));
+      });
+      await this.page.waitForTimeout(700);
+
+      const currentScrollY = await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as { scrollY?: number };
+        return scopedGlobal.scrollY ?? 0;
+      });
+      if (currentScrollY === previousScrollY) {
+        noMovementCount += 1;
+      } else {
+        noMovementCount = 0;
+      }
+      previousScrollY = currentScrollY;
+      if (noMovementCount >= 2) {
+        break;
+      }
+    }
+
+    const metalHint =
+      onlyMetalType === 'Silver'
+        ? 'Silver SIP '
+        : onlyMetalType === 'Gold'
+          ? 'Gold SIP '
+          : '';
+    throw new Error(
+      `Could not find any ${metalHint}card with value >= ${expectedMetalValueInGm} gm after scrolling.`,
+    );
+  }
+
   async printGoldValueAndClickProceedBySipName(
-    sipName?: string
+    sipName?: string,
+    options?: {
+      minValueThreshold?: number;
+      scrollDirection?: 'down' | 'up';
+      fallbackToAnySipWhenTargetBelowThreshold?: boolean;
+      onlyMetalType?: 'Gold' | 'Silver';
+    },
   ): Promise<{ sipName: string; goldValue: string; metalType: 'Gold' | 'Silver' }> {
     const sipCards = this.page
       .locator('app-sip-card, div.border.border-stroke.rounded-xl')
@@ -357,21 +610,39 @@ export class DashBoardPage extends BasePage {
     const targetSipName = sipName?.trim() ?? '';
     const normalizedTargetSipName = targetSipName.toLowerCase();
     const hasProvidedSipName = normalizedTargetSipName.length > 0;
+    const minValueThreshold = options?.minValueThreshold ?? 0;
+    const scrollDirection: 'down' | 'up' = options?.scrollDirection ?? 'down';
+    const fallbackToAnySipWhenTargetBelowThreshold =
+      options?.fallbackToAnySipWhenTargetBelowThreshold ?? false;
+    const onlyMetalType = options?.onlyMetalType;
     let previousScrollHeight = 0;
     let noMovementCount = 0;
     let scanCycles = 0;
     const startedAt = Date.now();
 
-    // On some list loads, SIP cards render only after the first viewport movement.
-    await this.page.evaluate(() => {
-      const scopedGlobal = globalThis as {
-        scrollBy?: (x: number, y: number) => void;
-        innerHeight?: number;
-      };
-      const viewportHeight = scopedGlobal.innerHeight ?? 0;
-      scopedGlobal.scrollBy?.(0, Math.max(120, Math.floor(viewportHeight * 0.5)));
-    });
-    await this.page.waitForTimeout(700);
+    if (scrollDirection === 'up') {
+      // Move to bottom first so scan can proceed upward.
+      await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as {
+          scrollTo?: (x: number, y: number) => void;
+          document?: { body?: { scrollHeight?: number } };
+        };
+        const fullHeight = scopedGlobal.document?.body?.scrollHeight ?? 0;
+        scopedGlobal.scrollTo?.(0, fullHeight);
+      });
+      await this.page.waitForTimeout(700);
+    } else {
+      // On some list loads, SIP cards render only after the first viewport movement.
+      await this.page.evaluate(() => {
+        const scopedGlobal = globalThis as {
+          scrollBy?: (x: number, y: number) => void;
+          innerHeight?: number;
+        };
+        const viewportHeight = scopedGlobal.innerHeight ?? 0;
+        scopedGlobal.scrollBy?.(0, Math.max(120, Math.floor(viewportHeight * 0.5)));
+      });
+      await this.page.waitForTimeout(700);
+    }
 
     while (true) {
       scanCycles += 1;
@@ -408,7 +679,15 @@ export class DashBoardPage extends BasePage {
         const titleText = rawTitleText.trim().toLowerCase();
 
         const nameMatched = normalizedTargetSipName ? titleText === normalizedTargetSipName : true;
+        const shouldRestrictToTargetOnly = hasProvidedSipName && !fallbackToAnySipWhenTargetBelowThreshold;
         if (!nameMatched) {
+          if (shouldRestrictToTargetOnly) {
+            continue;
+          }
+          // Fallback mode: target SIP can be low value; allow scanning other SIP cards.
+          // Continue evaluating this candidate.
+        }
+        if (!nameMatched && !hasProvidedSipName) {
           continue;
         }
 
@@ -493,7 +772,7 @@ export class DashBoardPage extends BasePage {
         const hasProceed = isProceedVisible && isProceedEnabled;
 
         const numericValue = Number(totalGoldText.replace(/[^\d.]/g, ''));
-        const hasPositiveValue = !Number.isNaN(numericValue) && numericValue > 0;
+        const hasPositiveValue = !Number.isNaN(numericValue) && numericValue > minValueThreshold;
         console.log(
           `[SIP CHECK] name="${effectiveSipName}" metalType="${metalLabel}" value="${totalGoldText || 'N/A'}" valueGreaterThanZero=${hasPositiveValue}`
         );
@@ -503,10 +782,21 @@ export class DashBoardPage extends BasePage {
         console.log(`Total ${metalLabel} for SIP "${effectiveSipName}": ${totalGoldText || 'N/A'}`);
         console.log(`Proceed available for SIP "${effectiveSipName}": ${hasProceed}`);
 
+        if (onlyMetalType && metalLabel !== onlyMetalType) {
+          console.log(
+            `[SIP SKIP] name="${effectiveSipName}" reason=metalTypeMismatch expected=${onlyMetalType} actual=${metalLabel}`,
+          );
+          continue;
+        }
+
         const hasSupportedMetal = metalLabel === 'Gold' || metalLabel === 'Silver';
         if (!hasSupportedMetal || !hasPositiveValue || !hasProceed) {
-          const reason = `metalSupported=${hasSupportedMetal}, positiveValue=${hasPositiveValue}, proceedAvailable=${hasProceed}`;
-          throw new Error(`Target SIP "${effectiveSipName}" does not satisfy required conditions (${reason}).`);
+          const reason = `metalSupported=${hasSupportedMetal}, valueGreaterThan${minValueThreshold}=${hasPositiveValue}, proceedAvailable=${hasProceed}`;
+          console.log(`[SIP SKIP] name="${effectiveSipName}" reason=${reason}`);
+          if (nameMatched && hasProvidedSipName && !fallbackToAnySipWhenTargetBelowThreshold) {
+            throw new Error(`Target SIP "${effectiveSipName}" does not satisfy required conditions (${reason}).`);
+          }
+          continue;
         }
         const resolvedMetalType: 'Gold' | 'Silver' = metalLabel === 'Gold' ? 'Gold' : 'Silver';
 
@@ -526,7 +816,7 @@ export class DashBoardPage extends BasePage {
         };
         return scopedGlobal.document?.body?.scrollHeight ?? 0;
       });
-      const listContainerMoved = await this.page.evaluate(() => {
+      const listContainerMoved = await this.page.evaluate((direction: 'down' | 'up') => {
         const scopedGlobal = globalThis as {
           document?: {
             querySelector?: (selector: string) => {
@@ -553,17 +843,19 @@ export class DashBoardPage extends BasePage {
           const canScroll = isScrollableY && container.scrollHeight > container.clientHeight;
           if (canScroll) {
             const before = container.scrollTop;
-            container.scrollTop = Math.min(
-              container.scrollHeight,
-              container.scrollTop + Math.floor(container.clientHeight * 0.85)
-            );
+            const delta = Math.floor(container.clientHeight * 0.85);
+            if (direction === 'up') {
+              container.scrollTop = Math.max(0, container.scrollTop - delta);
+              return container.scrollTop < before;
+            }
+            container.scrollTop = Math.min(container.scrollHeight, container.scrollTop + delta);
             return container.scrollTop > before;
           }
           container = container.parentElement ?? null;
         }
 
         return false;
-      });
+      }, scrollDirection);
 
       if (currentScrollHeight === previousScrollHeight && !listContainerMoved) {
         noMovementCount += 1;
@@ -576,14 +868,15 @@ export class DashBoardPage extends BasePage {
       }
 
       previousScrollHeight = currentScrollHeight;
-      await this.page.evaluate(() => {
+      await this.page.evaluate((direction: 'down' | 'up') => {
         const scopedGlobal = globalThis as {
           scrollBy?: (x: number, y: number) => void;
           innerHeight?: number;
         };
         const viewportHeight = scopedGlobal.innerHeight ?? 0;
-        scopedGlobal.scrollBy?.(0, Math.floor(viewportHeight * 0.85));
-      });
+        const delta = Math.floor(viewportHeight * 0.85);
+        scopedGlobal.scrollBy?.(0, direction === 'up' ? -delta : delta);
+      }, scrollDirection);
       await this.page.waitForTimeout(800);
     }
 
@@ -593,6 +886,8 @@ export class DashBoardPage extends BasePage {
       }
       throw new Error(`Selected SIP "${targetSipName}" was not found with Proceed enabled before end of list.`);
     }
-    throw new Error('No eligible SIP found (excluding Gold Vault/Silver Vault) with Gold value > 0.');
+    throw new Error(
+      `No eligible SIP found (excluding Gold Vault/Silver Vault) with value > ${minValueThreshold} while scrolling ${scrollDirection}.`,
+    );
   }
 }
