@@ -59,6 +59,9 @@ export class BuyMetalPage extends BasePage {
     await this.productsMenu.hover();
     await this.digitalGold.waitFor({ state: 'visible' });
     await this.digitalGold.click();
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.skipKycRedirectIfShown('/digital-gold/buy');
+    await this.waitForBuyFormReady();
   }
 
   async hoverOnProductsAndClickDigitalSilver(): Promise<void> {
@@ -66,6 +69,45 @@ export class BuyMetalPage extends BasePage {
     await this.productsMenu.hover();
     await this.digitalSilver.waitFor({ state: 'visible' });
     await this.digitalSilver.click();
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.skipKycRedirectIfShown('/digital-silver/buy');
+    await this.waitForBuyFormReady();
+  }
+
+  async openDigitalGoldBuyPage(): Promise<void> {
+    await this.openBuyPage('/digital-gold/buy');
+  }
+
+  async openDigitalSilverBuyPage(): Promise<void> {
+    await this.openBuyPage('/digital-silver/buy');
+  }
+
+  private async openBuyPage(buyPath: string): Promise<void> {
+    await this.page.goto('/dashboard');
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.page.goto(buyPath);
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.skipKycRedirectIfShown(buyPath);
+    if (/\/kyc/i.test(this.page.url())) {
+      throw new Error(`Buy page blocked by KYC: ${this.page.url()}`);
+    }
+    await this.waitForBuyFormReady();
+  }
+
+  private async skipKycRedirectIfShown(fallbackBuyPath: string): Promise<void> {
+    if (!/\/kyc/i.test(this.page.url())) return;
+
+    await this.page.waitForTimeout(3_000);
+    const redirectTo = new URL(this.page.url()).searchParams.get('redirectTo');
+    await this.page.goto(redirectTo || fallbackBuyPath);
+    await this.page.waitForLoadState('domcontentloaded');
+
+    if (/\/kyc/i.test(this.page.url())) {
+      await this.page.goto('/dashboard');
+      await this.page.waitForLoadState('domcontentloaded');
+      await this.page.goto(fallbackBuyPath);
+      await this.page.waitForLoadState('domcontentloaded');
+    }
   }
 
   async enterAmount(amount: string): Promise<void> {
@@ -89,15 +131,116 @@ export class BuyMetalPage extends BasePage {
   }
 
   async clickOnCreateSIP(): Promise<void> {
+    const blockUI = this.page.locator('.p-blockui-document');
+    await blockUI.waitFor({ state: 'hidden' }).catch(() => {});
+    await this.createSipClick.waitFor({ state: 'visible', timeout: 20_000 });
+    await expect(this.createSipClick).toBeEnabled({ timeout: 20_000 });
     await this.createSipClick.click();
+    await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+  }
+
+  private async isOnSipPlanForm(): Promise<boolean> {
+    if (/\/create-sip/i.test(this.page.url())) {
+      return this.planNameInput.isVisible({ timeout: 5_000 }).catch(() => false);
+    }
+    return this.planNameInput.isVisible({ timeout: 2_000 }).catch(() => false);
+  }
+
+  /** Navigate to buy, fill SIP amount/frequency, and land on plan-name step. */
+  async startSipAndOpenPlanForm(options: {
+    metal: 'gold' | 'silver';
+    amount: string;
+    frequency: 'weekly' | 'monthly';
+    investmentDay?: string;
+    skipNavigation?: boolean;
+  }): Promise<void> {
+    const buyPath =
+      options.metal === 'gold' ? '/digital-gold/buy' : ('/digital-silver/buy' as const);
+
+    if (!options.skipNavigation) {
+      if (options.metal === 'gold') {
+        await this.hoverOnProductsAndClickDigitalGold();
+      } else {
+        await this.hoverOnProductsAndClickDigitalSilver();
+      }
+    }
+
+    if (await this.isOnSipPlanForm()) {
+      return;
+    }
+
+    await this.clickOnCreateSIP();
+
+    if (await this.isOnSipPlanForm()) {
+      return;
+    }
+
+    if (options.frequency === 'monthly') {
+      await this.selectMonthlyFrequency();
+    } else {
+      await this.selectWeeklyFrequency();
+    }
+    await this.enterAmount(options.amount);
+    if (options.investmentDay) {
+      await this.selectInvestmentDay(options.investmentDay);
+    }
+
+    await this.clickOnCreateSIP();
+
+    if (!(await this.isOnSipPlanForm())) {
+      await this.clickCreateSipToPlanForm({
+        buyPath,
+        amount: options.amount,
+        frequency: options.frequency,
+        investmentDay: options.investmentDay,
+      });
+    }
+
+    await this.planNameInput.waitFor({ state: 'visible', timeout: 20_000 });
+  }
+
+  /** Second Create SIP click — retries once if KYC redirect clears the form. */
+  async clickCreateSipToPlanForm(options: {
+    buyPath: '/digital-gold/buy' | '/digital-silver/buy';
+    amount: string;
+    frequency: 'weekly' | 'monthly';
+    investmentDay?: string;
+  }): Promise<void> {
+    await this.clickOnCreateSIP();
+
+    if (await this.planNameInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      return;
+    }
+
+    await this.skipKycRedirectIfShown(options.buyPath);
+    await this.openBuyPage(options.buyPath);
+
+    await this.clickOnCreateSIP();
+    if (options.frequency === 'monthly') {
+      await this.selectMonthlyFrequency();
+    } else {
+      await this.selectWeeklyFrequency();
+    }
+    await this.enterAmount(options.amount);
+    if (options.investmentDay) {
+      await this.selectInvestmentDay(options.investmentDay);
+    }
+    await this.clickOnCreateSIP();
+    await this.planNameInput.waitFor({ state: 'visible', timeout: 20_000 });
   }
 
   async selectWeeklyFrequency(): Promise<void> {
-    await this.page.getByText('Weekly', { exact: true }).click();
+    if (await this.isOnSipPlanForm()) return;
+    const weekly = this.page.getByText('Weekly', { exact: true });
+    await weekly.waitFor({ state: 'visible', timeout: 20_000 });
+    await weekly.click();
   }
 
   async selectMonthlyFrequency(): Promise<void> {
-    await this.page.getByText('Monthly', { exact: true }).click();
+    if (await this.isOnSipPlanForm()) return;
+    const monthly = this.page.getByText('Monthly', { exact: true });
+    await monthly.waitFor({ state: 'visible', timeout: 20_000 });
+    await monthly.click();
   }
 
   async selectInvestmentDay(day: string): Promise<void> {
@@ -125,7 +268,7 @@ export class BuyMetalPage extends BasePage {
 
   async enterUniquePlanName(prefix = 'Sip_plan_weekly'): Promise<string> {
     const uniquePlanName = `${prefix}_${Date.now()}`;
-    await this.planNameInput.waitFor({ state: 'visible' });
+    await this.planNameInput.waitFor({ state: 'visible', timeout: 20_000 });
     await this.planNameInput.fill(uniquePlanName);
     return uniquePlanName;
   }

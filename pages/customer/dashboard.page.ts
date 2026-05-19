@@ -46,12 +46,78 @@ export class DashBoardPage extends BasePage {
     );
 
     this.portfolioValueXpath = "//p[contains(@class,'text-36') and contains(@class,'font-cabinetgroteskbold')]";
-    this.withdrawInvestmentButton = page.getByRole('button', { name: 'Withdraw Investment' });
+    this.withdrawInvestmentButton = page.getByRole('button', { name: /Withdraw Investment/i });
+  }
+
+  /** Portfolio block can load after hero/carousel; wait before reading gold/silver/portfolio INR. */
+  async waitForDashboardPortfolioSection(timeoutMs = 45_000): Promise<void> {
+    const blockers = this.page.locator('div.p-blockui[aria-busy="true"], .p-blockui-document');
+    const deadline = Date.now() + timeoutMs;
+    let reloadCount = 0;
+
+    while (Date.now() < deadline) {
+      if (/\/login/i.test(this.page.url())) {
+        throw new Error(
+          'Cannot read portfolio: session is on login page. Re-run: npx playwright test --project=auth-setup',
+        );
+      }
+
+      await blockers.first().waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+
+      const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
+      const goldLine = portfolioCard.locator('p').filter({ hasText: /Total Gold/i }).first();
+
+      if (await goldLine.isVisible().catch(() => false)) {
+        return;
+      }
+
+      await this.page.evaluate(() => {
+        const scoped = globalThis as unknown as {
+          scrollTo?: (x: number, y: number) => void;
+          document?: { body?: { scrollHeight?: number } };
+        };
+        const h = scoped.document?.body?.scrollHeight ?? 0;
+        scoped.scrollTo?.(0, h);
+      });
+      await this.page.waitForTimeout(600);
+      await this.page.evaluate(() => {
+        const g = globalThis as { scrollTo?: (x: number, y: number) => void };
+        g.scrollTo?.(0, 0);
+      });
+      await this.page.waitForTimeout(400);
+
+      if (await goldLine.isVisible().catch(() => false)) {
+        return;
+      }
+
+      if (reloadCount < 2 && /\/dashboard/i.test(this.page.url())) {
+        reloadCount += 1;
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.page.waitForTimeout(1_200);
+      } else {
+        await this.page.waitForTimeout(600);
+      }
+    }
+
+    throw new Error(
+      'Dashboard portfolio (My Portfolio / Total Gold) did not become visible in time. Check UAT dashboard layout or session.',
+    );
   }
 
   async verifyDashboardLoaded(): Promise<void> {
     await this.page.waitForLoadState('networkidle');
     console.log('Dashboard loaded');
+  }
+
+  async clickMyOrders(): Promise<void> {
+    const myOrders = this.page
+      .getByRole('link', { name: /my orders/i })
+      .or(this.page.getByRole('button', { name: /my orders/i }))
+      .or(this.page.getByText(/^my orders$/i))
+      .first();
+    await myOrders.waitFor({ state: 'visible', timeout: 15_000 });
+    await myOrders.click();
+    await this.page.waitForURL(/my-orders/i, { timeout: 15_000 });
   }
 
   async clickViewAll(): Promise<void> {
@@ -180,9 +246,10 @@ export class DashBoardPage extends BasePage {
   }
 
   async getTotalGoldValue(): Promise<number> {
+    await this.waitForDashboardPortfolioSection(45_000);
     const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-    const goldLabel = portfolioCard.locator('p', { hasText: /^Total Gold\(g\)$/ }).first();
-    await goldLabel.waitFor({ state: 'visible', timeout: 20_000 });
+    const goldLabel = portfolioCard.locator('p').filter({ hasText: /Total Gold/i }).first();
+    await goldLabel.waitFor({ state: 'visible', timeout: 25_000 });
 
     const valueNode = goldLabel.locator('xpath=preceding-sibling::p[1]');
     await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
@@ -196,9 +263,10 @@ export class DashBoardPage extends BasePage {
   }
 
   async getTotalSilverValue(): Promise<number> {
+    await this.waitForDashboardPortfolioSection(45_000);
     const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-    const silverLabel = portfolioCard.locator('p', { hasText: /^Total Silver\(g\)$/ }).first();
-    await silverLabel.waitFor({ state: 'visible', timeout: 20_000 });
+    const silverLabel = portfolioCard.locator('p').filter({ hasText: /Total Silver/i }).first();
+    await silverLabel.waitFor({ state: 'visible', timeout: 25_000 });
 
     const valueNode = silverLabel.locator('xpath=preceding-sibling::p[1]');
     await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
@@ -221,13 +289,30 @@ export class DashBoardPage extends BasePage {
   }
 
   async getPortfolioValueNumber(): Promise<number> {
-    const locator = this.page.getByText('My Portfolio')
-      .locator('xpath=following::p[1]');
+    await this.waitForDashboardPortfolioSection(45_000);
+    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
+    const primary = portfolioCard
+      .locator('p.text-36.font-cabinetgroteskbold')
+      .filter({ hasText: /[\d,.]/ })
+      .first();
 
-    await locator.waitFor({ state: 'visible' });
+    let text = '';
+    if (await primary.isVisible().catch(() => false)) {
+      text = (await primary.textContent()) ?? '';
+    } else {
+      const fallback = this.page
+        .getByText('My Portfolio')
+        .first()
+        .locator('xpath=following::p[contains(@class,"text-36")][1]');
+      await fallback.waitFor({ state: 'visible', timeout: 20_000 });
+      text = (await fallback.textContent()) ?? '';
+    }
 
-    const text = (await locator.textContent()) ?? '';
-    return parseFloat(text.replace(/[^\d.]/g, ''));
+    const n = parseFloat(String(text).replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(n)) {
+      throw new Error(`Unable to parse portfolio value from: "${String(text).slice(0, 120)}"`);
+    }
+    return n;
   }
 
   async getGoldFDValue(): Promise<string> {
@@ -241,7 +326,8 @@ export class DashBoardPage extends BasePage {
   }
 
   async clickWithdrawInvestment(): Promise<void> {
-    await this.withdrawInvestmentButton.waitFor({ state: 'visible' });
+    await this.waitForDashboardPortfolioSection(45_000);
+    await this.withdrawInvestmentButton.waitFor({ state: 'visible', timeout: 25_000 });
     const blockingOverlay = this.page.locator('div.p-blockui[aria-busy="true"]');
     if (await blockingOverlay.isVisible().catch(() => false)) {
       await blockingOverlay.waitFor({ state: 'hidden', timeout: 8_000 }).catch(() => undefined);

@@ -40,6 +40,7 @@ setup('authenticate customer', async ({ browser }) => {
   const page = await ctx.newPage();
   const login = new CustomerLoginPage(page);
   const { mobile, otp } = panelCreds('customer', targetEnv);
+  console.log(`[customer login] env=${targetEnv} mobile=${mobile}`);
   await login.login(mobile, otp);
   await ctx.storageState({ path: storagePath });
   await ctx.close();

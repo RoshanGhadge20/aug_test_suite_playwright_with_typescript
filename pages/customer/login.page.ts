@@ -41,10 +41,36 @@ export class CustomerLoginPage extends BasePage {
       await this.page.waitForLoadState('domcontentloaded');
     }
 
+    await this.dismissPostLoginPersonalisationIfPresent();
+
     try {
-      await this.page.waitForURL(home, { timeout: 20_000 });
+      await this.page.waitForURL(home, { timeout: 35_000 });
     } catch {
       throw new Error('Customer login did not reach home/dashboard after OTP/PIN submission.');
+    }
+  }
+
+  /** Some accounts show “Personalisation Questions” after PIN; Skip reaches dashboard. */
+  private async dismissPostLoginPersonalisationIfPresent(): Promise<void> {
+    const deadline = Date.now() + 28_000;
+    const skipButton = this.page.locator('button').filter({ hasText: /skip/i }).first();
+
+    while (Date.now() < deadline) {
+      const url = this.page.url();
+      if (/\/(dashboard|home|account)(\/|$|\?)/i.test(url)) {
+        return;
+      }
+      const heading = this.page.getByText('Personalisation Questions', { exact: false });
+      const onPersonalisation =
+        (await heading.isVisible().catch(() => false)) ||
+        (await skipButton.isVisible().catch(() => false));
+      if (onPersonalisation && (await skipButton.isVisible().catch(() => false))) {
+        await skipButton.click({ force: true });
+        await this.page.waitForLoadState('domcontentloaded').catch(() => undefined);
+        await this.page.waitForTimeout(900);
+        continue;
+      }
+      await this.page.waitForTimeout(450);
     }
   }
 
@@ -81,16 +107,19 @@ export class CustomerLoginPage extends BasePage {
         }
 
         // Retry to handle occasional dropped keystrokes in segmented PIN UIs.
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const freshBoxes = this.page.locator("input[maxlength='1']:visible");
+          await freshBoxes.first().waitFor({ state: 'visible', timeout: 5_000 });
           for (let i = 0; i < 6; i++) {
-            const box = pinBoxes.nth(i);
-            await box.click();
+            const box = freshBoxes.nth(i);
+            await box.click({ force: true });
             await box.fill('');
-            await box.type(normalized[i], { delay: 25 });
+            await box.pressSequentially(normalized[i], { delay: 60 });
           }
 
-          const joined = await pinBoxes.evaluateAll((els) =>
-            els.map((el: any) => String(el.value ?? '')).join(''),
+          await this.page.waitForTimeout(200);
+          const joined = await freshBoxes.evaluateAll((els) =>
+            els.map((el: { value?: string }) => String(el.value ?? '')).join(''),
           );
           if (joined.length === 6 && /^\d{6}$/.test(joined)) {
             return;

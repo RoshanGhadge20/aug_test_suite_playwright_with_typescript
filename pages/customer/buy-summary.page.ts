@@ -64,7 +64,7 @@ export class BuySummaryPage extends BasePage {
 
       // Some variants render amount blocks before/without the "Valid for" text.
       const investingAmount = this.page.getByText('Investing ₹', { exact: false }).first();
-      await investingAmount.waitFor({ state: 'visible', timeout: 10_000 });
+      await investingAmount.waitFor({ state: 'visible', timeout: 20_000 });
     }
   }
 
@@ -185,6 +185,18 @@ export class BuySummaryPage extends BasePage {
   }
 
   async clickProceedToPay(): Promise<void> {
-    await this.page.getByRole('button', { name: /proceed to pay/i }).click();
+    const proceedBtn = this.page.getByRole('button', { name: /proceed to pay/i });
+    await proceedBtn.waitFor({ state: 'visible', timeout: 20_000 });
+    await proceedBtn.click();
+    // UPI flows open "Set Up Bank Mandate"; e-mandate-only flows open "Choose bank account" or add-bank form.
+    await Promise.race([
+      this.page
+        .getByRole('dialog', { name: /set up bank mandate/i })
+        .waitFor({ state: 'visible', timeout: 30_000 }),
+      this.page
+        .getByRole('dialog', { name: /choose bank account/i })
+        .waitFor({ state: 'visible', timeout: 30_000 }),
+      this.page.locator('input#beneficiaryName').waitFor({ state: 'visible', timeout: 30_000 }),
+    ]);
   }
 }

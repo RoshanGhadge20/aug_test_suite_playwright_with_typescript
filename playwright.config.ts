@@ -32,6 +32,7 @@ export default defineConfig({
     ['html', { outputFolder: 'reports/html', open: 'never' }],
     ['json', { outputFile: 'reports/results.json' }],
     ['list'],
+    ['allure-playwright', { resultsDir: 'reports/allure-results' }],
   ],
   outputDir: 'reports/test-artifacts',
   use: {

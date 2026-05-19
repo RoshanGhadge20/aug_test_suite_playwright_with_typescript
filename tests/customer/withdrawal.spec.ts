@@ -879,32 +879,9 @@ test('TC_004-withdrwal from gold vault and convert into gold coin @customer-flow
     await withdrawalPage.waitForProductListPage();
     const categoryNames = await withdrawalPage.getAndLogProductCategoryNames();
     expect(categoryNames.length).toBeGreaterThan(0);
-    // Keep TC004 fast: avoid full product-list enumeration logs here.
-    // Add local retry because product-list UI can occasionally fail to open details on first click.
-    let selected = false;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      await withdrawalPage.selectCoinCategoryIfNotSelected();
-      console.log(
-        `[${TC004(4)}] Product selected from withdrawal workbook (attempt ${attempt}/3):`,
-        TC004_PRODUCT_NAME,
-      );
-      selected = await withdrawalPage
-        .selectProductByName(TC004_PRODUCT_NAME)
-        .then(() => true)
-        .catch(async (error) => {
-          console.warn(
-            `[${TC004(4)}] Product selection attempt ${attempt} failed for "${TC004_PRODUCT_NAME}". Retrying...`,
-          );
-          await withdrawalPage.settleMs(700);
-          if (attempt === 3) {
-            throw error;
-          }
-          return false;
-        });
-      if (selected) {
-        break;
-      }
-    }
+    await withdrawalPage.selectCoinCategoryIfNotSelected();
+    console.log(`[${TC004(4)}] Product selected from withdrawal workbook:`, TC004_PRODUCT_NAME);
+    await withdrawalPage.selectProductByName(TC004_PRODUCT_NAME);
   });
 
   await test.step('TC004_5 | Get and validate product details', async () => {
@@ -4462,6 +4439,7 @@ test('TC_017-Verify delivery address on checkout summary after editing delivery 
           return false;
         });
       if (selected) {
+        await withdrawalPage.waitForProductDetailsPage();
         break;
       }
     }
@@ -4469,6 +4447,7 @@ test('TC_017-Verify delivery address on checkout summary after editing delivery 
 
   await test.step('TC017_5 | Get product details and Request Delivery', async () => {
     logSub(5, 'Get and validate product details');
+    await withdrawalPage.waitForProductDetailsPage();
     selectedProductDetails = await withdrawalPage.getAndLogSelectedProductDetails();
     console.log(selectedProductDetails);
     await withdrawalPage.clickRequestDelivery();
@@ -4656,6 +4635,74 @@ test('TC_017-Verify delivery address on checkout summary after editing delivery 
       },
       { prefetchedDisplay: checkoutDeliverySnapshot },
     );
+  });
+});
+
+test('TC_018-Verify withdrawal cart add/remove product and Start Shopping navigation. @customer-flows', async ({
+  page,
+  dashboardPage,
+  withdrawalPage,
+}) => {
+  test.setTimeout(240_000);
+  const TC018 = (n: number): string => `TC018_${n}`;
+  const logSub = (n: number, title: string): void => {
+    console.log(`\n[${TC018(n)}] ${title}`);
+  };
+
+  const primaryProductName = tc004Dataset.productName || 'Augmont 0.5Gm Gold Coin (999 Purity)';
+
+  await test.step('TC018_1 | Open dashboard and navigate to convert product list', async () => {
+    logSub(1, 'Open convert product list');
+    await dashboardPage.goto('/dashboard');
+    await dashboardPage.clickWithdrawInvestment();
+    await withdrawalPage.clickProceed();
+    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
+    await withdrawalPage.clickProceedForConvertGoldJewellery();
+    await withdrawalPage.waitForProductListPage();
+    const categoryNames = await withdrawalPage.getAndLogProductCategoryNames();
+    expect(categoryNames.length).toBeGreaterThan(0);
+  });
+
+  await test.step('TC018_2 | Select one product and validate cart product details', async () => {
+    logSub(2, 'Select one product and validate cart details');
+    await withdrawalPage.selectCoinCategoryIfNotSelected();
+    await withdrawalPage.selectProductByName(primaryProductName, 'Coin');
+    console.log(`[${TC018(2)}] Product selected: ${primaryProductName}`);
+    const selectedProductDetails = await withdrawalPage.getAndLogSelectedProductDetails();
+    await withdrawalPage.clickRequestDelivery();
+    const productCountInCart = await withdrawalPage.getCountOfProductInCart();
+    if (productCountInCart > 1) {
+      await withdrawalPage.removeExtraProductsFromCart(selectedProductDetails.productName);
+    }
+    const selectedProductQty = await withdrawalPage.getSelectedProductQuantityInCart(selectedProductDetails.productName);
+    if (selectedProductQty > 1) {
+      await withdrawalPage.reduceSelectedProductQuantityInCart(selectedProductDetails.productName, 1);
+    }
+    await withdrawalPage.validateSelectedProductCardInCart(selectedProductDetails.productName, 1);
+
+    await withdrawalPage.validateCartItemWithSelectedProduct({
+      productName: selectedProductDetails.productName,
+      productWeight: selectedProductDetails.productWeight,
+      quantity: 1,
+    });
+  });
+
+  await test.step('TC018_3 | Remove all cart items and validate empty cart message', async () => {
+    logSub(3, 'Remove item and validate empty cart message');
+    await withdrawalPage.removeAllProductsFromCart();
+    await withdrawalPage.validateEmptyCartMessageVisible();
+  });
+
+  await test.step('TC018_4 | Click Continue Shopping and validate URL', async () => {
+    logSub(4, 'Continue shopping navigation');
+    await withdrawalPage.clickContinueShoppingFromCart();
+    await withdrawalPage.waitForProductListPage();
+    const currentUrl = page.url();
+    const expectedUrlPattern = /\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i;
+    console.log('[TC018 VALIDATION] Continue shopping URL | expected pattern:', expectedUrlPattern);
+    console.log('[TC018 VALIDATION] Continue shopping URL | actual:', currentUrl);
+    expect(currentUrl).toMatch(expectedUrlPattern);
+    console.log('[TC018 VALIDATION] Continue shopping URL validation: PASS');
   });
 });
 

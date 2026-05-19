@@ -1,12 +1,9 @@
 import path from 'path';
 import * as XLSX from 'xlsx';
 
-const CUSTOMER_DATA_WORKBOOK = path.resolve(
-  process.cwd(),
-  'testdata',
-  'customer',
-  'customer-data.xlsx',
-);
+/** Customer test data workbook: `testdata/customer/customer-data.xlsx` */
+export const CUSTOMER_DATA_DIR = path.resolve(process.cwd(), 'testdata', 'customer');
+export const CUSTOMER_DATA_WORKBOOK = path.join(CUSTOMER_DATA_DIR, 'customer-data.xlsx');
 
 const workbookCache = new Map<string, XLSX.WorkBook>();
 
@@ -276,4 +273,35 @@ export function saveWithdrawalTc006ProductName(productName: string): void {
     'WithdrawalTc006ProductName',
     normalizeCell(productName),
   );
+}
+
+const SHOP_TC001_DEFAULT_MOBILE = '9561273901';
+const SHOP_TC001_DEFAULT_OTP = '1234';
+
+export interface ShopDataset {
+  /** TC_SHOP_001 product list selection (`ShopTc001ProductName` column on `shop` sheet). */
+  productName: string;
+  /** OTP checkout mobile (`ShopTc001Mobile` on `shop` sheet, else `SHOP_TC001_MOBILE` env). */
+  mobile: string;
+  /** OTP checkout code (`ShopTc001Otp` on `shop` sheet, else `SHOP_TC001_OTP` env). */
+  otp: string;
+}
+
+/** TC_SHOP_001 data from `shop` sheet in `testdata/customer/customer-data.xlsx`. */
+export function getShopDataset(): ShopDataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  const excelMobile = normalizeCell(firstRow.ShopTc001Mobile);
+  const excelOtp = normalizeCell(firstRow.ShopTc001Otp);
+
+  return {
+    productName: normalizeCell(
+      firstRow.ShopTc001ProductName ?? 'Augmont 0.1Gm Gold Coin (999 Purity)',
+    ),
+    mobile: excelMobile || process.env.SHOP_TC001_MOBILE?.trim() || SHOP_TC001_DEFAULT_MOBILE,
+    otp: excelOtp || process.env.SHOP_TC001_OTP?.trim() || SHOP_TC001_DEFAULT_OTP,
+  };
 }

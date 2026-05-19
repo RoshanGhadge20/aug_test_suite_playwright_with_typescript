@@ -50,7 +50,8 @@ test.describe('customer SIP flows @customer-flows', () => {
       await buyMetalPage.enterAmount(dataset.SIPEmandateAmount);
       await buyMetalPage.selectInvestmentDay(dataset.SIPInvestmentDay);
       await buyMetalPage.clickOnCreateSIP();
-      planName = await buyMetalPage.enterUniquePlanName();
+m,.\
+65-vxc*      planName = await buyMetalPage.enterUniquePlanName();
       selectedSipStartDate = await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
     });
@@ -102,6 +103,8 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('Re-create SIP and proceed to payment', async () => {
+      await buyMetalPage.hoverOnProductsAndClickDigitalGold();
+      await buyMetalPage.clickOnCreateSIP();
       await buyMetalPage.selectWeeklyFrequency();
       await buyMetalPage.enterAmount(dataset.SIPEmandateAmount);
       await buyMetalPage.selectInvestmentDay(dataset.SIPRecreateInvestmentDay);
@@ -110,6 +113,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await buyMetalPage.enterStartDatePlusDays(recreateSipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
       planName = await buySummaryPage.getInvestmentPurposeText();
+      expect(await buySummaryPage.getFrequencyText()).toBe(dataset.SIPDurationWeekly);
       await buySummaryPage.clickProceedToPay();
     });
 
@@ -176,12 +180,12 @@ test.describe('customer SIP flows @customer-flows', () => {
     test.setTimeout(180_000);
 
     await test.step('Create weekly SIP for silver', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalSilver();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectWeeklyFrequency();
-      await buyMetalPage.enterAmount(sipUpiEmandateData.amount);
-      await buyMetalPage.selectInvestmentDay(sipUpiEmandateData.investmentDay);
-      await buyMetalPage.clickOnCreateSIP();
+      await buyMetalPage.startSipAndOpenPlanForm({
+        metal: 'silver',
+        amount: sipUpiEmandateData.amount,
+        frequency: 'weekly',
+        investmentDay: sipUpiEmandateData.investmentDay,
+      });
       planName = await buyMetalPage.enterUniquePlanName();
       await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
@@ -255,12 +259,12 @@ test.describe('customer SIP flows @customer-flows', () => {
     test.setTimeout(180_000);
 
     await test.step('Create weekly SIP for gold', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalGold();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectWeeklyFrequency();
-      await buyMetalPage.enterAmount(sipUpiEmandateData.amount);
-      await buyMetalPage.selectInvestmentDay(sipUpiEmandateData.investmentDay);
-      await buyMetalPage.clickOnCreateSIP();
+      await buyMetalPage.startSipAndOpenPlanForm({
+        metal: 'gold',
+        amount: sipUpiEmandateData.amount,
+        frequency: 'weekly',
+        investmentDay: sipUpiEmandateData.investmentDay,
+      });
       planName = await buyMetalPage.enterUniquePlanName();
       await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
@@ -351,11 +355,11 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('Create monthly SIP for gold', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalGold();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectMonthlyFrequency();
-      await buyMetalPage.enterAmount(sipMonthlyData.amount);
-      await buyMetalPage.clickOnCreateSIP();
+      await buyMetalPage.startSipAndOpenPlanForm({
+        metal: 'gold',
+        amount: sipMonthlyData.amount,
+        frequency: 'monthly',
+      });
       planName = await buyMetalPage.enterUniquePlanName(sipMonthlyData.planPrefix);
       await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
@@ -452,11 +456,11 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('Create monthly SIP for silver', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalSilver();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectMonthlyFrequency();
-      await buyMetalPage.enterAmount(sipMonthlyUpiData.amount);
-      await buyMetalPage.clickOnCreateSIP();
+      await buyMetalPage.startSipAndOpenPlanForm({
+        metal: 'silver',
+        amount: sipMonthlyUpiData.amount,
+        frequency: 'monthly',
+      });
       planName = await buyMetalPage.enterUniquePlanName(sipMonthlyUpiData.planPrefix);
       await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();

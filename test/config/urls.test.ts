@@ -50,4 +50,11 @@ describe('urls (env-aware)', () => {
     expect(cfg.sendOtpPath).toBe('/api/v1/auth/send-otp');
     expect(cfg.verifyOtpPath).toBe('/api/v1/auth/verify-otp');
   });
+
+  it('digitalGoldRatesUrl uses api-backend base for active env', async () => {
+    process.env.TARGET_ENV = 'test';
+    const mod = await import('../../config/urls');
+    expect(mod.digitalGoldRatesUrl('test')).toBe('http://test-base_url_backend/api/digital-gold/rates');
+    expect(mod.digitalGoldRatesUrl('uat')).toBe('http://uat-base_url_backend/api/digital-gold/rates');
+  });
 });

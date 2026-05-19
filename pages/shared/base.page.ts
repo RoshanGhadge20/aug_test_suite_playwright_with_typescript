@@ -34,6 +34,10 @@ export abstract class BasePage {
     );
   }
 
+  protected parseAmount(value: string): number {
+    return Number(value.replace(/[₹,\s]/g, '')) || 0;
+  }
+
   protected async fillOtp(otp: string): Promise<void> {
     const inputs = this.otpInputLocator();
     await inputs.first().waitFor({ state: 'visible', timeout: 15_000 });

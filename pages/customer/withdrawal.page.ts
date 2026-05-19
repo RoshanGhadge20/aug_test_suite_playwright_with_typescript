@@ -744,6 +744,62 @@ export class WithdrawalPage extends BasePage {
     await this.waitForUrl(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i, timeoutMs);
   }
 
+  private isOnProductDetailsPage(): boolean {
+    return /\/withdraw\/product-list\/product-details/i.test(this.page.url());
+  }
+
+  /** Return to product list when a retry lands on product details. */
+  async ensureProductListPage(): Promise<void> {
+    if (!this.isOnProductDetailsPage()) {
+      return;
+    }
+    const listLink = this.page.getByRole('link', { name: /^Product List$/i }).first();
+    if (await listLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await listLink.click();
+    } else {
+      await this.page.goBack();
+    }
+    await this.waitForProductListPage();
+  }
+
+  private categoryRadio(category: string): Locator {
+    return this.page.getByRole('radio', { name: new RegExp(`^${category}$`, 'i') }).first();
+  }
+
+  private productNameRegex(productName: string): RegExp {
+    const escaped = productName.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(escaped, 'i');
+  }
+
+  private productDetailsTitleHeading(productName: string): Locator {
+    return this.page.getByRole('heading', { level: 1 }).filter({ hasText: this.productNameRegex(productName) }).first();
+  }
+
+  private requestDeliveryButton(): Locator {
+    return this.page.getByRole('button', { name: /Request Delivery/i }).first();
+  }
+
+  /** Product details = Request Delivery visible + product title on screen (matches video/screenshot). */
+  async productDetailsShowsName(productName: string): Promise<boolean> {
+    const deliveryVisible = await this.requestDeliveryButton().isVisible({ timeout: 2_000 }).catch(() => false);
+    const titleVisible = await this.productDetailsTitleHeading(productName)
+      .isVisible({ timeout: 2_000 })
+      .catch(() => false);
+    return deliveryVisible && titleVisible;
+  }
+
+  /** Poll until product details match what you see in the UI (no strict URL or h1.text-32). */
+  async waitForProductSelected(productName: string, timeoutMs = 20_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.productDetailsShowsName(productName)) {
+        return;
+      }
+      await this.page.waitForTimeout(300);
+    }
+    throw new Error(`Product details for "${productName}" did not appear within ${timeoutMs}ms`);
+  }
+
   /** Short pause for UI settle (retries, checkbox state). */
   async settleMs(ms: number): Promise<void> {
     await this.page.waitForTimeout(ms);
@@ -1038,18 +1094,7 @@ export class WithdrawalPage extends BasePage {
   }
 
   async clickRequestDelivery(): Promise<void> {
-    const requestDeliveryButton = this.page
-      .getByRole('button', { name: /^Request Delivery$/i })
-      .first();
-    if (await requestDeliveryButton.isVisible().catch(() => false)) {
-      await requestDeliveryButton.click();
-      return;
-    }
-
-    await this.page
-      .locator('span.p-button-label', { hasText: /^Request Delivery$/i })
-      .first()
-      .click();
+    await this.requestDeliveryButton().click();
   }
 
   /** PrimeNG select-button group: primary attribute or fallback when markup/version differs. */
@@ -1067,6 +1112,7 @@ export class WithdrawalPage extends BasePage {
   }
 
   async getAndLogProductCategoryNames(): Promise<string[]> {
+    await this.ensureProductListPage();
     const categoryGroup = this.productCategorySelectGroup();
     await categoryGroup.waitFor({ state: 'visible', timeout: 45_000 });
 
@@ -1096,24 +1142,10 @@ export class WithdrawalPage extends BasePage {
   }
 
   private async selectProductCategoryIfNotSelected(category: 'Coin' | 'Jewellery'): Promise<void> {
-    const categoryGroup = this.productCategorySelectGroup();
-    await categoryGroup.scrollIntoViewIfNeeded().catch(() => {});
-    // Product list step already waited on this group; keep this wait bounded so
-    // selectProductByName retries cannot burn most of the test timeout.
-    await categoryGroup.waitFor({ state: 'visible', timeout: 15_000 }).catch(async () => {
-      await this.page.keyboard.press('Escape').catch(() => {});
-      await categoryGroup.scrollIntoViewIfNeeded().catch(() => {});
-      await categoryGroup.waitFor({ state: 'visible', timeout: 15_000 });
-    });
-
-    const categoryOption = categoryGroup
-      .locator('div[role="radio"]')
-      .filter({ hasText: new RegExp(`^${category}$`, 'i') })
-      .first();
-
+    await this.ensureProductListPage();
+    const categoryOption = this.categoryRadio(category);
     await categoryOption.waitFor({ state: 'visible', timeout: 15_000 });
-    const isSelected = (await categoryOption.getAttribute('aria-checked')) === 'true';
-    if (!isSelected) {
+    if ((await categoryOption.getAttribute('aria-checked')) !== 'true') {
       await categoryOption.click();
       await this.page.waitForTimeout(400);
     }
@@ -1142,10 +1174,32 @@ export class WithdrawalPage extends BasePage {
     return { count, names };
   }
 
+  /** Product detail view — avoid list-page false positives (e.g. "Purity" in h2 titles). */
+  private productDetailsPanel(): Locator {
+    return this.page
+      .locator('motion.div, div')
+      .filter({ has: this.page.locator('input[role="spinbutton"][min="1"][max="99"]') })
+      .filter({ has: this.page.getByText(/Making\s*&\s*Delivery Charges/i) })
+      .filter({ has: this.requestDeliveryButton() })
+      .last();
+  }
+
+  async waitForProductDetailsPage(timeout = 20_000): Promise<void> {
+    await this.requestDeliveryButton().waitFor({ state: 'visible', timeout });
+  }
+
+  private productDetailsContainer(): Locator {
+    return this.productDetailsPanel();
+  }
+
   async selectProductByName(productName: string, retryCategory: 'Coin' | 'Jewellery' = 'Coin'): Promise<void> {
     const normalizedProductName = productName.trim();
-    const escapedName = normalizedProductName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const nameRegex = new RegExp(escapedName, 'i');
+    const nameRegex = this.productNameRegex(normalizedProductName);
+
+    if (await this.productDetailsShowsName(normalizedProductName)) {
+      return;
+    }
+
     const productCards = this.page.locator('app-product');
     const directTarget = productCards
       .filter({
@@ -1156,23 +1210,46 @@ export class WithdrawalPage extends BasePage {
       .locator(`xpath=.//app-product[contains(translate(@ng-reflect-title,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'), "${normalizedProductName.toLowerCase()}")]`)
       .first();
 
+    await this.page.keyboard.press('Escape').catch(() => undefined);
+    await this.ensureProductListPage();
     await productCards.first().waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      if (await this.productDetailsShowsName(normalizedProductName)) {
+        return;
+      }
+
+      await this.ensureProductListPage();
       const target =
         (await directTarget.isVisible({ timeout: 2_000 }).catch(() => false)) ? directTarget : reflectedTitleTarget;
       await target.scrollIntoViewIfNeeded().catch(() => {});
-      const clickableCard = target.locator('div.border-2.border-stroke.rounded-2xl.cursor-pointer').first();
-      if (await clickableCard.isVisible({ timeout: 10_000 }).catch(() => false)) {
-        await clickableCard.click({ force: true });
-        await this.page
-          .locator('h1.text-32')
-          .or(this.page.locator('text=/Product Weight|Making\\s*&\\s*Delivery Charges/i'))
-          .first()
-          .waitFor({ state: 'visible', timeout: 20_000 });
-        return;
+      const styledCard = target.locator('div.border-2.border-stroke.rounded-2xl.cursor-pointer').first();
+      const clickTarget = (await styledCard.isVisible({ timeout: 2_000 }).catch(() => false))
+        ? styledCard
+        : target.locator('div.cursor-pointer, [cursor="pointer"]').first();
+
+      if (!(await clickTarget.isVisible({ timeout: 10_000 }).catch(() => false))) {
+        if (attempt < 3) {
+          await this.selectProductCategoryIfNotSelected(retryCategory);
+          await this.page.waitForTimeout(600);
+        }
+        continue;
       }
-      if (attempt < 3) {
+
+      await clickTarget.click({ force: true });
+      await this.page.waitForLoadState('domcontentloaded').catch(() => undefined);
+
+      try {
+        await this.waitForProductSelected(normalizedProductName, 20_000);
+        return;
+      } catch (error) {
+        if (await this.productDetailsShowsName(normalizedProductName)) {
+          return;
+        }
+        if (attempt === 3) {
+          throw error;
+        }
+        await this.ensureProductListPage();
         await this.selectProductCategoryIfNotSelected(retryCategory);
         await this.page.waitForTimeout(600);
       }
@@ -1193,10 +1270,12 @@ export class WithdrawalPage extends BasePage {
     expectedDeliveryDate: string;
     quantity: number;
   }> {
-    const detailsContainer = this.page.locator('div').filter({ has: this.page.locator('h1.text-32') }).first();
-    await detailsContainer.waitFor({ state: 'visible' });
+    await this.waitForProductDetailsPage(40_000);
+    const detailsContainer = this.productDetailsContainer();
+    await detailsContainer.waitFor({ state: 'visible', timeout: 40_000 });
 
-    const heading = detailsContainer.locator('h1.text-32').first();
+    const heading = detailsContainer.locator('h1.text-32').or(detailsContainer.getByRole('heading', { level: 1 })).first();
+    await heading.waitFor({ state: 'visible', timeout: 15_000 });
     const headingText = ((await heading.textContent()) ?? '').replace(/\s+/g, ' ').trim();
     const productName = headingText.split('(')[0].trim();
     const purity = ((await heading.locator('span').first().textContent()) ?? '').replace(/\s+/g, ' ').trim();
@@ -1310,6 +1389,8 @@ export class WithdrawalPage extends BasePage {
   }): Promise<void> {
     const cart = await this.getAndLogCartItemDetails();
     const normalize = (value: string): string => value.replace(/\s+/g, ' ').trim().toLowerCase();
+    console.log('[TC018 VALIDATION] Cart product name | expected contains:', selected.productName);
+    console.log('[TC018 VALIDATION] Cart product name | actual:', cart.productName);
 
     if (selected.productName && !normalize(cart.productName).includes(normalize(selected.productName))) {
       throw new Error(
@@ -1319,6 +1400,8 @@ export class WithdrawalPage extends BasePage {
 
     const selectedWeightValue = Number(selected.productWeight.match(/[\d.]+/)?.[0] ?? '0');
     const cartWeightValue = Number(cart.productWeight.match(/[\d.]+/)?.[0] ?? '0');
+    console.log('[TC018 VALIDATION] Cart product weight | expected:', selectedWeightValue);
+    console.log('[TC018 VALIDATION] Cart product weight | actual:', cartWeightValue);
     if (
       selectedWeightValue > 0 &&
       cartWeightValue > 0 &&
@@ -1332,6 +1415,11 @@ export class WithdrawalPage extends BasePage {
     if (selected.quantity > 0 && cart.quantity > 0 && cart.quantity !== selected.quantity) {
       throw new Error(`Cart quantity mismatch. Expected "${selected.quantity}", actual "${cart.quantity}"`);
     }
+    if (selected.quantity > 0 && cart.quantity > 0) {
+      console.log('[TC018 VALIDATION] Cart quantity | expected:', selected.quantity);
+      console.log('[TC018 VALIDATION] Cart quantity | actual:', cart.quantity);
+    }
+    console.log('[TC018 VALIDATION] Cart item details validation: PASS');
   }
 
   async getCountOfProductInCart(): Promise<number> {
@@ -1340,6 +1428,34 @@ export class WithdrawalPage extends BasePage {
     const count = await cartCards.count();
     console.log('Cart product count:', count);
     return count;
+  }
+
+  async getAndLogAllCartItemDetails(): Promise<Array<{ productName: string; quantity: number }>> {
+    const cartCards = this.page.locator('div.border.border-sheengold.rounded-2xl.p-4.mb-4');
+    await cartCards.first().waitFor({ state: 'visible' });
+    const count = await cartCards.count();
+    const details: Array<{ productName: string; quantity: number }> = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const card = cartCards.nth(i);
+      const productName = (((await card
+        .locator('div.text-20.text-darkgunmetal.font-cabinetgroteskextrabold')
+        .first()
+        .textContent()) ?? '')
+        .replace(/\s+/g, ' ')
+        .trim());
+
+      const quantityInput = card.locator('input[role="spinbutton"][min="1"][max="99"]').first();
+      const ariaValueNow = await quantityInput.getAttribute('aria-valuenow');
+      const inputValue = await quantityInput.inputValue().catch(() => '');
+      const parsedQty = Number((ariaValueNow ?? inputValue ?? '').trim());
+      const quantity = Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 0;
+
+      details.push({ productName, quantity });
+    }
+
+    console.log('[Cart] All products:', JSON.stringify(details, null, 2));
+    return details;
   }
 
   async removeExtraProductsFromCart(keepProductName: string): Promise<void> {
@@ -1388,6 +1504,74 @@ export class WithdrawalPage extends BasePage {
         throw new Error('Safety stop while removing extra cart products.');
       }
     }
+  }
+
+  async removeAllProductsFromCart(): Promise<void> {
+    const cartCards = this.page.locator('div.border.border-sheengold.rounded-2xl.p-4.mb-4');
+    const hasCart = await cartCards.first().isVisible().catch(() => false);
+    if (!hasCart) {
+      return;
+    }
+
+    let safety = 0;
+    while ((await cartCards.count()) > 0) {
+      const firstCard = cartCards.first();
+      const removeBtn = firstCard.getByRole('button', { name: /Remove Item/i }).first();
+      const removeVisible = await removeBtn.isVisible().catch(() => false);
+      if (!removeVisible) {
+        break;
+      }
+      await removeBtn.click();
+      await this.page.waitForTimeout(400);
+      safety += 1;
+      if (safety > 20) {
+        throw new Error('Safety stop while removing all cart products.');
+      }
+    }
+  }
+
+  async validateEmptyCartMessageVisible(timeoutMs = 15_000): Promise<void> {
+    const emptyCartMessage = this.page
+      .locator('div, p, span, h1, h2, h3')
+      .filter({ hasText: /cart\s*is\s*empty|empty\s*cart|no\s*items\s*in\s*cart|your\s*bag\s*is\s*empty/i })
+      .first();
+
+    const startShoppingButton = this.page.getByRole('button', { name: /Start Shopping/i }).first();
+    const continueShoppingButton = this.page.getByRole('button', { name: /Continue Shopping/i }).first();
+
+    const isMessageVisible = await emptyCartMessage.isVisible().catch(() => false);
+    if (isMessageVisible) {
+      const messageText = (((await emptyCartMessage.textContent()) ?? '')).replace(/\s+/g, ' ').trim();
+      console.log('[TC018 VALIDATION] Empty cart message visible:', messageText || '(empty text)');
+      return;
+    }
+
+    const isStartShoppingVisible = await startShoppingButton.isVisible().catch(() => false);
+    if (isStartShoppingVisible) {
+      console.log('[TC018 VALIDATION] Empty cart state visible via Start Shopping button');
+      return;
+    }
+
+    await expect(continueShoppingButton).toBeVisible({ timeout: timeoutMs });
+    console.log('[TC018 VALIDATION]  Empty cart state visible via Continue Shopping button');
+  }
+
+  async clickContinueShoppingFromCart(): Promise<void> {
+    const startShoppingButton = this.page.getByRole('button', { name: /Start Shopping/i }).first();
+    if (await startShoppingButton.isVisible().catch(() => false)) {
+      await startShoppingButton.click();
+      return;
+    }
+
+    const continueShoppingButton = this.page.getByRole('button', { name: /Continue Shopping/i }).first();
+    if (await continueShoppingButton.isVisible().catch(() => false)) {
+      await continueShoppingButton.click();
+      return;
+    }
+    await this.page
+      .locator('span.p-button-label', { hasText: /Continue Shopping/i })
+      .first()
+      .click();
   }
 
   private cartProductCardByName(productName: string): Locator {
@@ -1457,11 +1641,14 @@ export class WithdrawalPage extends BasePage {
     }
 
     const actualQuantity = await this.getSelectedProductQuantityInCart(productName);
+    console.log('[TC018 VALIDATION] Selected product quantity | expected:', expectedQuantity);
+    console.log('[TC018 VALIDATION] Selected product quantity | actual:', actualQuantity);
     if (actualQuantity !== expectedQuantity) {
       throw new Error(
         `Selected product quantity mismatch in cart. Expected "${expectedQuantity}", actual "${actualQuantity}"`,
       );
     }
+    console.log('[TC018 VALIDATION] Selected product card validation: PASS');
   }
 
   async getCartTotalAmountPayable(): Promise<number> {
@@ -2245,9 +2432,18 @@ export class WithdrawalPage extends BasePage {
     return rows;
   }
 
+  /** Skips profile-locked delivery inputs; avoids racing `isEnabled()` before Angular disables the field. */
+  private async fillDeliveryInputWhenEditable(input: Locator, value: string): Promise<void> {
+    await input.waitFor({ state: 'visible' });
+    if (!(await input.isEditable().catch(() => false))) {
+      return;
+    }
+    await input.fill(value);
+  }
+
   /**
    * Fills withdraw **delivery** fields (text inputs + State / City). Does not toggle same-as-billing; fills
-   * `#firstName` / `#lastName` only when enabled.
+   * `#firstName` / `#lastName` only when editable (often prefilled and locked from profile).
    */
   async fillManualDeliveryAddress(opts: {
     firstName: string;
@@ -2261,18 +2457,10 @@ export class WithdrawalPage extends BasePage {
     await section.scrollIntoViewIfNeeded();
     await section.waitFor({ state: 'visible' });
 
-    const firstNameInput = section.locator('#firstName').first();
-    await firstNameInput.waitFor({ state: 'visible' });
-    if (await firstNameInput.isEnabled()) {
-      await firstNameInput.fill(opts.firstName);
-    }
-    const lastNameInput = section.locator('#lastName').first();
-    if (await lastNameInput.isEnabled()) {
-      await lastNameInput.fill(opts.lastName);
-    }
-
-    await section.locator('#address').fill(opts.address);
-    await section.locator('#pinCode').fill(opts.pincode);
+    await this.fillDeliveryInputWhenEditable(section.locator('#firstName').first(), opts.firstName);
+    await this.fillDeliveryInputWhenEditable(section.locator('#lastName').first(), opts.lastName);
+    await this.fillDeliveryInputWhenEditable(section.locator('#address').first(), opts.address);
+    await this.fillDeliveryInputWhenEditable(section.locator('#pinCode').first(), opts.pincode);
 
     const stateCombo = section.locator('div:has(> div[for="stateId"]) span[role="combobox"]').first();
     await stateCombo.click();

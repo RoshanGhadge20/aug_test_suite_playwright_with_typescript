@@ -134,9 +134,12 @@ export class PaymentPage extends BasePage {
 
   async fillContactNumber(number: string): Promise<void> {
     await this.waitForRazorpayFrame();
-    const contactInput = this.razorpayFrame().getByTestId('contactNumber');
-    await contactInput.waitFor({ state: 'visible' });
-    await contactInput.fill(number);
+    await this.razorpayFrame().getByTestId('contactNumber').fill(number);
+  }
+
+  async clickRazorpayContinue(): Promise<void> {
+    await this.waitForRazorpayFrame();
+    await this.razorpayFrame().getByRole('button', { name: /^continue$/i }).click({ force: true });
   }
 
   async selectNetbanking(): Promise<void> {
@@ -249,33 +252,6 @@ export class PaymentPage extends BasePage {
     await otpInputs.first().type(otp, { delay: 100 });
   }
 
-  // async clickOnOtpContinueButton(): Promise<void> {
-  //   const frame = this.razorpayFrame();
-  //   const continueBtn = frame
-  //     .locator('button[type="submit"]:has-text("Continue"), button[type="submit"]:has-text("Submit"), button[type="submit"]:has-text("Verify"), button[type="submit"]:has-text("Pay")')
-  //     .first();
-  //   const paymentFailedTitle = frame.getByText(/payment could not be completed/i);
-  //   const paymentFailedReason = frame.getByText(/international cards are not supported|invalid card/i);
-
-  //   await Promise.race([
-  //     continueBtn.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-  //     paymentFailedTitle.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-  //     paymentFailedReason.first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-  //   ]);
-
-  //   if (await paymentFailedTitle.first().isVisible().catch(() => false)) {
-  //     const reason = (await paymentFailedReason.first().textContent().catch(() => 'Card payment was rejected.')) ?? 'Card payment was rejected.';
-  //     throw new Error(reason.trim());
-  //   }
-
-  //   await continueBtn.waitFor({ state: 'visible', timeout: 10_000 });
-  //   await continueBtn.click({ force: true });
-  //   await this.page.waitForSelector('text=/payment successful|success/i', { timeout: 40_000 });
-  //   const successDialog = this.page.getByRole('dialog', { name: 'Success' });
-  //   const continueBtnAfterSuccess = successDialog.getByRole('button', { name: 'Continue' });
-  //   await continueBtnAfterSuccess.waitFor({ state: 'visible', timeout: 5_000 });
-  //   await continueBtnAfterSuccess.click();
-  // }
 
   async clickOnOtpContinueButton(): Promise<void> {
     const frame = this.razorpayFrame();

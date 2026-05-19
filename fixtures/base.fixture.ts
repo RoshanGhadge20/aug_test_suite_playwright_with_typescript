@@ -8,10 +8,18 @@ import { MyOrderVerificationPage } from '../pages/customer/my-order-verification
 import { PaymentPage } from '../pages/customer/payment.page';
 import { WithdrawalPage } from '../pages/customer/withdrawal.page';
 import { AddNewBankWithdrawalPage } from '../pages/customer/add-new-bank-withdrawal.page';
+import { ProductMenuPage } from '../pages/customer/product-menu.page';
+import { ShopPage } from '../pages/customer/shop.page';
+import { ShopCartPage } from '../pages/customer/shop-cart.page';
+import { ShopCheckoutPage } from '../pages/customer/shop-checkout.page';
 
 type PageObjectFixtures = {
   customerLogin: CustomerLoginPage;
   addNewBankPage: AddNewBankPage;
+  productMenuPage: ProductMenuPage;
+  shopPage: ShopPage;
+  shopCartPage: ShopCartPage;
+  shopCheckoutPage: ShopCheckoutPage;
   buyMetalPage: BuyMetalPage;
   buySummaryPage: BuySummaryPage;
   dashboardPage: DashBoardPage;
@@ -27,6 +35,10 @@ type PageObjectFixtures = {
 export const test = base.extend<PageObjectFixtures>({
   customerLogin: async ({ page }, use) => { await use(new CustomerLoginPage(page)); },
   addNewBankPage: async ({ page }, use) => { await use(new AddNewBankPage(page)); },
+  productMenuPage: async ({ page }, use) => { await use(new ProductMenuPage(page)); },
+  shopPage: async ({ page }, use) => { await use(new ShopPage(page)); },
+  shopCartPage: async ({ page }, use) => { await use(new ShopCartPage(page)); },
+  shopCheckoutPage: async ({ page }, use) => { await use(new ShopCheckoutPage(page)); },
   buyMetalPage: async ({ page }, use) => { await use(new BuyMetalPage(page)); },
   buySummaryPage: async ({ page }, use) => { await use(new BuySummaryPage(page)); },
   dashboardPage: async ({ page }, use) => { await use(new DashBoardPage(page)); },

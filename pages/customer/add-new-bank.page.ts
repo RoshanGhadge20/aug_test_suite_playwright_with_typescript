@@ -24,16 +24,25 @@ export class AddNewBankPage extends BasePage {
   }
 
   async clickAddNewBank(): Promise<void> {
-    const addNewVisible = await this.addNewBankButton.isVisible().catch(() => false);
-    if (!addNewVisible) {
-      // In some flows, the "Choose Bank Account" dialog opens directly with the add-bank form.
-      const bankFormVisible = await this.beneficiaryNameInput.isVisible().catch(() => false);
-      if (bankFormVisible) {
-        return;
-      }
+    if (await this.beneficiaryNameInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      return;
     }
-    await this.addNewBankButton.waitFor({ state: 'visible', timeout: 20_000 });
-    await this.addNewBankButton.click();
+
+    const bankDialog = this.page.getByRole('dialog', { name: /choose bank account/i });
+    if (await bankDialog.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      const addNewInDialog = bankDialog
+        .locator(
+          'button:has(.pi-plus), button:has-text("Add New"), button:has-text("Add New Account")',
+        )
+        .first();
+      await addNewInDialog.waitFor({ state: 'visible', timeout: 20_000 });
+      await addNewInDialog.click();
+    } else {
+      await this.addNewBankButton.waitFor({ state: 'visible', timeout: 20_000 });
+      await this.addNewBankButton.click();
+    }
+
+    await this.beneficiaryNameInput.waitFor({ state: 'visible', timeout: 20_000 });
   }
 
   async openBankDropdown(): Promise<void> {

@@ -1,5 +1,6 @@
-import { Locator, Page } from '@playwright/test';
+import { Locator, Page, type Response } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import type { ShopBillingAddressDetails } from './shop-checkout.page';
 
 /** Product line on my-orders delivery / product detail card (see flex row with h3 + Transaction Id). */
 export type MyOrderProductCardDetails = {
@@ -9,6 +10,42 @@ export type MyOrderProductCardDetails = {
   quantity: number;
   priceAmount: number;
   productImageSrc?: string;
+};
+
+export type MyOrderShopCardDetails = {
+  productName: string;
+  orderId: string;
+  status: string;
+  quantity: number;
+  priceAmount: number;
+  orderedOn: string;
+  productImageSrc?: string;
+};
+
+export type MyOrderShopDetailViewDetails = {
+  productName: string;
+  netWeight: string;
+  quantity: number;
+  priceAmount: number;
+};
+
+export type MyOrderShopDetailStatusAndDate = {
+  orderId: string;
+  status: string;
+  orderedOn: string;
+};
+
+export type MyOrderShopDetailDateTime = {
+  dateTimeText: string;
+  orderDate: string;
+  orderTime: string;
+};
+
+export type MyOrderShopProductPropertiesDetails = {
+  sku: string;
+  metalType: string;
+  purity: string;
+  productWeight: string;
 };
 
 export type MyOrderSellCardDetails = {
@@ -35,6 +72,8 @@ export class MyOrderVerificationPage extends BasePage {
   private readonly orderRows: Locator;
   private readonly noRecordLabel: Locator;
   private selectedOrderRow: Locator | null = null;
+  private invoicePdfPage: Page | null = null;
+  private invoicePdfHref: string | null = null;
 
   constructor(page: Page) {
     super(page);
@@ -43,6 +82,18 @@ export class MyOrderVerificationPage extends BasePage {
       has: page.locator('div.text-10:has-text("Transaction ID")'),
     });
     this.noRecordLabel = page.locator('text=No Record Found');
+  }
+
+  private logShopInvoice(step: number, message: string): void {
+    console.log(`[Shop Invoice] Step ${step}: ${message}`);
+  }
+
+  private addressDetailsHeading(): Locator {
+    return this.page.getByRole('heading', { name: /Address Details/i }).first();
+  }
+
+  private shopInvoiceButton(): Locator {
+    return this.page.getByRole('button', { name: /Invoice/i }).first();
   }
 
   async clickProfileName(text: string): Promise<void> {
@@ -60,6 +111,40 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** Milliseconds to wait after clicking Sell so the list can refresh before assertions. */
   private static readonly settleAfterSellClickMs = 1_500;
+  /** Milliseconds to wait after clicking Shop so shop order cards can render. */
+  private static readonly settleAfterShopClickMs = 5_000;
+  private static readonly invoicePdfUrlPattern =
+    /emi-backend-api\.gfau\.augmont\.com\/.*finalInvoice.*\.pdf/i;
+
+  private static isInvoicePdfUrl(url: string): boolean {
+    return (
+      MyOrderVerificationPage.invoicePdfUrlPattern.test(url) ||
+      /finalInvoice.*\.pdf/i.test(url) ||
+      /\.pdf(\?|$)/i.test(url) ||
+      /amazonaws\.com\/.*\.pdf/i.test(url)
+    );
+  }
+
+  private async waitForInvoiceViewerPage(timeoutMs = 30_000): Promise<Page | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      for (const tab of this.page.context().pages()) {
+        if (tab.isClosed()) {
+          continue;
+        }
+        const hasPassword = await tab
+          .locator('input[type="password"]')
+          .first()
+          .isVisible({ timeout: 800 })
+          .catch(() => false);
+        if (hasPassword) {
+          return tab;
+        }
+      }
+      await this.page.waitForTimeout(500);
+    }
+    return null;
+  }
 
   /**
    * Clicks the first visible Sell control and waits briefly for the Sell list to settle.
@@ -73,6 +158,13 @@ export class MyOrderVerificationPage extends BasePage {
     await locator.click({ force: true });
     await this.page.waitForTimeout(MyOrderVerificationPage.settleAfterSellClickMs);
     return true;
+  }
+
+  async clickShopTab(): Promise<void> {
+    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    await shopTab.scrollIntoViewIfNeeded();
+    await shopTab.click({ force: true });
+    await this.page.waitForTimeout(MyOrderVerificationPage.settleAfterShopClickMs);
   }
 
   async clickSellTab(): Promise<void> {
@@ -103,10 +195,472 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   async goToMyOrders(): Promise<void> {
-    await this.page.goto('/my-orders');
-    await this.page.waitForURL('**/my-orders');
-    await this.page.waitForLoadState('networkidle').catch(() => {});
-    await this.page.waitForTimeout(1500);
+    const onAuthenticatedMyOrders = (): boolean => {
+      const u = this.page.url();
+      return /my-orders/i.test(u) && !/\/login/i.test(u);
+    };
+
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      await this.page.goto('/my-orders', { waitUntil: 'domcontentloaded' });
+      await this.page.waitForLoadState('networkidle').catch(() => {});
+      await this.page.waitForTimeout(attempt === 1 ? 1_200 : 2_000);
+
+      if (onAuthenticatedMyOrders()) {
+        return;
+      }
+
+      if (/\/login/i.test(this.page.url()) && attempt < 2) {
+        await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+        await this.page.waitForLoadState('networkidle').catch(() => {});
+        await this.page.waitForTimeout(2_000);
+        continue;
+      }
+
+      break;
+    }
+
+    if (/\/login/i.test(this.page.url())) {
+      throw new Error(
+        'My Orders opened the login page (session missing or expired). Re-run: npx playwright test --project=auth-setup',
+      );
+    }
+
+    await this.page.waitForURL(/my-orders/i, { timeout: 20_000 });
+  }
+
+  async getShopOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
+    const card = this.shopOrderCard(productName);
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+
+    return {
+      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
+      orderId: await this.readShopLabel(card, 'Order Id'),
+      status: await this.text(card.locator('span.rounded-full').first()),
+      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
+      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
+      orderedOn: await this.readShopOrderDate(card),
+    };
+  }
+
+  async getShopOrderDate(productName: string): Promise<string> {
+    const card = this.shopOrderCard(productName);
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    return this.readShopOrderDate(card);
+  }
+
+  async openShopOrderDetail(productName: string): Promise<void> {
+    const card = this.shopOrderCard(productName);
+    await card.getByRole('button', { name: /view detail/i }).click();
+    await this.shopOrderDetailPanel().waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  /** Navigate to shop order detail before opening the invoice PDF. */
+  async prepareShopOrderDetailForInvoice(productName: string): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTab();
+    await this.openShopOrderDetail(productName);
+    await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  /** Use existing order detail from step 13 when possible; otherwise open via My Orders. */
+  async ensureShopOrderDetailForInvoice(productName: string): Promise<void> {
+    if (await this.isShopOrderDetailReadyForInvoice()) {
+      this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
+      return;
+    }
+    await this.prepareShopOrderDetailForInvoice(productName);
+  }
+
+  private async isShopOrderDetailReadyForInvoice(): Promise<boolean> {
+    const hasAddress = await this.addressDetailsHeading().isVisible({ timeout: 2_000 }).catch(() => false);
+    const hasInvoice = await this.shopInvoiceButton().isVisible({ timeout: 2_000 }).catch(() => false);
+    return hasAddress && hasInvoice;
+  }
+
+  private resetShopInvoiceCapture(): void {
+    this.invoicePdfHref = null;
+    this.invoicePdfPage = null;
+  }
+
+  async getShopOrderDetailView(): Promise<MyOrderShopDetailViewDetails> {
+    const panel = this.shopOrderDetailPanel();
+    await panel.waitFor({ state: 'visible' });
+
+    const quantityLabel = panel.getByText(/^Quantity:/i).first();
+    const quantityValue = quantityLabel.locator('xpath=following-sibling::*[1]').first();
+
+    return {
+      productName: await this.text(panel.getByRole('heading', { level: 3 }).first()),
+      netWeight: await this.text(panel.getByText(/Net weight:/i)),
+      quantity: Number((await this.text(quantityValue)).replace(/\D/g, '') || '0'),
+      priceAmount: this.parseAmount(await this.text(panel.getByText(/₹\s*[\d,]+/).first())),
+    };
+  }
+
+  async getShopOrderDetailStatusAndDate(): Promise<MyOrderShopDetailStatusAndDate> {
+    const metaLine = await this.text(this.page.getByText(/ORDER ID:\s*\d+/i).first());
+    const orderId = metaLine.match(/ORDER\s*ID:\s*(\d+)/i)?.[1] ?? '';
+    const orderedPart = metaLine.match(/ORDERED ON\s+(.+)/i)?.[1]?.trim() ?? '';
+    const status = await this.text(this.page.getByText(/Payment Received/i).first());
+
+    return {
+      orderId,
+      status,
+      orderedOn: orderedPart ? `ORDERED ON ${orderedPart}` : metaLine,
+    };
+  }
+
+  async getShopOrderDetailDateTime(): Promise<MyOrderShopDetailDateTime> {
+    const dateTimeEl = this.page
+      .locator('p.text-gray-600.font-medium')
+      .filter({ hasText: /\|\s*\d{1,2}:\d{2}/i })
+      .first();
+    await dateTimeEl.waitFor({ state: 'visible', timeout: 15_000 });
+    const dateTimeText = await this.text(dateTimeEl);
+    const [orderDate = '', orderTime = ''] = dateTimeText.split('|').map((part) => part.trim());
+
+    return { dateTimeText, orderDate, orderTime };
+  }
+
+  /** Scroll to Address Details, click Invoice, and store the PDF tab/URL. */
+  async clickShopInvoice(options?: {
+    maxAttempts?: number;
+    retryDelayMs?: number;
+    captureTimeoutMs?: number;
+    productName?: string;
+  }): Promise<void> {
+    const maxAttempts = options?.maxAttempts ?? 4;
+    const retryDelayMs = options?.retryDelayMs ?? 3_000;
+    const captureTimeoutMs = options?.captureTimeoutMs ?? 12_000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      if (attempt > 1) {
+        this.logShopInvoice(
+          0,
+          `Retry ${attempt}/${maxAttempts} — refresh order detail and wait ${retryDelayMs}ms`,
+        );
+        this.resetShopInvoiceCapture();
+        if (options?.productName && attempt === 2) {
+          await this.prepareShopOrderDetailForInvoice(options.productName);
+        } else {
+          await this.page.reload({ waitUntil: 'domcontentloaded' });
+          await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+        }
+        await this.page.waitForTimeout(retryDelayMs);
+      }
+
+      try {
+        await this.captureShopInvoicePdf(captureTimeoutMs);
+        return;
+      } catch (error) {
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  private async captureShopInvoicePdf(captureTimeoutMs: number): Promise<void> {
+    this.logShopInvoice(1, 'Close profile menu if open');
+    await this.dismissProfileMenu();
+
+    this.logShopInvoice(2, 'Scroll to Address Details heading');
+    const addressHeading = this.addressDetailsHeading();
+    await addressHeading.waitFor({ state: 'visible', timeout: 15_000 });
+    await addressHeading.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+
+    this.logShopInvoice(3, 'Find Invoice button and scroll into view');
+    const invoiceBtn = this.shopInvoiceButton();
+    await invoiceBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await invoiceBtn.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(async () => {
+      await this.page.keyboard.press('End');
+      await this.page.waitForTimeout(300);
+    });
+
+    this.logShopInvoice(4, `Click Invoice and wait up to ${captureTimeoutMs}ms for PDF`);
+    let networkUrl: string | null = null;
+    const onResponse = async (response: Response) => {
+      if (networkUrl) {
+        return;
+      }
+      const url = response.url();
+      if (MyOrderVerificationPage.isInvoicePdfUrl(url)) {
+        this.logShopInvoice(4, `Captured PDF URL from network | ${url.slice(0, 120)}`);
+        networkUrl = url;
+        return;
+      }
+      if (!/invoice|finalInvoice|\.pdf|emi-backend-api\.gfau\.augmont\.com/i.test(url)) {
+        return;
+      }
+      try {
+        const body = await response.json();
+        const fromJson = MyOrderVerificationPage.findPdfUrlInJson(body, url);
+        if (fromJson) {
+          this.logShopInvoice(4, `Captured PDF URL from JSON | ${fromJson.slice(0, 120)}`);
+          networkUrl = fromJson;
+        }
+      } catch {
+        // not JSON
+      }
+    };
+    this.page.context().on('response', onResponse);
+
+    await invoiceBtn.click({ force: true });
+
+    const deadline = Date.now() + captureTimeoutMs;
+    let pdfTab: Page | null = null;
+    let viewerPage: Page | null = null;
+
+    while (Date.now() < deadline && !networkUrl) {
+      for (const tab of this.page.context().pages()) {
+        if (!tab.isClosed() && MyOrderVerificationPage.isInvoicePdfUrl(tab.url())) {
+          networkUrl = tab.url();
+          pdfTab = tab;
+          this.logShopInvoice(4, `Captured PDF URL from tab | ${networkUrl.slice(0, 120)}`);
+          break;
+        }
+      }
+      if (networkUrl) {
+        break;
+      }
+
+      viewerPage = await this.waitForInvoiceViewerPage(400);
+      if (viewerPage && MyOrderVerificationPage.isInvoicePdfUrl(viewerPage.url())) {
+        networkUrl = viewerPage.url();
+        pdfTab = viewerPage;
+        break;
+      }
+
+      await this.page.waitForTimeout(300);
+    }
+
+    this.page.context().off('response', onResponse);
+
+    if (!networkUrl) {
+      throw new Error('Invoice PDF URL not found after clicking Invoice.');
+    }
+
+    this.logShopInvoice(5, 'Resolve PDF URL from capture');
+    this.invoicePdfHref = networkUrl;
+    this.invoicePdfPage = pdfTab ?? viewerPage ?? this.page;
+    if (this.invoicePdfPage) {
+      await this.invoicePdfPage.bringToFront();
+    }
+    this.logShopInvoice(6, `PDF ready | url=${this.invoicePdfHref.slice(0, 100)}`);
+  }
+
+  private async dismissProfileMenu(): Promise<void> {
+    const menu = this.page.locator('menu[active]');
+    if (await menu.isVisible().catch(() => false)) {
+      await this.page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+    }
+    await this.page.keyboard.press('Escape').catch(() => {});
+  }
+
+  private static findPdfUrlInJson(value: unknown, baseUrl: string): string | null {
+    if (typeof value === 'string' && /\.pdf/i.test(value)) {
+      return value.startsWith('http') ? value : new URL(value, baseUrl).toString();
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = MyOrderVerificationPage.findPdfUrlInJson(item, baseUrl);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    if (value && typeof value === 'object') {
+      for (const nested of Object.values(value as Record<string, unknown>)) {
+        const found = MyOrderVerificationPage.findPdfUrlInJson(nested, baseUrl);
+        if (found) {
+          return found;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Enter mobile last-4 password and submit on the invoice PDF viewer. */
+  async submitShopInvoicePassword(mobile: string): Promise<void> {
+    const password = mobile.replace(/\D/g, '').slice(-4);
+    const pdfPage = this.invoicePdfPage ?? this.page;
+
+    this.logShopInvoice(7, `Enter PDF password (last 4 digits of mobile)`);
+    const passwordInput = pdfPage.locator('input[type="password"]').first();
+
+    if (await passwordInput.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      await passwordInput.fill(password);
+    } else {
+      await pdfPage.keyboard.type(password, { delay: 100 });
+    }
+
+    this.logShopInvoice(8, 'Submit PDF password');
+    const submitBtn = pdfPage.locator('cr-button#submit');
+    if (await submitBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await submitBtn.click();
+    } else {
+      await pdfPage.keyboard.press('Enter');
+    }
+    this.logShopInvoice(9, 'PDF password submitted');
+  }
+
+  async getShopInvoicePdfUrl(): Promise<string> {
+    if (this.invoicePdfHref) {
+      this.logShopInvoice(10, `Return stored PDF URL | ${this.invoicePdfHref.slice(0, 100)}`);
+      return this.invoicePdfHref;
+    }
+    if (this.invoicePdfPage && MyOrderVerificationPage.isInvoicePdfUrl(this.invoicePdfPage.url())) {
+      return this.invoicePdfPage.url();
+    }
+    throw new Error('Shop invoice PDF URL not found.');
+  }
+
+  isOrderDateToday(orderDate: string): boolean {
+    const trimmed = orderDate.trim().replace(/^ORDERED ON\s+/i, '');
+    const match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{2,4}))?/i);
+    if (match) {
+      const day = Number(match[1]);
+      const monthIndex = new Date(`${match[2]} 1, 2000`).getMonth();
+      if (Number.isNaN(monthIndex)) {
+        return false;
+      }
+      const today = new Date();
+      if (day !== today.getDate() || monthIndex !== today.getMonth()) {
+        return false;
+      }
+      if (!match[3]) {
+        return true;
+      }
+      let year = Number(match[3]);
+      if (year < 100) {
+        return true;
+      }
+      return year === today.getFullYear();
+    }
+
+    const orderedDate = new Date(trimmed);
+    if (Number.isNaN(orderedDate.getTime())) {
+      return false;
+    }
+    const today = new Date();
+    return (
+      orderedDate.getFullYear() === today.getFullYear() &&
+      orderedDate.getMonth() === today.getMonth() &&
+      orderedDate.getDate() === today.getDate()
+    );
+  }
+
+  async getShopOrderProductProperties(): Promise<MyOrderShopProductPropertiesDetails> {
+    await this.expandShopAccordion(/Product Properties/i);
+    const panel = this.page.getByRole('region', { name: /Product Properties/i });
+
+    return {
+      sku: await this.readProductPropertyValue(panel, 'SKU'),
+      metalType: await this.readProductPropertyValue(panel, 'Metal Type'),
+      purity: await this.readProductPropertyValue(panel, 'Purity'),
+      productWeight: await this.readProductPropertyValue(panel, 'Product Weight'),
+    };
+  }
+
+  async getShopOrderAddress(type: 'received' | 'billed'): Promise<ShopBillingAddressDetails> {
+    const label = type === 'received' ? /Recieved At|Received At/i : /Billed to|Billed At/i;
+    return this.readShopOrderAddressAccordion(label);
+  }
+
+  isOrderedOnToday(orderedOn: string): boolean {
+    const dateText = orderedOn.replace(/^ORDERED ON\s+/i, '').trim();
+    const orderedDate = new Date(dateText);
+    if (Number.isNaN(orderedDate.getTime())) {
+      return false;
+    }
+    const today = new Date();
+    return (
+      orderedDate.getFullYear() === today.getFullYear() &&
+      orderedDate.getMonth() === today.getMonth() &&
+      orderedDate.getDate() === today.getDate()
+    );
+  }
+
+  async getShopOrderPaymentMethod(): Promise<string> {
+    const paymentRow = this.page
+      .locator('motion.div.flex, div.flex')
+      .filter({ has: this.page.locator('i.pi-wallet') })
+      .first();
+    await paymentRow.waitFor({ state: 'visible', timeout: 15_000 });
+    return this.text(paymentRow.locator('p.font-semibold').first());
+  }
+
+  private async readShopOrderAddressAccordion(namePattern: RegExp): Promise<ShopBillingAddressDetails> {
+    const header = this.page.getByRole('button', { name: namePattern }).first();
+    await header.waitFor({ state: 'visible', timeout: 15_000 });
+    if ((await header.getAttribute('aria-expanded')) !== 'true') {
+      await header.click();
+    }
+
+    const controlsId = await header.getAttribute('aria-controls');
+    const content = controlsId
+      ? this.page.locator(`#${controlsId}`)
+      : header.locator('xpath=following-sibling::*[1]');
+    await content.locator('p.text-gray-600').first().waitFor({ state: 'visible', timeout: 10_000 });
+
+    const headerText = await this.text(header);
+    const headerMatch = headerText.match(/(?:Billed to|Billed At|Recieved At|Received At)\s+(.+?),\s*(\d{6})/i);
+    const lines = (await content.locator('p.text-gray-600').allTextContents())
+      .map((line) => line.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
+    const pinLine = lines.find((line) => /\b\d{6}\b/.test(line)) ?? '';
+    const pincode = pinLine.match(/\b(\d{6})\b/)?.[1] ?? headerMatch?.[2] ?? '';
+    const mobile = lines.find((line) => line.replace(/\D/g, '').length === 10)?.replace(/\D/g, '') ?? '';
+
+    return {
+      fullName: headerMatch?.[1]?.trim() ?? '',
+      mobile,
+      address: lines.filter((line) => line !== pinLine && line.replace(/\D/g, '') !== mobile).join(', '),
+      pincode,
+    };
+  }
+
+  private async expandShopAccordion(name: RegExp): Promise<void> {
+    const header = this.page.getByRole('button', { name }).first();
+    if ((await header.getAttribute('aria-expanded')) !== 'true') {
+      await header.click();
+    }
+  }
+
+  private async readProductPropertyValue(panel: Locator, label: string): Promise<string> {
+    const row = panel
+      .getByRole('heading', { name: label, level: 4, exact: true })
+      .locator('xpath=parent::*');
+    return this.text(row.getByRole('heading', { level: 4 }).last());
+  }
+
+  private shopOrderDetailPanel(): Locator {
+    return this.page
+      .locator('motion.div.flex.flex-col.gap-4, div.flex.flex-col.gap-4')
+      .filter({ has: this.page.getByRole('heading', { level: 3 }) })
+      .filter({ has: this.page.getByText(/Net weight:/i) })
+      .first();
+  }
+
+  private shopOrderCard(productName: string): Locator {
+    return this.page
+      .locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre')
+      .filter({ has: this.page.getByRole('heading', { level: 3 }).filter({ hasText: productName }) })
+      .first();
+  }
+
+  private async readShopOrderDate(card: Locator): Promise<string> {
+    return this.text(card.locator('span').filter({ hasText: /^ORDERED ON/i }).first());
+  }
+
+  private async readShopLabel(card: Locator, label: string): Promise<string> {
+    const labelCell = card.getByText(new RegExp(`^${label}\\s*:?`, 'i')).first();
+    return this.text(labelCell.locator('xpath=following-sibling::*[1]').first());
+  }
+
+  private async text(locator: Locator): Promise<string> {
+    return ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim();
   }
 
   private async getFieldValue(label: string): Promise<string> {
@@ -194,35 +748,81 @@ export class MyOrderVerificationPage extends BasePage {
     return this.selectedOrderRow ?? this.orderRows.first();
   }
 
+  private static isPreCompletionDeliveryStatus(status: string): boolean {
+    const s = status.trim();
+    if (!s) return false;
+    if (/^(Completed|Failed)$/i.test(s)) return false;
+    return /pending|processing|payment|confirmed|booked|order placed|in transit|shipped/i.test(s);
+  }
+
   private async getStatusFromLatestOrderRow(): Promise<string> {
+    const fromProductCard = async (): Promise<string> => {
+      try {
+        await this.getProductOrderCardRoot().waitFor({ state: 'visible', timeout: 8_000 });
+        const details = await this.getProductDetailsFromOrderCard();
+        return details.status.trim();
+      } catch {
+        return '';
+      }
+    };
+
+    const cardStatus = await fromProductCard();
+    if (cardStatus) {
+      return cardStatus;
+    }
+
     const row = this.getLatestOrderRow();
-    const rowBadge = row.locator('span').filter({ hasText: /^Pending$|^Completed$|^Failed$|^Processing$/i }).first();
+    const rowBadge = row
+      .locator('span,div,p')
+      .filter({
+        hasText:
+          /^(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)$/i,
+      })
+      .first();
     const rowBadgeText = ((await rowBadge.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
     if (rowBadgeText) {
-      return rowBadgeText;
+      const normalized = rowBadgeText.match(
+        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
+      )?.[1];
+      if (normalized) {
+        return normalized.trim();
+      }
     }
 
     const rowText = ((await row.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
-    const statusFromText = rowText.match(/\b(Pending|Completed|Failed|Processing)\b/i)?.[1] ?? '';
+    const statusFromText =
+      rowText.match(
+        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
+      )?.[1] ?? '';
     if (statusFromText.trim()) {
       return statusFromText.trim();
     }
 
-    // Fallback for layouts where status badge is not nested under selected row wrapper.
     const globalBadge = this.page
-      .locator('span')
-      .filter({ hasText: /^Pending$|^Completed$|^Failed$|^Processing$/i })
+      .locator('span,div,p')
+      .filter({
+        hasText:
+          /^(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)$/i,
+      })
       .first();
     const globalBadgeText = ((await globalBadge.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
-    return globalBadgeText;
+    const globalNormalized = globalBadgeText.match(
+      /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
+    )?.[1];
+    return (globalNormalized ?? globalBadgeText).trim();
   }
 
   async validateLatestOrderRowStatusPending(): Promise<void> {
-    const status = await this.getStatusFromLatestOrderRow();
-    console.log('[My orders list] Expected status: Pending');
+    const status = (await this.getStatusFromLatestOrderRow()).trim();
+    console.log('[My orders list] Expected: pre-completion delivery status (e.g. Pending, Processing, Payment Received)');
     console.log('[My orders list] Actual status:', status || 'N/A');
-    if (!/pending/i.test(status)) {
-      throw new Error(`My orders list status mismatch. Expected "Pending", actual "${status || 'N/A'}"`);
+    if (!status) {
+      throw new Error('My orders list: could not resolve order status (empty).');
+    }
+    if (!MyOrderVerificationPage.isPreCompletionDeliveryStatus(status)) {
+      throw new Error(
+        `My orders list status mismatch. Expected a pre-completion delivery status, actual "${status}"`,
+      );
     }
   }
 
@@ -382,9 +982,11 @@ export class MyOrderVerificationPage extends BasePage {
       }
     }
 
-    const resolvedStatus = order.status || (await this.getStatusFromLatestOrderRow());
-    if (!/pending/i.test(resolvedStatus)) {
-      throw new Error(`My order status mismatch. Expected "Pending", actual "${resolvedStatus || 'N/A'}"`);
+    const resolvedStatus = (order.status || (await this.getStatusFromLatestOrderRow())).trim();
+    if (!MyOrderVerificationPage.isPreCompletionDeliveryStatus(resolvedStatus)) {
+      throw new Error(
+        `My order status mismatch. Expected a pre-completion delivery status, actual "${resolvedStatus || 'N/A'}"`,
+      );
     }
   }
 
