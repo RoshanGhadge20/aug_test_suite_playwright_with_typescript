@@ -34,6 +34,10 @@ export abstract class BasePage {
     );
   }
 
+  protected parseAmount(value: string): number {
+    return Number(value.replace(/[₹,\s]/g, '')) || 0;
+  }
+
   protected async fillOtp(otp: string): Promise<void> {
     const inputs = this.otpInputLocator();
     await inputs.first().waitFor({ state: 'visible', timeout: 15_000 });
@@ -42,11 +46,15 @@ export abstract class BasePage {
       throw new Error('OTP input fields not found on page. Update selectors in BasePage.otpInputLocator().');
     }
     if (count === 1) {
-      await inputs.first().fill(otp);
+      const box = inputs.first();
+      await box.click();
+      await box.fill(otp);
       return;
     }
     for (let i = 0; i < otp.length && i < count; i++) {
-      await inputs.nth(i).fill(otp[i]);
+      const box = inputs.nth(i);
+      await box.click();
+      await box.fill(otp[i]);
     }
   }
 }

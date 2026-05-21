@@ -8,7 +8,7 @@
   "scripts": {
     "test": "playwright test",
     "test:admin": "playwright test --project=admin",
-    "test:customer": "playwright test --project=customer",
+    "test:customer": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer",
     "test:business": "playwright test --project=business",
     "test:new-admin": "playwright test --project=new-admin",
     "test:api": "playwright test --project=api-backend --project=api-emi",
@@ -32,6 +32,7 @@
     "express": "^4.22.1",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -40,6 +41,7 @@
     "@types/node": "^25.6.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
+    "pdf-parse": "^2.4.5",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

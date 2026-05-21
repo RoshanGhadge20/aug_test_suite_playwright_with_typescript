@@ -59,6 +59,12 @@ export function apiCreds(service: ApiService, envName: EnvName = getTargetEnv())
   return BUNDLES[envName].apiCreds[service];
 }
 
+/** Full URL for digital-gold spot rates (gBuy / gSell), aligned with `{TEST|UAT}_BASE_URL_BACKEND`. */
+export function digitalGoldRatesUrl(envName: EnvName = getTargetEnv()): string {
+  const base = apiUrl('api-backend', envName).replace(/\/+$/, '');
+  return `${base}/api/digital-gold/rates`;
+}
+
 export interface ApiServiceAuthConfig {
   sendOtpPath: string;
   verifyOtpPath: string;

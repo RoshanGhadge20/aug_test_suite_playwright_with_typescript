@@ -23,11 +23,11 @@ function storageStateIfExists(env: EnvName, panel: Panel): string | undefined {
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
-  expect: { timeout: 10_000 },
+  expect: { timeout: 5_000 },
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,
-  workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : (isCI ? 2 : undefined),
+  workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 1,
   reporter: [
     ['html', { outputFolder: 'reports/html', open: 'never' }],
     ['json', { outputFile: 'reports/results.json' }],
@@ -36,8 +36,8 @@ export default defineConfig({
   outputDir: 'reports/test-artifacts',
   use: {
     headless,
-    actionTimeout: 15_000,
-    navigationTimeout: 30_000,
+    actionTimeout: 10_000,
+   // navigationTimeout: 30_000,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

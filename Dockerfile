@@ -29,4 +29,5 @@ COPY src ./src
 RUN mkdir -p storage reports
 
 EXPOSE 3000
-CMD ["node", "dist/src/api/index.js"]
+# CMD ["node", "dist/src/api/index.js"]
+CMD ["npx", "playwright", "test", "--project=customer"]
