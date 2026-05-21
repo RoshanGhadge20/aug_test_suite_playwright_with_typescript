@@ -63,6 +63,44 @@ export function extractShopNetPayable(pdfText: string): number {
   return Number.isNaN(fallback) ? Number.NaN : fallback;
 }
 
+/** EMI proforma contract PDF from emi-backend-api (not standard shop tax invoice). */
+export function isShopEmiProformaInvoicePdf(pdfUrl: string): boolean {
+  return /proformaContract|emi-backend-api/i.test(pdfUrl);
+}
+
+/** Parse payable/down-payment amount from EMI proforma PDF; optional hint from checkout EMI plan. */
+export function extractShopEmiProformaNetPayable(pdfText: string, expectedHint?: number): number {
+  const compact = compactText(pdfText);
+  const labelPatterns = [
+    /(?:Down\s*Payment|Initial\s*Payment|Amount\s*Payable|Payable\s*Amount|Total\s*Amount|Net\s*Payable)\s*[:\-]?\s*₹?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i,
+    /₹\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:Down|Initial)/i,
+  ];
+
+  for (const pattern of labelPatterns) {
+    const match = compact.match(pattern);
+    if (match?.[1]) {
+      const value = parseAmount(match[1]);
+      if (!Number.isNaN(value) && value > 0) {
+        return value;
+      }
+    }
+  }
+
+  const amounts = [...compact.matchAll(/(\d+(?:,\d{3})*(?:\.\d+)?)/g)]
+    .map((m) => parseAmount(m[1]))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+
+  if (expectedHint != null && !Number.isNaN(expectedHint)) {
+    const hit = amounts.find((a) => Math.abs(a - expectedHint) <= 2);
+    if (hit != null) {
+      return hit;
+    }
+  }
+
+  const fallback = extractShopNetPayable(pdfText);
+  return Number.isNaN(fallback) ? Number.NaN : fallback;
+}
+
 /** Product name can wrap across lines in parsed PDF text. */
 export function shopPdfContainsProductName(pdfText: string, productName: string): boolean {
   const haystack = compactText(pdfText).toLowerCase();

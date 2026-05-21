@@ -1,4 +1,4 @@
-import { Locator, Page, type Response } from '@playwright/test';
+import { expect, Locator, Page, type Response } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import type { ShopBillingAddressDetails } from './shop-checkout.page';
 
@@ -27,6 +27,11 @@ export type MyOrderShopDetailViewDetails = {
   netWeight: string;
   quantity: number;
   priceAmount: number;
+};
+
+/** Order summary shown after Pay Now on an EMI Booked shop-tab row. */
+export type MyOrderShopEmiDetailViewDetails = MyOrderShopDetailViewDetails & {
+  dueOn: string;
 };
 
 export type MyOrderShopDetailStatusAndDate = {
@@ -114,12 +119,12 @@ export class MyOrderVerificationPage extends BasePage {
   /** Milliseconds to wait after clicking Shop so shop order cards can render. */
   private static readonly settleAfterShopClickMs = 5_000;
   private static readonly invoicePdfUrlPattern =
-    /emi-backend-api\.gfau\.augmont\.com\/.*finalInvoice.*\.pdf/i;
+    /emi-backend-api\.gfau\.augmont\.com\/.*(?:finalInvoice|proformaContract).*\.pdf/i;
 
   private static isInvoicePdfUrl(url: string): boolean {
     return (
       MyOrderVerificationPage.invoicePdfUrlPattern.test(url) ||
-      /finalInvoice.*\.pdf/i.test(url) ||
+      /(?:finalInvoice|proformaContract).*\.pdf/i.test(url) ||
       /\.pdf(\?|$)/i.test(url) ||
       /amazonaws\.com\/.*\.pdf/i.test(url)
     );
@@ -242,6 +247,30 @@ export class MyOrderVerificationPage extends BasePage {
     };
   }
 
+  /** TC003 EMI shop tab row — no Quantity label; quantity defaults to 1. */
+  async getShopEmiOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
+    const card = this.shopOrderCard(productName);
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+
+    const quantityLabel = card.getByText(/^Quantity\s*:?/i).first();
+    const hasQuantity = await quantityLabel.isVisible({ timeout: 2_000 }).catch(() => false);
+    let quantity = 1;
+    if (hasQuantity) {
+      const raw = await this.readShopLabel(card, 'Quantity');
+      const parsed = Number(raw.replace(/\D/g, '') || '0');
+      quantity = parsed > 0 ? parsed : 1;
+    }
+
+    return {
+      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
+      orderId: await this.readShopLabel(card, 'Order Id'),
+      status: await this.text(card.locator('span.rounded-full').first()),
+      quantity,
+      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
+      orderedOn: await this.readShopOrderDate(card),
+    };
+  }
+
   async getShopOrderDate(productName: string): Promise<string> {
     const card = this.shopOrderCard(productName);
     await card.waitFor({ state: 'visible', timeout: 45_000 });
@@ -249,9 +278,64 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   async openShopOrderDetail(productName: string): Promise<void> {
+    const u = this.page.url();
+    if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
+      await this.goToMyOrders();
+      await this.clickShopTab();
+    }
+
     const card = this.shopOrderCard(productName);
+    await card.scrollIntoViewIfNeeded();
     await card.getByRole('button', { name: /view detail/i }).click();
-    await this.shopOrderDetailPanel().waitFor({ state: 'visible', timeout: 15_000 });
+    const panel = this.shopOrderDetailPanel();
+    await panel.waitFor({ state: 'visible', timeout: 15_000 });
+    await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(productName, {
+      timeout: 20_000,
+    });
+  }
+
+  /** TC003 EMI Booked row — click Pay Now on the shop-tab card to open the EMI order summary. */
+  async openShopEmiOrderDetail(productName: string): Promise<void> {
+    const u = this.page.url();
+    if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
+      await this.goToMyOrders();
+      await this.clickShopTab();
+    }
+
+    const card = this.shopOrderCard(productName);
+    await card.scrollIntoViewIfNeeded();
+    await card.getByRole('button', { name: /^pay now$/i }).click();
+
+    const panel = this.shopEmiOrderDetailPanel();
+    await panel.waitFor({ state: 'visible', timeout: 15_000 });
+    await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(productName, {
+      timeout: 20_000,
+    });
+    await expect(panel.getByRole('button', { name: /^pay now$/i })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /cancel booking/i })).toBeVisible();
+  }
+
+  /** Read product, weight, quantity, price and due date from the EMI Pay Now summary panel. */
+  async getShopEmiOrderDetailView(): Promise<MyOrderShopEmiDetailViewDetails> {
+    const panel = this.shopEmiOrderDetailPanel();
+    await panel.waitFor({ state: 'visible', timeout: 15_000 });
+
+    let quantity = 1;
+    const quantityLabel = panel.getByText(/^Quantity:/i).first();
+    if (await quantityLabel.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      const quantityValue = quantityLabel.locator('xpath=following-sibling::*[1]').first();
+      quantity = Number((await this.text(quantityValue)).replace(/\D/g, '') || '1') || 1;
+    }
+
+    return {
+      productName: await this.text(panel.getByRole('heading', { level: 3 }).first()),
+      netWeight: await this.text(panel.getByText(/Net weight:/i).first()),
+      quantity,
+      priceAmount: this.parseAmount(
+        await this.text(panel.locator('p.font-bold').filter({ hasText: /₹/ }).first()),
+      ),
+      dueOn: await this.text(panel.getByText(/^DUE ON/i).first()),
+    };
   }
 
   /** Navigate to shop order detail before opening the invoice PDF. */
@@ -262,13 +346,83 @@ export class MyOrderVerificationPage extends BasePage {
     await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
   }
 
-  /** Use existing order detail from step 13 when possible; otherwise open via My Orders. */
-  async ensureShopOrderDetailForInvoice(productName: string): Promise<void> {
-    if (await this.isShopOrderDetailReadyForInvoice()) {
+  /**
+   * TC003 EMI — open order detail where Address Details and Invoice are visible.
+   * Uses Pay Now on the shop-tab card (Booked EMI rows); does not click Pay Now inside the summary panel.
+   */
+  async openShopEmiOrderDetailForInvoice(productName: string): Promise<void> {
+    const u = this.page.url();
+    if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
+      await this.goToMyOrders();
+      await this.clickShopTab();
+    }
+
+    const card = this.shopOrderCard(productName);
+    await card.scrollIntoViewIfNeeded();
+
+    const viewDetailBtn = card.getByRole('button', { name: /view detail/i });
+    if (await viewDetailBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await viewDetailBtn.click();
+    } else {
+      await card.getByRole('button', { name: /^pay now$/i }).click();
+      await this.shopEmiOrderDetailPanel().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+    }
+
+    await this.scrollToShopInvoiceSection();
+    await this.shopInvoiceButton().waitFor({ state: 'visible', timeout: 20_000 });
+
+    const heading = await this.resolveShopOrderDetailProductHeading();
+    if (!heading.includes(productName)) {
+      throw new Error(
+        `EMI order detail for invoice does not show "${productName}" (got "${heading || '(empty)'}").`,
+      );
+    }
+  }
+
+  /** TC003 EMI order detail before invoice — lands on Address Details + Invoice UI. */
+  async prepareShopEmiOrderDetailForInvoice(productName: string): Promise<void> {
+    await this.openShopEmiOrderDetailForInvoice(productName);
+  }
+
+  /**
+   * Use existing order detail from step 13 when possible; otherwise open via My Orders.
+   * Default behavior matches single-product flows (e.g. TC_SHOP_001): skip when invoice UI is ready.
+   * Pass `requireMatchingProduct: true` for multi-product flows so we do not skip when another
+   * product's order detail is still open.
+   */
+  async ensureShopOrderDetailForInvoice(
+    productName: string,
+    options?: { requireMatchingProduct?: boolean },
+  ): Promise<void> {
+    const requireProduct = options?.requireMatchingProduct === true;
+    if (requireProduct) {
+      if (await this.isShopOrderDetailReadyForInvoiceWithProduct(productName)) {
+        this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
+        return;
+      }
+    } else if (await this.isShopOrderDetailReadyForInvoice()) {
       this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
       return;
     }
     await this.prepareShopOrderDetailForInvoice(productName);
+  }
+
+  /** TC003 EMI — same as ensureShopOrderDetailForInvoice but opens EMI invoice-ready detail. */
+  async ensureShopEmiOrderDetailForInvoice(
+    productName: string,
+    options?: { requireMatchingProduct?: boolean },
+  ): Promise<void> {
+    const requireProduct = options?.requireMatchingProduct === true;
+    if (requireProduct) {
+      if (await this.isShopEmiOrderDetailReadyForInvoiceWithProduct(productName)) {
+        this.logShopInvoice(0, 'EMI order detail already open — skip My Orders navigation');
+        return;
+      }
+    } else if (await this.isShopOrderDetailReadyForInvoice()) {
+      this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
+      return;
+    }
+    await this.prepareShopEmiOrderDetailForInvoice(productName);
   }
 
   private async isShopOrderDetailReadyForInvoice(): Promise<boolean> {
@@ -277,9 +431,65 @@ export class MyOrderVerificationPage extends BasePage {
     return hasAddress && hasInvoice;
   }
 
+  private async isShopOrderDetailReadyForInvoiceWithProduct(productName: string): Promise<boolean> {
+    if (!(await this.isShopOrderDetailReadyForInvoice())) {
+      return false;
+    }
+    const heading = await this.resolveShopOrderDetailProductHeading();
+    return heading.includes(productName);
+  }
+
+  private async isShopEmiOrderDetailReadyForInvoiceWithProduct(productName: string): Promise<boolean> {
+    return this.isShopOrderDetailReadyForInvoiceWithProduct(productName);
+  }
+
+  private async resolveShopOrderDetailProductHeading(): Promise<string> {
+    const standard = this.shopOrderDetailPanel().getByRole('heading', { level: 3 }).first();
+    if (await standard.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return this.text(standard);
+    }
+    const emi = this.shopEmiOrderDetailPanel().getByRole('heading', { level: 3 }).first();
+    if (await emi.isVisible({ timeout: 1_500 }).catch(() => false)) {
+      return this.text(emi);
+    }
+    return '';
+  }
+
+  /** Scroll until Address Details (and Invoice) are in view on long EMI order pages. */
+  private async scrollToShopInvoiceSection(): Promise<void> {
+    const addressHeading = this.addressDetailsHeading();
+    for (let i = 0; i < 8; i += 1) {
+      if (await addressHeading.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await addressHeading.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+        return;
+      }
+      await this.page.keyboard.press('PageDown');
+      await this.page.waitForTimeout(350);
+    }
+    await addressHeading.waitFor({ state: 'visible', timeout: 20_000 });
+    await addressHeading.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+  }
+
   private resetShopInvoiceCapture(): void {
     this.invoicePdfHref = null;
     this.invoicePdfPage = null;
+  }
+
+  /**
+   * Clears cached invoice URL/page and closes PDF viewer tabs before opening another shop order's invoice.
+   * Needed when checkout returns separate order ids (one PDF per product).
+   */
+  async resetShopInvoiceSession(): Promise<void> {
+    this.resetShopInvoiceCapture();
+    await this.page.bringToFront().catch(() => {});
+    for (const p of this.page.context().pages()) {
+      if (p === this.page || p.isClosed()) {
+        continue;
+      }
+      if (MyOrderVerificationPage.isInvoicePdfUrl(p.url())) {
+        await p.close().catch(() => {});
+      }
+    }
   }
 
   async getShopOrderDetailView(): Promise<MyOrderShopDetailViewDetails> {
@@ -328,6 +538,8 @@ export class MyOrderVerificationPage extends BasePage {
     retryDelayMs?: number;
     captureTimeoutMs?: number;
     productName?: string;
+    /** TC003 EMI — re-open invoice-ready detail via Pay Now, not View Detail. */
+    useEmiOrderDetail?: boolean;
   }): Promise<void> {
     const maxAttempts = options?.maxAttempts ?? 4;
     const retryDelayMs = options?.retryDelayMs ?? 3_000;
@@ -341,7 +553,11 @@ export class MyOrderVerificationPage extends BasePage {
         );
         this.resetShopInvoiceCapture();
         if (options?.productName && attempt === 2) {
-          await this.prepareShopOrderDetailForInvoice(options.productName);
+          if (options.useEmiOrderDetail) {
+            await this.prepareShopEmiOrderDetailForInvoice(options.productName);
+          } else {
+            await this.prepareShopOrderDetailForInvoice(options.productName);
+          }
         } else {
           await this.page.reload({ waitUntil: 'domcontentloaded' });
           await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
@@ -643,10 +859,24 @@ export class MyOrderVerificationPage extends BasePage {
       .first();
   }
 
+  /** EMI Pay Now summary (Pay Now + Cancel Booking + DUE ON footer). */
+  private shopEmiOrderDetailPanel(): Locator {
+    return this.page
+      .locator('div.bg-sheengold-ochre.rounded-lg.shadow-sm, motion.div.bg-sheengold-ochre.rounded-lg.shadow-sm')
+      .filter({ has: this.page.getByRole('button', { name: /^pay now$/i }) })
+      .filter({ has: this.page.getByRole('button', { name: /cancel booking/i }) })
+      .filter({ has: this.page.getByText(/Net weight:/i) })
+      .filter({ has: this.page.getByText(/^DUE ON/i) })
+      .first();
+  }
+
   private shopOrderCard(productName: string): Locator {
+    const escaped = productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return this.page
       .locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre')
-      .filter({ has: this.page.getByRole('heading', { level: 3 }).filter({ hasText: productName }) })
+      .filter({
+        has: this.page.getByRole('heading', { level: 3, name: new RegExp(escaped, 'i') }),
+      })
       .first();
   }
 

@@ -1,4 +1,4 @@
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
 export type ShopCartItemDetails = {
@@ -8,8 +8,24 @@ export type ShopCartItemDetails = {
   itemPrice: number;
 };
 
+/** EMI cart row (TC003) — no quantity dropdown; line price is Net Payable. */
+export type ShopEmiCartItemDetails = {
+  productName: string;
+  netWeight: string;
+  itemPrice: number;
+};
+
 export type ShopCartPriceDetails = {
   metalPrice: number;
+  makingAndDeliveryCharges: number;
+  tax: number;
+  grandTotal: number;
+};
+
+/** TC003 — EMI + Buy Now cart price panel (TAX, Initial Payment, etc.). */
+export type ShopEmiMixedCartPriceDetails = {
+  metalPrice: number;
+  initialPayment: number;
   makingAndDeliveryCharges: number;
   tax: number;
   grandTotal: number;
@@ -41,6 +57,15 @@ export class ShopCartPage extends BasePage {
     await this.page.goto('/shop-new/cart');
     await this.waitForCart();
     await this.removeAllCartItems();
+  }
+
+  async expectCartHasProducts(productNames: string[]): Promise<void> {
+    await this.waitForCart();
+    expect(await this.getCartItemCount()).toBe(productNames.length);
+    const cartNames = await this.getAllCartProductNames();
+    for (const name of productNames) {
+      expect(cartNames.some((cartName) => cartName.includes(name) || name.includes(cartName))).toBe(true);
+    }
   }
 
   async waitForCart(): Promise<void> {
@@ -80,6 +105,17 @@ export class ShopCartPage extends BasePage {
   async clickProceedToPay(): Promise<void> {
     await this.proceedToPayButton.waitFor({ state: 'visible', timeout: 10_000 });
     await this.proceedToPayButton.click();
+  }
+
+  async continueShopping(): Promise<void> {
+    const link = this.page.getByRole('link', { name: /continue shopping/i }).first();
+    if (await link.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await link.click();
+      await this.page.waitForURL(/shop-new\/product/i, { timeout: 15_000 });
+      return;
+    }
+    await this.page.goto('/shop-new/product');
+    await this.page.waitForURL(/shop-new\/product/i, { timeout: 15_000 });
   }
 
   async removeAllCartItems(): Promise<string[]> {
@@ -123,6 +159,31 @@ export class ShopCartPage extends BasePage {
     };
   }
 
+  /** TC003 only — EMI lines omit quantity; do not use for Buy Now rows (use getCartItemDetails). */
+  async getEmiCartItemDetails(productName: string): Promise<ShopEmiCartItemDetails> {
+    await this.waitForCart();
+    const item = this.cartItem(productName);
+    await item.waitFor({ state: 'visible', timeout: 10_000 });
+
+    return {
+      productName: await this.text(item.getByRole('heading', { level: 3 })),
+      netWeight: await this.text(item.getByText(/Net weight:/i)),
+      itemPrice: this.parseAmount(
+        await this.text(item.locator('p.font-bold').filter({ hasText: /^₹/ })),
+      ),
+    };
+  }
+
+  async expectEmiCartItemMatchesNetPayable(
+    productName: string,
+    expectedNetPayable: number,
+  ): Promise<ShopEmiCartItemDetails> {
+    const cartItem = await this.getEmiCartItemDetails(productName);
+    expect(cartItem.productName).toContain(productName);
+    expect(cartItem.itemPrice).toBe(expectedNetPayable);
+    return cartItem;
+  }
+
   async getCartPriceDetails(): Promise<ShopCartPriceDetails> {
     await this.waitForCart();
     await this.priceDetailsSection.waitFor({ state: 'visible', timeout: 10_000 });
@@ -131,6 +192,20 @@ export class ShopCartPage extends BasePage {
       metalPrice: await this.priceRow('Metal Price'),
       makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges'),
       tax: await this.priceRow('Tax'),
+      grandTotal: await this.priceRow('Grand Total'),
+    };
+  }
+
+  /** TC003 only — mixed EMI cart uses TAX and Initial Payment rows. */
+  async getEmiMixedCartPriceDetails(): Promise<ShopEmiMixedCartPriceDetails> {
+    await this.waitForCart();
+    await this.priceDetailsSection.waitFor({ state: 'visible', timeout: 10_000 });
+
+    return {
+      metalPrice: await this.priceRow('Metal Price'),
+      initialPayment: await this.priceRow('Initial Payment'),
+      makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges'),
+      tax: await this.priceRowEither('Tax', 'TAX'),
       grandTotal: await this.priceRow('Grand Total'),
     };
   }
@@ -144,6 +219,16 @@ export class ShopCartPage extends BasePage {
   private async priceRow(label: string): Promise<number> {
     const labelCell = this.priceDetailsSection.getByText(label, { exact: true });
     return this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]')));
+  }
+
+  private async priceRowEither(...labels: string[]): Promise<number> {
+    for (const label of labels) {
+      const labelCell = this.priceDetailsSection.getByText(label, { exact: true });
+      if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        return this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]')));
+      }
+    }
+    throw new Error(`Price row not found in cart: ${labels.join(' | ')}`);
   }
 
   private async text(locator: Locator): Promise<string> {

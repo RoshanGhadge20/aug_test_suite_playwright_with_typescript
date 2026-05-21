@@ -1,8 +1,34 @@
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { ShopCartPriceDetails } from './shop-cart.page';
 
 export type ShopCheckoutPriceDetails = ShopCartPriceDetails & {
+  savings: number;
+  paidFromFunds: number;
+};
+
+/** TC003 — EMI Details panel on order summary (after OTP). */
+export type ShopEmiSummaryPriceDetails = {
+  downPayment: number;
+  totalAmount: number;
+  emiScheme: string;
+  emiPerMonth: number;
+  makingAndDeliveryCharges: number;
+  tax: number;
+  savings: number;
+  paidFromFunds: number;
+  grandTotal: number;
+};
+
+/** TC003 — EMI + Buy Now checkout price panel (flex rows under Price Details). */
+export type ShopEmiMixedCheckoutPriceDetails = {
+  metalPrice: number;
+  initialPayment: number;
+  emiScheme: string;
+  emiPerMonth: number;
+  makingAndDeliveryCharges: number;
+  tax: number;
+  grandTotal: number;
   savings: number;
   paidFromFunds: number;
 };
@@ -25,8 +51,20 @@ export type ShopOrderPlacedDetails = {
   successMessage: string;
 };
 
+/** Parsed order ID(s) from the Order Placed dialog — one shared ID or one per product. */
+export type ShopPlacedOrders = {
+  orderIds: string[];
+  displayText: string;
+  isSingleSharedOrder: boolean;
+  successMessage: string;
+};
+
 export class ShopCheckoutPage extends BasePage {
   private readonly priceDetailsSection: Locator;
+  /** TC003 — bordered price card on address step (Initial Payment row). */
+  private readonly emiPriceDetailsPanel: Locator;
+  /** TC003 — bordered EMI Details card on summary step (Total Amount row). */
+  private readonly emiSummaryDetailsPanel: Locator;
   private readonly billingToThisAddressButton: Locator;
   private readonly chooseBillingHeading: Locator;
   private readonly sameAsBillingLabel: Locator;
@@ -43,6 +81,12 @@ export class ShopCheckoutPage extends BasePage {
     this.priceDetailsSection = page
       .getByRole('heading', { name: 'Price Details', level: 2 })
       .locator('xpath=..');
+    this.emiPriceDetailsPanel = page
+      .locator('div.border.border-gray-300.rounded-lg')
+      .filter({ has: page.getByText('Initial Payment', { exact: true }) });
+    this.emiSummaryDetailsPanel = page
+      .locator('div.border.border-gray-300.rounded-lg')
+      .filter({ has: page.getByText('Total Amount', { exact: true }) });
     this.billingToThisAddressButton = page.getByRole('button', { name: /Billing to this Address/i });
     this.chooseBillingHeading = page.getByRole('heading', { name: 'Choose Billing Address', level: 2 });
     this.sameAsBillingLabel = page.locator('label[for="sameAsBillingAddress"]');
@@ -84,6 +128,47 @@ export class ShopCheckoutPage extends BasePage {
       paidFromFunds: await this.priceRow('Paid From Funds', section),
       tax: await this.priceRow('Tax', section),
       grandTotal: await this.priceRow('Grand Total', section),
+    };
+  }
+
+  /** TC003 only — same price-row pattern as cart; not for TC001/TC002 ({@link getPriceDetails}). */
+  async getEmiMixedCheckoutPriceDetails(): Promise<ShopEmiMixedCheckoutPriceDetails> {
+    await this.emiPriceDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
+    return {
+      metalPrice: await this.emiPriceRow('Metal Price'),
+      initialPayment: await this.emiPriceRow('Initial Payment'),
+      emiScheme: await this.emiPriceRowText('EMI Scheme'),
+      emiPerMonth: await this.emiPriceRow('EMI Amount per month'),
+      tax: await this.emiPriceRowEither('Tax', 'TAX'),
+      makingAndDeliveryCharges: await this.emiPriceRow('Making & Delivery Charges'),
+      grandTotal: await this.emiPriceRow('Grand Total'),
+      savings: 0,
+      paidFromFunds: 0,
+    };
+  }
+
+  /** TC003 only — EMI Details on summary; not for TC001/TC002 ({@link getPriceDetails}). */
+  async getEmiSummaryPriceDetails(): Promise<ShopEmiSummaryPriceDetails> {
+    await this.page
+      .getByRole('heading', { name: 'EMI Details', level: 2 })
+      .waitFor({ state: 'visible', timeout: 15_000 });
+    await this.emiSummaryDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
+
+    const downPaymentText = await this.text(
+      this.emiSummaryDetailsPanel.locator('.bg-amber-50 p').first(),
+    );
+    const downPaymentMatch = downPaymentText.match(/₹[\d,.]+/);
+
+    return {
+      downPayment: this.parseAmount(downPaymentMatch?.[0] ?? downPaymentText),
+      totalAmount: await this.emiSummaryPriceRow('Total Amount'),
+      emiScheme: await this.emiSummaryPriceRowText('EMI Scheme'),
+      emiPerMonth: await this.emiSummaryPriceRow('EMI Amount per month'),
+      tax: await this.emiSummaryPriceRowEither('Tax', 'TAX'),
+      makingAndDeliveryCharges: await this.emiSummaryPriceRow('Making & Delivery Charges'),
+      savings: await this.emiSummaryPriceRow('Savings'),
+      paidFromFunds: await this.emiSummaryPriceRow('Paid From Funds'),
+      grandTotal: await this.emiSummaryPriceRow('Grand Total'),
     };
   }
 
@@ -166,9 +251,64 @@ export class ShopCheckoutPage extends BasePage {
         .first(),
     );
     const orderIdRaw = await this.text(dialog.locator('.bg-teal-aliceblue').first());
-    const orderId = orderIdRaw.replace(/^Order\s*ID:\s*/i, '').trim();
+    const orderId = this.parseOrderIds(orderIdRaw).join(',');
 
     return { orderId, successMessage };
+  }
+
+  parseOrderIds(rawOrderId: string): string[] {
+    return rawOrderId
+      .replace(/^Order\s*ID:\s*/i, '')
+      .split(',')
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  async getPlacedOrders(productCount: number): Promise<ShopPlacedOrders> {
+    const placed = await this.getOrderPlacedDetails();
+    const orderIds = this.parseOrderIds(placed.orderId);
+
+    return {
+      orderIds,
+      displayText: orderIds.join(','),
+      isSingleSharedOrder: orderIds.length === 1,
+      successMessage: placed.successMessage,
+    };
+  }
+
+  assertPlacedOrders(orders: ShopPlacedOrders, productCount: number): void {
+    for (const id of orders.orderIds) {
+      expect(id).toMatch(/^\d+$/);
+    }
+    if (orders.isSingleSharedOrder) {
+      expect(orders.orderIds).toHaveLength(1);
+      return;
+    }
+    expect(orders.orderIds).toHaveLength(productCount);
+  }
+
+  assertOrderIdForProduct(shopOrderId: string, orders: ShopPlacedOrders): void {
+    if (orders.isSingleSharedOrder) {
+      expect(shopOrderId).toBe(orders.orderIds[0]);
+      return;
+    }
+    expect(orders.orderIds).toContain(shopOrderId);
+  }
+
+  getInvoiceOrderId(orders: ShopPlacedOrders, firstProductOrderId: string): string {
+    return orders.isSingleSharedOrder ? orders.orderIds[0] : firstProductOrderId;
+  }
+
+  getExpectedInvoiceNetPayable(
+    orders: ShopPlacedOrders,
+    combinedGrandTotal: number,
+    firstProductPrice: number,
+  ): number {
+    return orders.isSingleSharedOrder ? combinedGrandTotal : firstProductPrice;
+  }
+
+  getInvoiceProductNames(orders: ShopPlacedOrders, productNames: string[]): string[] {
+    return orders.isSingleSharedOrder ? productNames : [productNames[0]];
   }
 
   async dismissOrderPlacedDialog(): Promise<void> {
@@ -315,6 +455,74 @@ export class ShopCheckoutPage extends BasePage {
     const labelCell = section.getByText(label, { exact: true });
     const value = await this.text(labelCell.locator('xpath=following-sibling::*[1]'));
     return Math.abs(this.parseAmount(value));
+  }
+
+  private async optionalPriceRow(section: Locator, label: string): Promise<number> {
+    const labelCell = section.getByText(label, { exact: true });
+    if (!(await labelCell.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      return 0;
+    }
+    const value = await this.text(labelCell.locator('xpath=following-sibling::*[1]'));
+    return Math.abs(this.parseAmount(value));
+  }
+
+  private async priceRowEither(section: Locator, ...labels: string[]): Promise<number> {
+    for (const label of labels) {
+      const labelCell = section.getByText(label, { exact: true });
+      if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        const value = await this.text(labelCell.locator('xpath=following-sibling::*[1]'));
+        return Math.abs(this.parseAmount(value));
+      }
+    }
+    throw new Error(`Price row not found in checkout: ${labels.join(' | ')}`);
+  }
+
+  private async emiPriceRow(label: string): Promise<number> {
+    const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
+    return Math.abs(
+      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
+    );
+  }
+
+  private async emiPriceRowText(label: string): Promise<string> {
+    const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
+    return this.text(labelCell.locator('xpath=following-sibling::*[1]'));
+  }
+
+  private async emiPriceRowEither(...labels: string[]): Promise<number> {
+    for (const label of labels) {
+      const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
+      if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        return Math.abs(
+          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
+        );
+      }
+    }
+    throw new Error(`Price row not found in checkout: ${labels.join(' | ')}`);
+  }
+
+  private async emiSummaryPriceRow(label: string): Promise<number> {
+    const labelCell = this.emiSummaryDetailsPanel.getByText(label, { exact: true });
+    return Math.abs(
+      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
+    );
+  }
+
+  private async emiSummaryPriceRowText(label: string): Promise<string> {
+    const labelCell = this.emiSummaryDetailsPanel.getByText(label, { exact: true });
+    return this.text(labelCell.locator('xpath=following-sibling::*[1]'));
+  }
+
+  private async emiSummaryPriceRowEither(...labels: string[]): Promise<number> {
+    for (const label of labels) {
+      const labelCell = this.emiSummaryDetailsPanel.getByText(label, { exact: true });
+      if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        return Math.abs(
+          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
+        );
+      }
+    }
+    throw new Error(`Price row not found in EMI summary: ${labels.join(' | ')}`);
   }
 
   private async text(locator: Locator): Promise<string> {

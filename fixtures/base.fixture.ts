@@ -12,6 +12,7 @@ import { ProductMenuPage } from '../pages/customer/product-menu.page';
 import { ShopPage } from '../pages/customer/shop.page';
 import { ShopCartPage } from '../pages/customer/shop-cart.page';
 import { ShopCheckoutPage } from '../pages/customer/shop-checkout.page';
+import { ShopEmiPage } from '../pages/customer/shop-emi.page';
 
 type PageObjectFixtures = {
   customerLogin: CustomerLoginPage;
@@ -20,6 +21,7 @@ type PageObjectFixtures = {
   shopPage: ShopPage;
   shopCartPage: ShopCartPage;
   shopCheckoutPage: ShopCheckoutPage;
+  shopEmiPage: ShopEmiPage;
   buyMetalPage: BuyMetalPage;
   buySummaryPage: BuySummaryPage;
   dashboardPage: DashBoardPage;
@@ -39,6 +41,7 @@ export const test = base.extend<PageObjectFixtures>({
   shopPage: async ({ page }, use) => { await use(new ShopPage(page)); },
   shopCartPage: async ({ page }, use) => { await use(new ShopCartPage(page)); },
   shopCheckoutPage: async ({ page }, use) => { await use(new ShopCheckoutPage(page)); },
+  shopEmiPage: async ({ page }, use) => { await use(new ShopEmiPage(page)); },
   buyMetalPage: async ({ page }, use) => { await use(new BuyMetalPage(page)); },
   buySummaryPage: async ({ page }, use) => { await use(new BuySummaryPage(page)); },
   dashboardPage: async ({ page }, use) => { await use(new DashBoardPage(page)); },

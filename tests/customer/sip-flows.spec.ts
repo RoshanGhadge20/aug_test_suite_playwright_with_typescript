@@ -50,8 +50,8 @@ test.describe('customer SIP flows @customer-flows', () => {
       await buyMetalPage.enterAmount(dataset.SIPEmandateAmount);
       await buyMetalPage.selectInvestmentDay(dataset.SIPInvestmentDay);
       await buyMetalPage.clickOnCreateSIP();
-m,.\
-65-vxc*      planName = await buyMetalPage.enterUniquePlanName();
+
+      planName = await buyMetalPage.enterUniquePlanName();
       selectedSipStartDate = await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
       await buyMetalPage.clickOnCreateSIP();
     });

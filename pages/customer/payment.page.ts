@@ -134,12 +134,69 @@ export class PaymentPage extends BasePage {
 
   async fillContactNumber(number: string): Promise<void> {
     await this.waitForRazorpayFrame();
-    await this.razorpayFrame().getByTestId('contactNumber').fill(number);
+    const frame = this.razorpayFrame();
+    const fallbackPhone =
+      process.env.UAT_CUSTOMER_USER_MOBILE ??
+      process.env.TEST_CUSTOMER_USER_MOBILE ??
+      '';
+    const resolvedPhone = (number || fallbackPhone).trim();
+    const digitsOnlyPhone = resolvedPhone.replace(/\D/g, '').slice(-10);
+    if (!digitsOnlyPhone) {
+      return;
+    }
+
+    const contactInput = frame
+      .getByTestId('contactNumber')
+      .or(frame.locator('#contact'))
+      .or(frame.locator('input[placeholder*="mobile" i], input[name*="contact" i], input[type="tel"]'))
+      .first();
+
+    const isVisible = await contactInput
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!isVisible) {
+      return;
+    }
+
+    await contactInput.click({ force: true });
+    await contactInput.fill('');
+    await contactInput.type(digitsOnlyPhone, { delay: 75 });
+
+    const typedValue = await contactInput.inputValue().catch(() => '');
+    const typedDigits = typedValue.replace(/\D/g, '');
+    if (!typedDigits.endsWith(digitsOnlyPhone.slice(-4))) {
+      await contactInput.click({ force: true });
+      await this.page.keyboard.press('Control+A');
+      await this.page.keyboard.press('Backspace');
+      await contactInput.type(digitsOnlyPhone, { delay: 100 });
+    }
   }
 
   async clickRazorpayContinue(): Promise<void> {
     await this.waitForRazorpayFrame();
-    await this.razorpayFrame().getByRole('button', { name: /^continue$/i }).click({ force: true });
+    const frame = this.razorpayFrame();
+
+    const netbanking = frame.locator('label').filter({ hasText: 'Netbanking' });
+    if (await netbanking.isVisible().catch(() => false)) {
+      return;
+    }
+
+    const continueBtn = frame
+      .getByRole('button', { name: /^continue$/i })
+      .or(frame.locator('button[validateform="true"]').filter({ hasText: /^Continue$/i }))
+      .first();
+
+    const isVisible = await continueBtn
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!isVisible) {
+      return;
+    }
+
+    await continueBtn.click({ force: true });
+    await frame.locator('#overlay-backdrop').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
   }
 
   async selectNetbanking(): Promise<void> {

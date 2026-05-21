@@ -305,3 +305,64 @@ export function getShopDataset(): ShopDataset {
     otp: excelOtp || process.env.SHOP_TC001_OTP?.trim() || SHOP_TC001_DEFAULT_OTP,
   };
 }
+
+const SHOP_TC002_DEFAULT_PRODUCTS = [
+  'Augmont 0.1Gm Gold Coin (999 Purity)',
+  'Augmont 0.5Gm Gold Coin (999 Purity)',
+] as const;
+
+export interface ShopTc002Dataset {
+  /** Two or more products for multi-item checkout (`ShopTc002ProductNames` pipe-separated or `ShopTc002ProductName1` + `2`). */
+  productNames: string[];
+}
+
+function parseShopTc002ProductNames(row: Record<string, unknown>): string[] {
+  const pipeList = normalizeCell(row.ShopTc002ProductNames);
+  if (pipeList) {
+    const names = pipeList.split('|').map((name) => normalizeCell(name)).filter(Boolean);
+    if (names.length >= 2) return names;
+  }
+
+  const first = normalizeCell(row.ShopTc002ProductName1);
+  const second = normalizeCell(row.ShopTc002ProductName2);
+  if (first && second) return [first, second];
+
+  return [...SHOP_TC002_DEFAULT_PRODUCTS];
+}
+
+/** TC_SHOP_002 products from `shop` sheet. Mobile/OTP use {@link getShopDataset} (shared for all shop TCs). */
+export function getShopTc002Dataset(): ShopTc002Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    productNames: parseShopTc002ProductNames(firstRow),
+  };
+}
+
+const SHOP_TC003_DEFAULT_EMI_PRODUCT = 'Augmont 0.1Gm Gold Coin (999 Purity)';
+const SHOP_TC003_DEFAULT_BUY_NOW_PRODUCT = 'Augmont 0.5Gm Gold Coin (999 Purity)';
+
+export interface ShopTc003Dataset {
+  /** Product added via Buy with EMI + Pay (`ShopTc003EmiProductName` on `shop` sheet). */
+  emiProductName: string;
+  /** Second product added via Buy Now (`ShopTc003BuyNowProductName` on `shop` sheet). */
+  buyNowProductName: string;
+}
+
+/** TC_SHOP_003 products from `shop` sheet. Mobile/OTP use {@link getShopDataset}. */
+export function getShopTc003Dataset(): ShopTc003Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    emiProductName:
+      normalizeCell(firstRow.ShopTc003EmiProductName) || SHOP_TC003_DEFAULT_EMI_PRODUCT,
+    buyNowProductName:
+      normalizeCell(firstRow.ShopTc003BuyNowProductName) || SHOP_TC003_DEFAULT_BUY_NOW_PRODUCT,
+  };
+}
