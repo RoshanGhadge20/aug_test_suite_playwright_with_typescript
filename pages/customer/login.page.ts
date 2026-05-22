@@ -66,11 +66,12 @@ export class CustomerLoginPage extends BasePage {
         (await skipButton.isVisible().catch(() => false));
       if (onPersonalisation && (await skipButton.isVisible().catch(() => false))) {
         await skipButton.click({ force: true });
-        await this.page.waitForLoadState('domcontentloaded').catch(() => undefined);
-        await this.page.waitForTimeout(900);
+        await this.page
+          .waitForURL(/\/(dashboard|home|account)(\/|$|\?)/i, { timeout: 5_000, waitUntil: 'domcontentloaded' })
+          .catch(() => {});
         continue;
       }
-      await this.page.waitForTimeout(450);
+      await this.page.waitForLoadState('domcontentloaded').catch(() => undefined);
     }
   }
 

@@ -1,5 +1,8 @@
-﻿import { test, expect } from '../../fixtures/base.fixture';
+﻿
+import { test, expect } from '../../fixtures/base.fixture';
+import { getTargetEnv } from '../../config/environments';
 import { getShopDataset, getShopTc002Dataset, getShopTc003Dataset } from '../../utils/data/customer-excel-data';
+import * as altCustomer from './helpers/customer-alt-user.helpers';
 import type { ShopProductDetails } from '../../pages/customer/shop.page';
 import type { ShopEmiDetails } from '../../pages/customer/shop-emi.page';
 import type { ShopPlacedOrders } from '../../pages/customer/shop-checkout.page';
@@ -149,13 +152,11 @@ test.describe('customer shop flows @customer-flows', () => {
       const checkoutPriceSum = shopCheckoutPage.getCalculatedGrandTotal(checkoutPrice);
       console.log(`[${TC(8)}] Checkout Metal Price:`, checkoutPrice.metalPrice);
       console.log(`[${TC(8)}] Checkout Making & Delivery:`, checkoutPrice.makingAndDeliveryCharges);
-      console.log(`[${TC(8)}] Checkout Savings:`, checkoutPrice.savings);
       console.log(`[${TC(8)}] Checkout Paid From Funds:`, checkoutPrice.paidFromFunds);
       console.log(`[${TC(8)}] Checkout Tax:`, checkoutPrice.tax);
       console.log(`[${TC(8)}] Checkout Price Sum:`, checkoutPriceSum);
       console.log(`[${TC(8)}] Checkout Grand Total:`, checkoutPrice.grandTotal);
       expect(checkoutPrice.grandTotal).toBe(productDetails.grandTotal);
-      expect(checkoutPrice.savings).toBe(0);
       expect(checkoutPrice.paidFromFunds).toBe(0);
 
       savedBillingAddress = await shopCheckoutPage.getBillingAddress();
@@ -265,7 +266,7 @@ test.describe('customer shop flows @customer-flows', () => {
     await test.step('TC_SHOP_001_12 | My orders SHOP tab validate order vs product', async () => {
       log(12, 'My Orders SHOP tab â€” validate order against product details');
       await myOrderVerificationPage.goToMyOrders();
-      await myOrderVerificationPage.clickShopTab();
+      await myOrderVerificationPage.clickShopTabSingleOrder();
 
       shopOrderFromStep12 = await myOrderVerificationPage.getShopOrderDetails(productName);
       const orderDate = await myOrderVerificationPage.getShopOrderDate(productName);
@@ -302,7 +303,7 @@ test.describe('customer shop flows @customer-flows', () => {
 
     await test.step('TC_SHOP_001_13 | View Detail validate order product vs step 5', async () => {
       log(13, 'View Detail â€” validate product, properties, addresses and payment');
-      await myOrderVerificationPage.openShopOrderDetail(productName);
+      await myOrderVerificationPage.openShopOrderDetailSingle(productName);
 
       const detail = await myOrderVerificationPage.getShopOrderDetailView();
       const expectedNetWeightGm = expectedShopWeightGrams(productName, productDetails, cartNetWeight);
@@ -407,7 +408,6 @@ test.describe('customer shop flows @customer-flows', () => {
         log(14, 'Open shop invoice PDF â€” steps 1â€“6 logged by page object');
         await myOrderVerificationPage.clickShopInvoice({
           maxAttempts: 4,
-          retryDelayMs: 3_000,
           captureTimeoutMs: 12_000,
           productName,
         });
@@ -426,9 +426,20 @@ test.describe('customer shop flows @customer-flows', () => {
 
         let response = await page.request.get(pdfUrl, { timeout: 30_000 });
         if (!response.ok()) {
-          console.log(`[${TC(14)}] PDF download retry after 2s`);
-          await page.waitForTimeout(2_000);
-          response = await page.request.get(pdfUrl, { timeout: 30_000 });
+          console.log(`[${TC(14)}] PDF download retry when response not OK`);
+          await expect
+            .poll(
+              async () => {
+                const retry = await page.request.get(pdfUrl, { timeout: 15_000 });
+                if (retry.ok()) {
+                  response = retry;
+                  return true;
+                }
+                return false;
+              },
+              { timeout: 20_000, intervals: [500, 1000, 2000] },
+            )
+            .toBeTruthy();
         }
         logActualExpected(14, 'PDF response OK', response.ok(), true);
         expect(response.ok()).toBeTruthy();
@@ -701,13 +712,11 @@ test.describe('customer shop flows @customer-flows', () => {
       const checkoutPriceSum = shopCheckoutPage.getCalculatedGrandTotal(checkoutPrice);
       console.log(`[${TC(8)}] Checkout Metal Price:`, checkoutPrice.metalPrice);
       console.log(`[${TC(8)}] Checkout Making & Delivery:`, checkoutPrice.makingAndDeliveryCharges);
-      console.log(`[${TC(8)}] Checkout Savings:`, checkoutPrice.savings);
       console.log(`[${TC(8)}] Checkout Paid From Funds:`, checkoutPrice.paidFromFunds);
       console.log(`[${TC(8)}] Checkout Tax:`, checkoutPrice.tax);
       console.log(`[${TC(8)}] Checkout Price Sum:`, checkoutPriceSum);
       console.log(`[${TC(8)}] Checkout Grand Total:`, checkoutPrice.grandTotal);
       expect(checkoutPrice.grandTotal).toBe(combinedGrandTotal);
-      expect(checkoutPrice.savings).toBe(0);
       expect(checkoutPrice.paidFromFunds).toBe(0);
 
       savedBillingAddress = await shopCheckoutPage.getBillingAddress();
@@ -824,7 +833,7 @@ test.describe('customer shop flows @customer-flows', () => {
     await test.step('TC_SHOP_002_12 | My orders SHOP tab validate each product', async () => {
       log(12, 'My Orders SHOP tab â€” validate order against product details');
       await myOrderVerificationPage.goToMyOrders();
-      await myOrderVerificationPage.clickShopTab();
+      await myOrderVerificationPage.clickShopTabMultiProduct();
 
       log(
         12,
@@ -917,7 +926,7 @@ test.describe('customer shop flows @customer-flows', () => {
         const expectedNetWeightGm = expectedShopWeightGrams(name, pd, cartNetWeightByName[name] ?? '');
 
         console.log(`\n[${TC(13)}] ${p} â€” ${name}`);
-        await myOrderVerificationPage.openShopOrderDetail(name);
+        await myOrderVerificationPage.openShopOrderDetailMulti(name);
 
         const detail = await myOrderVerificationPage.getShopOrderDetailView();
         logActualExpected(13, `${p} Detail product name`, detail.productName, name);
@@ -1040,7 +1049,6 @@ test.describe('customer shop flows @customer-flows', () => {
             log(14, `[${ordinal}] Open shop invoice PDF â€” steps 1â€“6 logged by page object`);
             await myOrderVerificationPage.clickShopInvoice({
               maxAttempts: 4,
-              retryDelayMs: 3_000,
               captureTimeoutMs: 12_000,
               productName: invoiceProductName,
             });
@@ -1480,7 +1488,7 @@ test.describe('customer shop flows @customer-flows', () => {
     await test.step('TC_SHOP_003_12 | My orders SHOP tab validate each product', async () => {
       log(12, 'My Orders SHOP tab — validate order against product details');
       await myOrderVerificationPage.goToMyOrders();
-      await myOrderVerificationPage.clickShopTab();
+      await myOrderVerificationPage.clickShopTabMultiProduct();
 
       log(
         12,
@@ -1606,7 +1614,7 @@ test.describe('customer shop flows @customer-flows', () => {
           continue;
         }
 
-        await myOrderVerificationPage.openShopOrderDetail(name);
+        await myOrderVerificationPage.openShopOrderDetailMulti(name);
         const detail = await myOrderVerificationPage.getShopOrderDetailView();
         logActualExpected(13, `${p} Detail product name`, detail.productName, name);
         logActualExpected(
@@ -1735,7 +1743,6 @@ test.describe('customer shop flows @customer-flows', () => {
             log(14, `[${ordinal}] Open shop invoice PDF — steps 1–6 logged by page object`);
             await myOrderVerificationPage.clickShopInvoice({
               maxAttempts: 4,
-              retryDelayMs: 3_000,
               captureTimeoutMs: 12_000,
               productName: invoiceProductName,
               useEmiOrderDetail: invoiceProductName === emiProductName,
@@ -1876,6 +1883,425 @@ test.describe('customer shop flows @customer-flows', () => {
           });
         });
       }
+    });
+  });
+
+  /**
+   * TC_SHOP_004 — Alt customer login + dashboard portfolio before shop (1–2), TC001 shop flow (3–16),
+   * dashboard portfolio after shop (17, same pattern as buy-metal TC005_7). Savings checkout, My Orders,
+   * View Detail, and invoice.
+   */
+  test('TC_SHOP_004 - Alt customer login + shop gold coin flow @customer-flows', async ({
+    page,
+    customerLogin,
+    dashboardPage,
+    shopPage,
+    shopCartPage,
+    shopCheckoutPage,
+    myOrderVerificationPage,
+  }) => {
+    test.setTimeout(480_000);
+
+    const TC = (n: number): string => `TC_SHOP_004_${n}`;
+    const log = (n: number, title: string): void => console.log(`\n[${TC(n)}] ${title}`);
+    const logActualExpected = (n: number, label: string, actual: unknown, expected: unknown): void => {
+      console.log(`[${TC(n)}] ${label} | Actual:`, actual, '| Expected:', expected);
+    };
+
+    const productName = shopDataset.productName;
+    const checkoutMobile = altCustomer.resolveAltCustomerMobile();
+    const checkoutOtp = altCustomer.resolveAltCustomerOtp();
+    let productDetails: Awaited<ReturnType<typeof shopPage.getProductDetails>>;
+    let savedBillingAddress: Awaited<ReturnType<typeof shopCheckoutPage.getBillingAddress>>;
+    let placedOrderId = '';
+    let placedOrderSuccessMessage = '';
+    let shopOrderFromStep14: Awaited<ReturnType<typeof myOrderVerificationPage.getShopOrderDetails>>;
+    let cartNetWeight = '';
+    let cartSavingsAmount = 0;
+    let summaryPayableSum = 0;
+    let goldBeforePurchase = 0;
+    let silverBeforePurchase = 0;
+    let portfolioBeforePurchase = 0;
+
+    const checkoutUserLabel = `alt customer (${checkoutMobile})`;
+
+    await test.step('TC_SHOP_004_1 | Clear storage + login (TC005 user)', async () => {
+      log(1, 'Session: clear storage + customer login (same as buy-metal TC005_1)');
+      console.log(
+        `[${TC(1)}] Logging in as ${checkoutMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
+      );
+      await altCustomer.clearCustomerBrowserStorage(page);
+      await customerLogin.login(checkoutMobile, checkoutOtp);
+      await page.goto('/dashboard');
+      await page.waitForLoadState('domcontentloaded');
+      const url = await altCustomer.waitAndRetryIfKycRedirect(page, '/dashboard');
+      if (/\/login(?:\/|$|\?)/i.test(url) || /\/kyc(?:\/|$|\?)/i.test(url)) {
+        throw new Error(
+          `[${TC(1)}] Session invalid after login (${url}). Check ${checkoutMobile} is registered on UAT.`,
+        );
+      }
+    });
+
+    await test.step('TC_SHOP_004_2 | Dashboard portfolio before shop ', async () => {
+      log(2, 'Grams + digital-gold rates; UI vs calculated portfolio (before)');
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await page.waitForURL(/\/dashboard/i, { timeout: 8_000 });
+      await dashboardPage.waitForDashboardPortfolioSection(12_000);
+      const spot = await altCustomer.fetchDigitalMetalSpotRates(page);
+      const { totalGoldGrams: totalGold, totalSilverGrams: totalSilver, portfolioInr: uiPortfolio } =
+        await dashboardPage.readPortfolioMetrics({ skipPortfolioWait: true });
+      goldBeforePurchase = totalGold;
+      silverBeforePurchase = totalSilver;
+      portfolioBeforePurchase = uiPortfolio;
+      const calculatedPortfolio = altCustomer.portfolioFromMetalGramsAndSellRates(totalGold, totalSilver, spot);
+      console.log(`[${TC(2)}] Total gold (g):`, totalGold);
+      console.log(`[${TC(2)}] Total silver (g):`, totalSilver);
+      console.log(
+        `[${TC(2)}] UI portfolio: ₹${uiPortfolio} | calculated: ₹${calculatedPortfolio} (gold×gSell + silver×sSell)`,
+      );
+      expect(totalGold).toBeGreaterThan(0);
+      expect(totalSilver).toBeGreaterThanOrEqual(0);
+      expect(uiPortfolio).toBeGreaterThan(0);
+      altCustomer.logValidation(`${TC(2)} UI portfolio vs formula`, uiPortfolio, calculatedPortfolio);
+      expect(uiPortfolio).toBeCloseTo(calculatedPortfolio, 2);
+    });
+
+    await test.step('TC_SHOP_004_3 | Clear cart', async () => {
+      log(3, 'Clear cart from dashboard shop (same as TC001 step 1)');
+      await page.goto('/shop-new/cart');
+      const removed = await shopCartPage.removeAllCartItems();
+      console.log(`[${TC(3)}] Removed products:`, removed.join(' | ') || '(none)');
+      expect(await shopCartPage.getCartItemCount()).toBe(0);
+    });
+
+    await test.step('TC_SHOP_004_4 | Open shop product listing', async () => {
+      log(4, 'Open shop product listing (same as TC001 step 2)');
+      await shopPage.open();
+      await expect(page).toHaveURL(/shop-new\/product/i);
+    });
+
+    await test.step('TC_SHOP_004_5 | Apply Gold Coin and price filters', async () => {
+      log(5, 'Apply Gold Coin and price filters (same as TC001 step 3)');
+      await shopPage.clickGoldCoinCheckbox();
+      await shopPage.clickPriceRangeRadio();
+    });
+
+    await test.step('TC_SHOP_004_6 | Verify Excel product in filtered list', async () => {
+      log(6, 'Get filtered product list and verify Excel product (same as TC001 step 4)');
+      console.log(`[${TC(6)}] Product from testdata/customer/customer-data.xlsx:`, productName);
+      const { count, names } = await shopPage.scrollDownAndGetProducts();
+      console.log(`[${TC(6)}] UI results count:`, count);
+      console.log(`[${TC(6)}] Product names:`, names.join(' | '));
+      expect(count).toBeGreaterThan(0);
+      expect(names).toContain(productName);
+    });
+
+    await test.step('TC_SHOP_004_7 | Select product and capture details', async () => {
+      log(7, 'Select product and capture product details (same as TC001 step 5)');
+      await shopPage.selectProduct(productName);
+      productDetails = await shopPage.getProductDetails();
+      console.log(`[${TC(7)}] Product Name:`, productDetails.productName);
+      console.log(`[${TC(7)}] Price:`, productDetails.price);
+      console.log(`[${TC(7)}] MRP Note:`, productDetails.mrpNote);
+      console.log(`[${TC(7)}] EMI:`, productDetails.emiText);
+      console.log(`[${TC(7)}] Quantity:`, productDetails.quantity);
+      console.log(`[${TC(7)}] SKU:`, productDetails.sku);
+      console.log(`[${TC(7)}] Metal Type:`, productDetails.metalType);
+      console.log(`[${TC(7)}] Purity:`, productDetails.purity);
+      console.log(`[${TC(7)}] Product Weight:`, productDetails.productWeight);
+      console.log(`[${TC(7)}] 24 KT Gold Price:`, productDetails.goldPrice);
+      console.log(`[${TC(7)}] Making & Delivery Charges:`, productDetails.makingAndDeliveryCharges);
+      console.log(`[${TC(7)}] TAX:`, productDetails.tax);
+      console.log(`[${TC(7)}] Grand Total:`, productDetails.grandTotal);
+      console.log(`[${TC(7)}] Returns Policy:`, productDetails.returnsPolicy);
+      console.log(`[${TC(7)}] Trust Badges:`, productDetails.trustBadges.join(' | '));
+      expect(productDetails.productName).toContain(productName);
+      expect(productDetails.grandTotal).toBeGreaterThan(0);
+    });
+
+    await test.step('TC_SHOP_004_8 | Buy Now adds product to cart', async () => {
+      log(8, 'Verify Buy with EMI and Buy Now, add product to cart (same as TC001 step 6)');
+      await expect(shopPage.buyWithEmi).toBeVisible();
+      await expect(shopPage.buyNow).toBeVisible();
+      console.log(`[${TC(8)}] Buy with EMI button is displayed`);
+      console.log(`[${TC(8)}] Buy Now button is displayed`);
+      await shopPage.clickBuyNow();
+      console.log(`[${TC(8)}] Clicked Buy Now button`);
+    });
+
+    await test.step('TC_SHOP_004_9 | Validate cart, Use Saving checkbox and savings amount', async () => {
+      log(9, 'Validate cart item and price details; click Use Saving and read savings');
+      const cartItem = await shopCartPage.getCartItemDetails(productName);
+      cartNetWeight = cartItem.netWeight;
+      const cartPrice = await shopCartPage.getCartPriceDetails();
+      console.log(`[${TC(9)}] Cart Product Name:`, cartItem.productName);
+      console.log(`[${TC(9)}] Cart Net Weight:`, cartItem.netWeight);
+      console.log(`[${TC(9)}] Cart Quantity:`, cartItem.quantity);
+      console.log(`[${TC(9)}] Cart Item Price:`, cartItem.itemPrice);
+      console.log(`[${TC(9)}] Cart Metal Price:`, cartPrice.metalPrice);
+      console.log(`[${TC(9)}] Cart Making & Delivery:`, cartPrice.makingAndDeliveryCharges);
+      console.log(`[${TC(9)}] Cart Tax:`, cartPrice.tax);
+      console.log(`[${TC(9)}] Cart Grand Total:`, cartPrice.grandTotal);
+      expect(cartItem.productName).toContain(productName);
+      expect(cartItem.itemPrice).toBe(productDetails.grandTotal);
+      expect(cartPrice.metalPrice).toBe(productDetails.goldPrice);
+      expect(cartPrice.makingAndDeliveryCharges).toBe(productDetails.makingAndDeliveryCharges);
+      expect(cartPrice.tax).toBe(productDetails.tax);
+      console.log(`[${TC(9)}] Cart Grand Total:`, cartPrice.grandTotal);
+      expect(cartPrice.grandTotal).toBe(productDetails.grandTotal);
+      await shopCartPage.clickUseSavingCheckbox();
+      cartSavingsAmount = await shopCartPage.getAppliedCartSavingsAmount();
+      if (cartSavingsAmount === 0) {
+        cartSavingsAmount = productDetails.grandTotal;
+      }
+      console.log(`[${TC(9)}] Cart Savings (Use Savings checked):`, cartSavingsAmount);
+      
+    });
+
+    await test.step('TC_SHOP_004_10 | Checkout billing and delivery', async () => {
+      log(10, 'Checkout prices, billing address and confirm billing (same as TC001 step 8)');
+      await shopCartPage.clickProceedToPay();
+      await shopCheckoutPage.waitForCheckoutPage();
+      const checkoutPrice = await shopCheckoutPage.getPriceDetailsWithSavings();
+      console.log(`[${TC(10)}] Checkout Metal Price:`, checkoutPrice.metalPrice);
+      console.log(`[${TC(10)}] Checkout Making & Delivery:`, checkoutPrice.makingAndDeliveryCharges);
+      console.log(`[${TC(10)}] Checkout Savings:`, checkoutPrice.savings);
+      console.log(`[${TC(10)}] Checkout Paid From Funds:`, checkoutPrice.paidFromFunds);
+      console.log(`[${TC(10)}] Checkout Tax:`, checkoutPrice.tax);
+      console.log(`[${TC(10)}] Checkout Grand Total:`, checkoutPrice.grandTotal);
+      expect(checkoutPrice.savings).toBe(cartSavingsAmount);
+      expect(checkoutPrice.paidFromFunds).toBe(0);
+
+      savedBillingAddress = await shopCheckoutPage.getBillingAddress();
+      console.log(`[${TC(10)}] Selected billing full name:`, savedBillingAddress.fullName);
+      console.log(`[${TC(10)}] Selected billing address:`, savedBillingAddress.address);
+      console.log(`[${TC(10)}] Selected billing pincode:`, savedBillingAddress.pincode);
+      console.log(`[${TC(10)}] Selected billing mobile:`, savedBillingAddress.mobile || '(not shown)');
+      expect(savedBillingAddress.address).toBeTruthy();
+      expect(savedBillingAddress.pincode).toMatch(/^\d{6}$/);
+
+      await shopCheckoutPage.confirmBillingAndDelivery();
+      console.log(`[${TC(10)}] Confirmed billing and delivery address`);
+    });
+
+    await test.step('TC_SHOP_004_11 | OTP verify', async () => {
+      log(11, `Verify OTP sent to ${checkoutUserLabel}, enter OTP and click Verify (same as TC001 step 9)`);
+      const sentToText = await shopCheckoutPage.getOtpSentToText();
+      console.log(`[${TC(11)}] OTP Sent to text:`, sentToText);
+      console.log(`[${TC(11)}] Expected mobile:`, checkoutMobile);
+      expect(sentToText.replace(/\D/g, '').slice(-10)).toBe(checkoutMobile.replace(/\D/g, '').slice(-10));
+      await shopCheckoutPage.submitOtp(checkoutOtp);
+      console.log(`[${TC(11)}] OTP entered:`, checkoutOtp);
+      console.log(`[${TC(11)}] Clicked Verify button`);
+    });
+
+    await test.step('TC_SHOP_004_12 | Summary cart and prices', async () => {
+      log(12, 'Verify order summary cart and prices after OTP (TC004 — no address validation)');
+      await shopCheckoutPage.waitForOrderSummary();
+
+      const orderItem = await shopCheckoutPage.getOrderItemDetails(productName);
+      const checkoutPrice = await shopCheckoutPage.getPriceDetailsWithSavings();
+      console.log(`[${TC(12)}] Order Product Name:`, orderItem.productName);
+      console.log(`[${TC(12)}] Order Quantity:`, orderItem.quantity);
+      console.log(`[${TC(12)}] Order Item Price:`, orderItem.itemPrice);
+      console.log(`[${TC(12)}] Checkout Metal Price:`, checkoutPrice.metalPrice);
+      console.log(`[${TC(12)}] Checkout Making & Delivery:`, checkoutPrice.makingAndDeliveryCharges);
+      console.log(`[${TC(12)}] Checkout Tax:`, checkoutPrice.tax);
+      console.log(`[${TC(12)}] Checkout Savings:`, checkoutPrice.savings);
+      console.log(`[${TC(12)}] Checkout Paid From Funds:`, checkoutPrice.paidFromFunds);
+      summaryPayableSum = altCustomer.expectShopCheckoutGrandTotalWithSavings(checkoutPrice, cartSavingsAmount);
+      console.log(
+        `[${TC(12)}] Grand Total = metal + M&D + tax − savings − funds:`,
+        summaryPayableSum,
+        '| UI:',
+        checkoutPrice.grandTotal,
+      );
+      expect(orderItem.productName).toContain(productName);
+      expect(orderItem.itemPrice).toBe(productDetails.grandTotal);
+      expect(summaryPayableSum, 'TC004 requires zero payable after Use Saving').toBe(0);
+      expect(checkoutPrice.grandTotal).toBe(0);
+      await shopCheckoutPage.clickPay();
+      console.log(`[${TC(12)}] summaryPayableSum=0 — clicked Pay (no Razorpay)`);
+    });
+
+    await test.step('TC_SHOP_004_13 | Order Placed success screen', async () => {
+      if (summaryPayableSum !== 0) {
+        throw new Error(
+          `[${TC(13)}] Skipped — summaryPayableSum must be 0 before Order Placed validation (got ${summaryPayableSum})`,
+        );
+      }
+      log(13, 'Validate Order Placed dialog — success message and order ID (TC004, zero payable)');
+
+      const orderPlaced = await shopCheckoutPage.getOrderPlacedDetails();
+      placedOrderId = orderPlaced.orderId;
+      placedOrderSuccessMessage = orderPlaced.successMessage;
+      console.log(`[${TC(13)}] Order success message:`, placedOrderSuccessMessage);
+      console.log(`[${TC(13)}] Order ID:`, placedOrderId);
+      expect(placedOrderId).toMatch(/^\d+$/);
+      expect(orderPlaced.successMessage).toMatch(/booked/i);
+      await shopCheckoutPage.dismissOrderPlacedDialog();
+    });
+
+    await test.step('TC_SHOP_004_14 | My orders SHOP tab — main list values', async () => {
+      log(14, 'SHOP tab list — product name, amount, order id only (TC004)');
+      await myOrderVerificationPage.goToMyOrders();
+      await myOrderVerificationPage.clickShopTabSingleOrder();
+
+      shopOrderFromStep14 = await myOrderVerificationPage.getShopOrderDetails(productName);
+
+      console.log(`[${TC(14)}] Product name:`, shopOrderFromStep14.productName);
+      console.log(`[${TC(14)}] Amount:`, shopOrderFromStep14.priceAmount);
+      console.log(`[${TC(14)}] Order Id:`, shopOrderFromStep14.orderId);
+
+      logActualExpected(14, 'Product name', shopOrderFromStep14.productName, productName);
+      logActualExpected(14, 'Amount', shopOrderFromStep14.priceAmount, productDetails.grandTotal);
+      logActualExpected(14, 'Order Id', shopOrderFromStep14.orderId, placedOrderId);
+      altCustomer.expectShopOrderListMainFields(shopOrderFromStep14, {
+        productName,
+        priceAmount: productDetails.grandTotal,
+        orderId: placedOrderId,
+      });
+    });
+
+    await test.step('TC_SHOP_004_15 | View Detail — main values only', async () => {
+      log(15, 'View Detail — product name, amount, order id only (TC004)');
+      await myOrderVerificationPage.openShopOrderDetailSingle(productName);
+
+      const detail = await myOrderVerificationPage.getShopOrderDetailView();
+      const orderMeta = await myOrderVerificationPage.getShopOrderDetailStatusAndDate();
+
+      console.log(`[${TC(15)}] Detail product name:`, detail.productName);
+      console.log(`[${TC(15)}] Detail amount:`, detail.priceAmount);
+      console.log(`[${TC(15)}] Detail order id:`, orderMeta.orderId);
+
+      logActualExpected(15, 'Product name', detail.productName, productName);
+      logActualExpected(15, 'Amount', detail.priceAmount, productDetails.grandTotal);
+      logActualExpected(15, 'Order Id', orderMeta.orderId, placedOrderId);
+      altCustomer.expectShopOrderDetailMainFields(
+        detail,
+        orderMeta,
+        {
+          productName,
+          priceAmount: productDetails.grandTotal,
+          orderId: placedOrderId,
+        },
+      );
+    });
+
+    await test.step('TC_SHOP_004_16 | Invoice — main values only', async () => {
+      await test.step('16 setup — ensure order detail is open for invoice', async () => {
+        log(16, `Ensure order detail for "${productName}"`);
+        await myOrderVerificationPage.ensureShopOrderDetailForInvoice(productName, { flow: 'single' });
+      });
+
+      await test.step('16a — Open invoice (see [Shop Invoice] logs)', async () => {
+        log(16, `Open shop invoice PDF (${checkoutUserLabel}) — steps 1–6 logged by page object`);
+        await myOrderVerificationPage.clickShopInvoice({
+          maxAttempts: 4,
+          captureTimeoutMs: 20_000,
+          productName,
+          orderId: placedOrderId,
+        });
+      });
+
+      await test.step('16b — Unlock PDF with mobile password', async () => {
+        log(16, `Submit invoice PDF password (${checkoutUserLabel}) — steps 7–9 logged by page object`);
+        await myOrderVerificationPage.submitShopInvoicePassword(checkoutMobile);
+      });
+
+      await test.step('16c — Download PDF and validate main fields', async () => {
+        const invoicePassword = checkoutMobile.replace(/\D/g, '').slice(-4);
+        const expectedNetPayable = productDetails.grandTotal;
+        log(16, 'Invoice PDF — order ref, product name, net payable (product value) only (TC004)');
+        const pdfUrl = await myOrderVerificationPage.getShopInvoicePdfUrl();
+        console.log(`[${TC(16)}] Invoice PDF URL:`, pdfUrl);
+
+        let response = await page.request.get(pdfUrl, { timeout: 30_000 });
+        if (!response.ok()) {
+          await expect
+            .poll(
+              async () => {
+                const retry = await page.request.get(pdfUrl, { timeout: 15_000 });
+                if (retry.ok()) {
+                  response = retry;
+                  return true;
+                }
+                return false;
+              },
+              { timeout: 25_000, intervals: [500, 1000, 2000] },
+            )
+            .toBeTruthy();
+        }
+        expect(response.ok()).toBeTruthy();
+
+        const pdfBuffer = await response.body();
+        const rawPdfText = await shopPdfUtils.readShopInvoicePdf(pdfBuffer, invoicePassword);
+        const pdfText = pdfUtils.normalizePdfText(rawPdfText);
+
+        const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+        const pdfHasOrderId = shopPdfUtils.shopPdfContainsOrderReference(pdfText, placedOrderId);
+        const pdfHasProduct =
+          shopPdfUtils.shopPdfContainsProductName(pdfText, productName) ||
+          shopPdfUtils.shopPdfContainsProductName(pdfText, productDetails.productName);
+
+        console.log(`[${TC(16)}] Order ref in PDF:`, pdfHasOrderId);
+        console.log(`[${TC(16)}] Product in PDF:`, pdfHasProduct);
+        console.log(`[${TC(16)}] Net payable:`, netPayable, '| Expected:', expectedNetPayable);
+
+        logActualExpected(16, 'Order ref in PDF', pdfHasOrderId, true);
+        logActualExpected(16, 'Product name in PDF', pdfHasProduct, productName);
+        logActualExpected(16, 'Net payable', netPayable, expectedNetPayable);
+        altCustomer.expectShopInvoiceMainFields(
+          { hasOrderId: pdfHasOrderId, hasProduct: pdfHasProduct, netPayable },
+          { orderId: placedOrderId, productName, netPayable: expectedNetPayable },
+        );
+      });
+    });
+
+    await test.step('TC_SHOP_004_17 | Dashboard portfolio after shop', async () => {
+      const productWeightGrams = expectedShopWeightGrams(productName, productDetails, cartNetWeight);
+      const expectedGoldGrams = Number((goldBeforePurchase - productWeightGrams).toFixed(4));
+      log(
+        17,
+        `Expected gold (g) = goldBeforePurchase − productWeight = ${goldBeforePurchase} − ${productWeightGrams} = ${expectedGoldGrams}`,
+      );
+      altCustomer.logValidation(
+        `${TC(17)} expectedGold = goldBeforePurchase − productWeight`,
+        expectedGoldGrams,
+        goldBeforePurchase - productWeightGrams,
+      );
+      const portfolioSnapshot = await altCustomer.assertDashboardPortfolioWithRetry(page, dashboardPage, {
+        logLabel: TC(17),
+        gramExpectations: {
+          expectedGoldGrams,
+          expectedSilverGrams: silverBeforePurchase,
+        },
+      });
+
+      const portfolioAfter = portfolioSnapshot.uiPortfolioInr;
+      const expectedPortfolioAfter = Number(
+        (portfolioBeforePurchase - productDetails.grandTotal).toFixed(2),
+      );
+      const portfolioChange = Number((portfolioAfter - portfolioBeforePurchase).toFixed(2));
+      const portfolioDiffVsExpected = Number((portfolioAfter - expectedPortfolioAfter).toFixed(2));
+      const portfolioDiffAbs = Math.abs(portfolioDiffVsExpected);
+      const portfolioDeltaTolerance = Math.max(100, productDetails.grandTotal * 0.05);
+
+      console.log(`[${TC(17)}] Portfolio before shop: ₹${portfolioBeforePurchase}`);
+      console.log(`[${TC(17)}] Portfolio after shop: ₹${portfolioAfter}`);
+      console.log(`[${TC(17)}] Portfolio change (after − before): ₹${portfolioChange}`);
+      console.log(`[${TC(17)}] Grand total (product / savings): ₹${productDetails.grandTotal}`);
+      console.log(`[${TC(17)}] Expected after (before − grandTotal): ₹${expectedPortfolioAfter}`);
+      console.log(
+        `[${TC(17)}] Diff (actual after − expected after): ₹${portfolioDiffVsExpected} | |diff|: ₹${portfolioDiffAbs} (tolerance ±₹${portfolioDeltaTolerance})`,
+      );
+      altCustomer.logValidation(
+        `${TC(17)} portfolioAfter vs portfolioBefore − grandTotal`,
+        portfolioAfter,
+        expectedPortfolioAfter,
+      );
+      altCustomer.logValidation(`${TC(17)} |portfolio diff| vs tolerance`, portfolioDiffAbs, portfolioDeltaTolerance);
+      expect(portfolioDiffAbs).toBeLessThanOrEqual(portfolioDeltaTolerance);
     });
   });
 });

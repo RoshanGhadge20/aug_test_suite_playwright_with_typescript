@@ -20,6 +20,13 @@ export type ShopProductDetails = {
 };
 
 export class ShopPage extends BasePage {
+  /** PDP / accordion waits for getProductDetails (keep below global 15s action timeout). */
+  private static readonly pdpHeadingTimeoutMs = 8_000;
+  private static readonly accordionControlTimeoutMs = 5_000;
+  private static readonly accordionPanelTimeoutMs = 5_000;
+  private static readonly panelFieldProbeMs = 800;
+  private static readonly emiBannerProbeMs = 1_500;
+  private static readonly skuValuePollMs = 1_500;
   private readonly goldCoinCheckbox: Locator;
   private readonly priceRange100To20000Radio: Locator;
   private readonly resultsText: Locator;
@@ -46,16 +53,18 @@ export class ShopPage extends BasePage {
     super(page);
     this.goldCoinCheckbox = page
       .getByText('Gold Coin', { exact: true })
-      .locator('xpath=following-sibling::*[1]');
+      .locator('xpath=following-sibling::*[1]')
+      .first();
     this.priceRange100To20000Radio = page
       .getByText('₹100 - ₹20000', { exact: true })
-      .locator('xpath=preceding-sibling::*[1]');
+      .locator('xpath=preceding-sibling::*[1]')
+      .first();
     this.resultsText = page.getByText(/\d+\s+results/i).first();
     this.goldCoinHeading = page.getByRole('heading', { name: 'Gold Coin', level: 2, exact: true });
     this.goldCoinProductGrid = this.goldCoinHeading.locator(
       'xpath=parent::*/parent::*/following-sibling::*[1]',
     );
-    this.productImages = this.goldCoinProductGrid.locator('img[alt]');
+    this.productImages = this.goldCoinProductGrid.locator('img[alt]').or(page.locator('figure img[alt]'));
     this.productNameHeading = page.locator('h2.line-clamp-2').first();
     this.productPrice = page.locator('div.font-semibold').filter({ hasText: /^₹/ }).first();
     this.mrpNote = page.getByText('MRP inclusive of all taxes');
@@ -164,8 +173,39 @@ export class ShopPage extends BasePage {
   async clickPriceRangeRadio(): Promise<void> {
     await this.scrollPageUp();
     await this.priceRange100To20000Radio.click();
-    await this.page.waitForTimeout(1_000);
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
     await this.resultsText.waitFor({ state: 'visible', timeout: 10_000 });
+  }
+
+  /** Scroll listing and collect unique product `alt` names (lazy-loaded grid). */
+  private async collectAllProductNames(): Promise<string[]> {
+    const names = new Set<string>();
+    let stagnantRounds = 0;
+
+    for (let round = 0; round < 50 && stagnantRounds < 6; round += 1) {
+      const batch = await this.productImages.evaluateAll((imgs) =>
+        imgs.map((img) => img.getAttribute('alt')?.trim() ?? '').filter((alt) => alt.length > 0),
+      );
+      const before = names.size;
+      for (const name of batch) {
+        names.add(name);
+      }
+      stagnantRounds = names.size === before ? stagnantRounds + 1 : 0;
+
+      await this.goldCoinProductGrid
+        .evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        })
+        .catch(() => {});
+      await this.productImages
+        .last()
+        .scrollIntoViewIfNeeded()
+        .catch(() => {});
+      await this.page.mouse.wheel(0, 800);
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+    }
+
+    return [...names];
   }
 
   async scrollDownAndGetProducts(): Promise<{ count: number; names: string[] }> {
@@ -175,47 +215,64 @@ export class ShopPage extends BasePage {
     const countMatch = resultsLabel.match(/(\d+)\s+results/i);
     const count = countMatch ? Number(countMatch[1]) : 0;
 
-    const imageCount = await this.productImages.count();
-    const names: string[] = [];
-    for (let i = 0; i < imageCount; i++) {
-      const alt = await this.productImages.nth(i).getAttribute('alt');
-      if (alt?.trim()) names.push(alt.trim());
-    }
+    const names = await this.collectAllProductNames();
 
     return { count, names };
   }
 
   async selectProduct(productName: string): Promise<void> {
-    const img = this.productImage(productName);
-    await img.scrollIntoViewIfNeeded();
-    await img.click();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const img = this.productImage(productName);
+      try {
+        await img.scrollIntoViewIfNeeded();
+        await img.click();
+        break;
+      } catch (error) {
+        if (attempt === 2) {
+          throw error;
+        }
+      }
+    }
+    await this.productNameHeading.waitFor({ state: 'visible', timeout: ShopPage.pdpHeadingTimeoutMs });
   }
 
   async expandProductProperties(): Promise<void> {
     await this.expandAccordion(this.productPropertiesAccordion);
+    await this.productPropertiesPanel.waitFor({ state: 'visible', timeout: ShopPage.accordionPanelTimeoutMs });
+    await this.productPropertiesPanel
+      .getByRole('heading', { name: 'Metal Type', level: 4, exact: true })
+      .first()
+      .waitFor({ state: 'visible', timeout: ShopPage.accordionPanelTimeoutMs });
+
     const skuLabel = this.productPropertiesPanel
       .getByRole('heading', { name: 'SKU', level: 4, exact: true })
       .first();
-    await skuLabel.waitFor({ state: 'visible', timeout: 10_000 });
-    // PDP often renders the label before the value (span/p, not always a second h4).
-    const skuRow = skuLabel.locator('xpath=parent::*');
-    try {
-      await expect
-        .poll(async () => ((await skuRow.textContent()) ?? '').replace(/\s+/g, ' ').trim(), {
-          timeout: 4_000,
-        })
-        .not.toMatch(/^SKU\s*:?\s*$/i);
-    } catch {
-      // Some PDPs omit SKU; panelValue will return '' and step 13 can still assert order detail.
+    if (await skuLabel.isVisible({ timeout: ShopPage.panelFieldProbeMs }).catch(() => false)) {
+      const skuRow = skuLabel.locator('xpath=parent::*');
+      try {
+        await expect
+          .poll(async () => ((await skuRow.textContent()) ?? '').replace(/\s+/g, ' ').trim(), {
+            timeout: ShopPage.skuValuePollMs,
+            intervals: [100, 200, 300],
+          })
+          .not.toMatch(/^SKU\s*:?\s*$/i);
+      } catch {
+        // Some PDPs omit SKU; panelValue may still read value from row text.
+      }
     }
   }
 
   async expandPriceBreakdown(): Promise<void> {
     await this.expandAccordion(this.priceBreakdownAccordion);
+    await this.priceBreakdownPanel.waitFor({ state: 'visible', timeout: ShopPage.accordionPanelTimeoutMs });
+    await this.priceBreakdownPanel
+      .getByRole('heading', { name: 'Grand Total', level: 4, exact: true })
+      .first()
+      .waitFor({ state: 'visible', timeout: ShopPage.accordionPanelTimeoutMs });
   }
 
   async getProductDetails(): Promise<ShopProductDetails> {
-    await this.productNameHeading.waitFor({ state: 'visible', timeout: 15_000 });
+    await this.productNameHeading.waitFor({ state: 'visible', timeout: ShopPage.pdpHeadingTimeoutMs });
     await this.expandProductProperties();
     await this.expandPriceBreakdown();
 
@@ -255,7 +312,8 @@ export class ShopPage extends BasePage {
         if (attempt >= 2) {
           throw new Error('Cart page did not open after clicking Buy Now (2 attempts)');
         }
-        await this.page.waitForTimeout(1_000);
+        await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+        await expect(this.buyNowButton).toBeEnabled({ timeout: 5_000 });
         await this.scrollToBuyNow();
       }
     }
@@ -285,7 +343,8 @@ export class ShopPage extends BasePage {
         if (attempt >= 2) {
           throw new Error('EMI plan screen did not open after clicking Buy with EMI (2 attempts)');
         }
-        await this.page.waitForTimeout(1_000);
+        await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+        await expect(this.buyWithEmiButton).toBeEnabled({ timeout: 5_000 });
         await this.scrollToBuyWithEmi();
       }
     }
@@ -310,7 +369,7 @@ export class ShopPage extends BasePage {
     await this.page.getByText(/Product added to the cart/i).waitFor({ state: 'visible', timeout: 15_000 });
   }
 
-  /** Gold Coin + ₹100–₹20000 filters; re-applies if listing still shows many results. */
+  /** Gold Coin + ₹100–₹20000 filters (main flow; single apply — avoid toggling Gold Coin off on retry). */
   async applyListingFilters(): Promise<void> {
     await this.scrollPageUp();
     await this.resultsText.waitFor({ state: 'visible', timeout: 15_000 });
@@ -319,15 +378,14 @@ export class ShopPage extends BasePage {
       const match = label.match(/(\d+)\s+results/i);
       return match ? Number(match[1]) : 999;
     };
-    let count = await readCount();
+    const count = await readCount();
     if (count > 30) {
       await this.clickGoldCoinCheckbox();
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
       await this.clickPriceRangeRadio();
-      count = await readCount();
-    }
-    if (count > 30) {
-      await this.clickGoldCoinCheckbox();
-      await this.clickPriceRangeRadio();
+      await expect
+        .poll(readCount, { timeout: 20_000, intervals: [300, 500, 1000, 2000] })
+        .toBeLessThanOrEqual(30);
     }
   }
 
@@ -348,7 +406,7 @@ export class ShopPage extends BasePage {
   }
 
   private async expandAccordion(button: Locator): Promise<void> {
-    await button.waitFor({ state: 'visible', timeout: 10_000 });
+    await button.waitFor({ state: 'visible', timeout: ShopPage.accordionControlTimeoutMs });
     if ((await button.getAttribute('aria-expanded')) !== 'true') {
       await button.click();
     }
@@ -371,7 +429,7 @@ export class ShopPage extends BasePage {
     const labelHeading = panel
       .getByRole('heading', { name: label, level: 4, exact: true })
       .first();
-    if (!(await labelHeading.isVisible({ timeout: 2_000 }).catch(() => false))) {
+    if (!(await labelHeading.isVisible({ timeout: ShopPage.panelFieldProbeMs }).catch(() => false))) {
       return '';
     }
 
@@ -404,7 +462,7 @@ export class ShopPage extends BasePage {
 
   /** EMI strip is not shown on every PDP (e.g. some coin SKUs); return empty string when absent. */
   private async readEmiBannerText(): Promise<string> {
-    const visible = await this.emiBanner.isVisible({ timeout: 3_000 }).catch(() => false);
+    const visible = await this.emiBanner.isVisible({ timeout: ShopPage.emiBannerProbeMs }).catch(() => false);
     if (!visible) {
       return '';
     }

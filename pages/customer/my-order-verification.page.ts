@@ -98,7 +98,41 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   private shopInvoiceButton(): Locator {
-    return this.page.getByRole('button', { name: /Invoice/i }).first();
+    return this.page
+      .locator('p-button button, button, a')
+      .filter({ hasText: /^invoice$/i })
+      .or(this.page.getByRole('button', { name: /^invoice$/i }))
+      .first();
+  }
+
+  /** Invoice control inside Address Details block (avoids unrelated Invoice matches). */
+  private shopInvoiceButtonInAddressSection(): Locator {
+    const section = this.page.locator('div').filter({ has: this.addressDetailsHeading() });
+    return section
+      .locator('p-button button, button, a')
+      .filter({ hasText: /^invoice$/i })
+      .or(section.getByRole('button', { name: /^invoice$/i }))
+      .first();
+  }
+
+  private async clickShopInvoiceButton(): Promise<void> {
+    await this.scrollToShopInvoiceSection();
+    const candidates = [this.shopInvoiceButtonInAddressSection(), this.shopInvoiceButton()];
+    for (const btn of candidates) {
+      const visible = await btn.isVisible({ timeout: 3_000 }).catch(() => false);
+      if (!visible) {
+        continue;
+      }
+      await btn.scrollIntoViewIfNeeded();
+      await expect(btn).toBeEnabled({ timeout: 8_000 });
+      try {
+        await btn.click({ timeout: 8_000 });
+      } catch {
+        await btn.click({ force: true });
+      }
+      return;
+    }
+    throw new Error('Invoice button not found or not clickable on order detail.');
   }
 
   async clickProfileName(text: string): Promise<void> {
@@ -114,10 +148,388 @@ export class MyOrderVerificationPage extends BasePage {
     await link.click();
   }
 
-  /** Milliseconds to wait after clicking Sell so the list can refresh before assertions. */
-  private static readonly settleAfterSellClickMs = 1_500;
-  /** Milliseconds to wait after clicking Shop so shop order cards can render. */
-  private static readonly settleAfterShopClickMs = 5_000;
+  /** Shop-tab rows — legacy ochre cards or compact list row (heading + Order Id + View Detail). */
+  private shopOrderListRows(): Locator {
+    const listRow = this.page
+      .locator('div')
+      .filter({ has: this.page.getByRole('heading', { level: 3 }) })
+      .filter({ has: this.page.getByText(/^Order Id:/i) })
+      .filter({ has: this.page.getByRole('button', { name: /^view detail$/i }) });
+    return this.page.locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre').or(listRow);
+  }
+
+  private shopOrderCards(): Locator {
+    return this.shopOrderListRows();
+  }
+
+  /** True when a shop-tab card exposes the given order id (label sibling, not one text node). */
+  private async isShopOrderIdOnList(orderId: string): Promise<boolean> {
+    const target = orderId.replace(/\D/g, '');
+    if (!target) {
+      return false;
+    }
+
+    for (let scroll = 0; scroll < 18; scroll += 1) {
+      const cards = this.shopOrderCards();
+      const count = await cards.count().catch(() => 0);
+      for (let i = 0; i < count; i += 1) {
+        const card = cards.nth(i);
+        if (!(await card.isVisible({ timeout: 250 }).catch(() => false))) {
+          continue;
+        }
+        const idText = (await this.readShopLabel(card, 'Order Id').catch(() => '')).replace(/\D/g, '');
+        if (idText === target) {
+          return true;
+        }
+      }
+
+      const orderIdVisible = await this.page
+        .getByText(new RegExp(`Order Id:?\\s*${orderId}`, 'i'))
+        .first()
+        .isVisible({ timeout: 300 })
+        .catch(() => false);
+      if (orderIdVisible) {
+        return true;
+      }
+
+      await this.scrollShopOrdersListDown();
+    }
+
+    return false;
+  }
+
+  /** Wait until My Orders list has loaded (shop cards, sell rows, or empty state). */
+  private async waitForMyOrdersListReady(timeoutMs = 15_000): Promise<void> {
+    await Promise.race([
+      this.shopOrderCards().first().waitFor({ state: 'visible', timeout: timeoutMs }),
+      this.orderRows.first().waitFor({ state: 'visible', timeout: timeoutMs }),
+      this.noRecordLabel.waitFor({ state: 'visible', timeout: timeoutMs }),
+    ]).catch(() => {});
+  }
+
+  /** SHOP list rendered — not BUY-tab Transaction ID rows. */
+  private async isShopTabListRendered(): Promise<boolean> {
+    const buyListVisible = await this.page
+      .getByText(/^Transaction ID$/i)
+      .first()
+      .isVisible({ timeout: 400 })
+      .catch(() => false);
+    if (buyListVisible) {
+      return false;
+    }
+
+    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+      return true;
+    }
+
+    const shopSignals = await Promise.all([
+      this.shopOrderCards()
+        .first()
+        .isVisible({ timeout: 400 })
+        .catch(() => false),
+      this.page
+        .getByText(/^ORDERED ON/i)
+        .first()
+        .isVisible({ timeout: 400 })
+        .catch(() => false),
+      this.page
+        .getByRole('button', { name: /^view detail$/i })
+        .first()
+        .isVisible({ timeout: 400 })
+        .catch(() => false),
+    ]);
+    return shopSignals.some(Boolean);
+  }
+
+  /** True when shop rows have real data (not skeleton placeholders with empty Order Id / heading). */
+  private async isShopOrderListHydrated(): Promise<boolean> {
+    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+      return true;
+    }
+
+    const orderIdWithValue = await this.page
+      .getByText(/Order Id:\s*\d{3,}/i)
+      .first()
+      .isVisible({ timeout: 400 })
+      .catch(() => false);
+    if (orderIdWithValue) {
+      return true;
+    }
+
+    const cards = this.shopOrderCards();
+    const count = Math.min(await cards.count().catch(() => 0), 5);
+    for (let i = 0; i < count; i += 1) {
+      const card = cards.nth(i);
+      if (!(await card.isVisible({ timeout: 300 }).catch(() => false))) {
+        continue;
+      }
+      const heading = (await this.text(card.getByRole('heading', { level: 3 }).first())).trim();
+      const idText = (await this.readShopLabel(card, 'Order Id').catch(() => '')).replace(/\D/g, '');
+      if (heading.length > 0 && idText.length >= 3) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Wait until SHOP rows show product name + order id (not empty skeleton placeholders). */
+  private async waitForShopOrderListHydrated(timeoutMs = 45_000): Promise<void> {
+    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    let lastTabClickMs = 0;
+
+    await expect
+      .poll(
+        async () => {
+          if (!(await this.isShopTabListRendered())) {
+            return false;
+          }
+          if (await this.isShopOrderListHydrated()) {
+            return true;
+          }
+
+          const now = Date.now();
+          if (lastTabClickMs === 0 || now - lastTabClickMs >= 10_000) {
+            lastTabClickMs = now;
+            await shopTab.click({ force: true }).catch(() => {});
+            await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+          }
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] },
+      )
+      .toBeTruthy();
+  }
+
+  /** Scroll SHOP list down to load lazy-loaded order rows. */
+  private async scrollShopOrdersListDown(): Promise<void> {
+    const firstCard = this.shopOrderCards().first();
+    if (await firstCard.isVisible({ timeout: 500 }).catch(() => false)) {
+      await firstCard.scrollIntoViewIfNeeded().catch(() => {});
+    }
+    await this.shopOrderCards()
+      .last()
+      .scrollIntoViewIfNeeded()
+      .catch(() => {});
+    await this.page.mouse.wheel(0, 450);
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
+  }
+
+  /**
+   * After SHOP tab click — wait for tab active, blockUI, shop API, and SHOP list DOM (not BUY rows).
+   */
+  private async waitForShopTabAfterClick(options: {
+    shopTab: Locator;
+    shopListResponse: Promise<unknown>;
+    timeoutMs: number;
+    listValidationOnly?: boolean;
+  }): Promise<void> {
+    const { shopTab, shopListResponse, timeoutMs, listValidationOnly } = options;
+
+    if (!listValidationOnly) {
+      await expect
+        .poll(async () => shopTab.isChecked().catch(() => false), {
+          timeout: 15_000,
+          intervals: [200, 500, 1000],
+        })
+        .toBeTruthy();
+    } else {
+      await expect
+        .poll(
+          async () => {
+            const checked = await shopTab.isChecked().catch(() => false);
+            const ariaChecked = await shopTab.getAttribute('aria-checked').catch(() => null);
+            return checked || ariaChecked === 'true';
+          },
+          { timeout: 15_000, intervals: [200, 500, 1000] },
+        )
+        .toBeTruthy();
+    }
+
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: timeoutMs });
+    await shopListResponse;
+    await this.waitForMyOrdersListReady(15_000);
+
+    await expect
+      .poll(async () => this.isShopTabListRendered(), {
+        timeout: timeoutMs,
+        intervals: [300, 500, 1000, 2000],
+      })
+      .toBeTruthy();
+  }
+
+  /**
+   * After SHOP list is visible, wait until order id appears (re-clicks SHOP every 12s to refresh).
+   */
+  async waitForShopOrderIdOnList(
+    orderId: string,
+    options?: { productName?: string; timeoutMs?: number },
+  ): Promise<void> {
+    const timeoutMs = options?.timeoutMs ?? 90_000;
+    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    let lastRefreshMs = 0;
+    let lastReloadMs = 0;
+
+    const refreshShopList = async (): Promise<void> => {
+      const refreshResponse = this.page
+        .waitForResponse(
+          (r) =>
+            r.ok() &&
+            (r.request().method() === 'GET' || r.request().method() === 'POST') &&
+            /shop|my-orders|myorders|order-list|customer-order/i.test(r.url()),
+          { timeout: 20_000 },
+        )
+        .catch(() => null);
+      await shopTab.click({ force: true }).catch(() => {});
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+      await refreshResponse;
+      await this.waitForMyOrdersListReady(10_000);
+      await expect
+        .poll(async () => this.isShopTabListRendered(), {
+          timeout: 15_000,
+          intervals: [300, 500, 1000],
+        })
+        .toBeTruthy()
+        .catch(() => {});
+      await this.waitForShopOrderListHydrated(30_000).catch(() => {});
+      await this.scrollShopOrdersListDown();
+    };
+
+    await expect
+      .poll(
+        async () => {
+          if (!(await this.isShopOrderListHydrated())) {
+            return false;
+          }
+
+          if (await this.isShopOrderIdOnList(orderId)) {
+            return true;
+          }
+
+          if (options?.productName) {
+            const card = this.shopOrderCard(options.productName);
+            if (await card.isVisible({ timeout: 500 }).catch(() => false)) {
+              const idText = (await this.readShopLabel(card, 'Order Id').catch(() => '')).replace(/\D/g, '');
+              if (idText === orderId.replace(/\D/g, '')) {
+                return true;
+              }
+            }
+          }
+
+          const now = Date.now();
+          if (lastReloadMs === 0) {
+            lastReloadMs = now;
+            lastRefreshMs = now;
+            if (!(await this.isShopOrderListHydrated())) {
+              await refreshShopList();
+            }
+          } else if (now - lastReloadMs >= 20_000) {
+            lastReloadMs = now;
+            lastRefreshMs = now;
+            await this.goToMyOrders();
+            await this.page.evaluate('window.scrollTo(0, 0)').catch(() => {});
+            await refreshShopList();
+          } else if (now - lastRefreshMs >= 8_000) {
+            lastRefreshMs = now;
+            await refreshShopList();
+          }
+
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 1500, 2000, 3000] },
+      )
+      .toBeTruthy();
+  }
+
+  /**
+   * After SHOP tab is selected, wait for shop API/UI (blockUI gone + shop cards or empty state).
+   * Ignores BUY-tab rows (Transaction ID / Narration) still visible while shop data loads.
+   */
+  private async waitForShopTabDataLoaded(options?: {
+    productName?: string;
+    orderId?: string;
+    timeoutMs?: number;
+    /** TC004 — wait for shop list rows without requiring SHOP radio isChecked. */
+    requireTabChecked?: boolean;
+  }): Promise<void> {
+    const timeoutMs = options?.timeoutMs ?? 45_000;
+    const requireTabChecked = options?.requireTabChecked ?? true;
+    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    const productCard = options?.productName ? this.shopOrderCard(options.productName) : null;
+    const orderCard = options?.orderId ? this.shopOrderCardByOrderId(options.orderId) : null;
+
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: timeoutMs }).catch(() => {});
+
+    await expect
+      .poll(
+        async () => {
+          if (requireTabChecked && !(await shopTab.isChecked().catch(() => false))) {
+            return false;
+          }
+
+          if (options?.orderId) {
+            if (await this.isShopOrderIdOnList(options.orderId)) {
+              return true;
+            }
+            const orderIdVisible = await this.page
+              .getByText(new RegExp(`Order Id:?\\s*${options.orderId}`, 'i'))
+              .first()
+              .isVisible({ timeout: 500 })
+              .catch(() => false);
+            if (orderIdVisible) {
+              return true;
+            }
+          }
+
+          if (orderCard) {
+            return orderCard.isVisible({ timeout: 500 }).catch(() => false);
+          }
+
+          if (productCard) {
+            return productCard.isVisible({ timeout: 500 }).catch(() => false);
+          }
+
+          const shopCard = await this.shopOrderCards()
+            .first()
+            .isVisible({ timeout: 500 })
+            .catch(() => false);
+          if (shopCard) {
+            return true;
+          }
+
+          const orderedOn = await this.page
+            .getByText(/^ORDERED ON/i)
+            .first()
+            .isVisible({ timeout: 500 })
+            .catch(() => false);
+          if (orderedOn) {
+            return true;
+          }
+
+          const viewDetail = await this.page
+            .getByRole('button', { name: /view detail/i })
+            .first()
+            .isVisible({ timeout: 500 })
+            .catch(() => false);
+          if (viewDetail) {
+            return true;
+          }
+
+          if (await this.noRecordLabel.isVisible({ timeout: 500 }).catch(() => false)) {
+            return true;
+          }
+
+          // BUY tab still showing — shop list not ready yet.
+          const buyListVisible = await this.page
+            .getByText(/^Transaction ID$/i)
+            .first()
+            .isVisible({ timeout: 300 })
+            .catch(() => false);
+          return !buyListVisible;
+        },
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000] },
+      )
+      .toBeTruthy();
+  }
   private static readonly invoicePdfUrlPattern =
     /emi-backend-api\.gfau\.augmont\.com\/.*(?:finalInvoice|proformaContract).*\.pdf/i;
 
@@ -131,24 +543,31 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   private async waitForInvoiceViewerPage(timeoutMs = 30_000): Promise<Page | null> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      for (const tab of this.page.context().pages()) {
-        if (tab.isClosed()) {
-          continue;
-        }
-        const hasPassword = await tab
-          .locator('input[type="password"]')
-          .first()
-          .isVisible({ timeout: 800 })
-          .catch(() => false);
-        if (hasPassword) {
-          return tab;
-        }
-      }
-      await this.page.waitForTimeout(500);
-    }
-    return null;
+    let found: Page | null = null;
+    await expect
+      .poll(
+        async () => {
+          for (const tab of this.page.context().pages()) {
+            if (tab.isClosed()) {
+              continue;
+            }
+            const hasPassword = await tab
+              .locator('input[type="password"]')
+              .first()
+              .isVisible({ timeout: 200 })
+              .catch(() => false);
+            if (hasPassword) {
+              found = tab;
+              return true;
+            }
+          }
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [100, 250, 500] },
+      )
+      .toBeTruthy()
+      .catch(() => {});
+    return found;
   }
 
   /**
@@ -161,15 +580,102 @@ export class MyOrderVerificationPage extends BasePage {
         : await locator.isVisible().catch(() => false);
     if (!visible) return false;
     await locator.click({ force: true });
-    await this.page.waitForTimeout(MyOrderVerificationPage.settleAfterSellClickMs);
+    await this.waitForMyOrdersListReady(10_000);
     return true;
   }
 
-  async clickShopTab(): Promise<void> {
+  /** TC001 / TC004 — single product on SHOP tab (main-branch click + list hydrate). */
+  async clickShopTabSingleOrder(): Promise<void> {
+    await this.clickShopTabAndWaitForList(20_000);
+  }
+
+  /** TC002 / TC003 — multiple products; same tab settle, rows read by exact product name. */
+  async clickShopTabMultiProduct(): Promise<void> {
+    await this.clickShopTabAndWaitForList(20_000);
+  }
+
+  private async clickShopTabAndWaitForList(hydrateTimeoutMs = 20_000): Promise<void> {
     const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
     await shopTab.scrollIntoViewIfNeeded();
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
     await shopTab.click({ force: true });
-    await this.page.waitForTimeout(MyOrderVerificationPage.settleAfterShopClickMs);
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.waitForShopOrderListHydrated(hydrateTimeoutMs);
+  }
+
+  /** Scroll SHOP list until the product row is in view. */
+  async waitForShopProductOnList(productName: string, timeoutMs = 60_000): Promise<void> {
+    await this.resolveShopOrderCardIndex(productName, timeoutMs);
+  }
+
+  /** Read shop-tab list row by order id (preferred when multiple products were ordered). */
+  async getShopOrderListDetailsByOrderId(
+    orderId: string,
+    options?: { skipTabLoadWait?: boolean },
+  ): Promise<MyOrderShopCardDetails> {
+    if (!options?.skipTabLoadWait) {
+      await this.waitForShopOrderIdOnList(orderId);
+    }
+    const card = this.shopOrderCardByOrderId(orderId);
+    await card.scrollIntoViewIfNeeded();
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+
+    let orderedOn = '';
+    try {
+      orderedOn = await this.readShopOrderDate(card);
+    } catch {
+      orderedOn = '';
+    }
+
+    return {
+      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
+      orderId: await this.readShopLabel(card, 'Order Id'),
+      status: await this.text(card.locator('span.rounded-full').first()),
+      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
+      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
+      orderedOn,
+    };
+  }
+
+  /** TC004 — read shop-tab card from list only (no View Detail). */
+  async getShopOrderListDetails(options: {
+    productName: string;
+    orderId?: string;
+    /** Set when {@link clickShopTab} already waited for shop list data. */
+    skipTabLoadWait?: boolean;
+  }): Promise<MyOrderShopCardDetails> {
+    if (options.orderId) {
+      return this.getShopOrderListDetailsByOrderId(options.orderId, {
+        skipTabLoadWait: options.skipTabLoadWait,
+      });
+    }
+
+    if (!options.skipTabLoadWait) {
+      await this.waitForShopTabDataLoaded({
+        productName: options.productName,
+        timeoutMs: 45_000,
+        requireTabChecked: false,
+      });
+    }
+    const card = this.shopOrderCards().nth(await this.resolveShopOrderCardIndex(options.productName));
+    await card.scrollIntoViewIfNeeded();
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+
+    let orderedOn = '';
+    try {
+      orderedOn = await this.readShopOrderDate(card);
+    } catch {
+      orderedOn = '';
+    }
+
+    return {
+      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
+      orderId: await this.readShopLabel(card, 'Order Id'),
+      status: await this.text(card.locator('span.rounded-full').first()),
+      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
+      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
+      orderedOn,
+    };
   }
 
   async clickSellTab(): Promise<void> {
@@ -207,8 +713,8 @@ export class MyOrderVerificationPage extends BasePage {
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       await this.page.goto('/my-orders', { waitUntil: 'domcontentloaded' });
-      await this.page.waitForLoadState('networkidle').catch(() => {});
-      await this.page.waitForTimeout(attempt === 1 ? 1_200 : 2_000);
+      await this.page.waitForURL(/\/my-orders/i, { timeout: 12_000 }).catch(() => {});
+      await this.waitForMyOrdersListReady(12_000);
 
       if (onAuthenticatedMyOrders()) {
         return;
@@ -216,8 +722,7 @@ export class MyOrderVerificationPage extends BasePage {
 
       if (/\/login/i.test(this.page.url()) && attempt < 2) {
         await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-        await this.page.waitForLoadState('networkidle').catch(() => {});
-        await this.page.waitForTimeout(2_000);
+        await this.page.waitForURL(/\/dashboard/i, { timeout: 10_000 }).catch(() => {});
         continue;
       }
 
@@ -233,10 +738,23 @@ export class MyOrderVerificationPage extends BasePage {
     await this.page.waitForURL(/my-orders/i, { timeout: 20_000 });
   }
 
-  async getShopOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
-    const card = this.shopOrderCard(productName);
-    await card.waitFor({ state: 'visible', timeout: 45_000 });
+  async getShopOrderDetails(
+    productName: string,
+    _options?: { skipTabLoadWait?: boolean },
+  ): Promise<MyOrderShopCardDetails> {
+    const card = await this.resolveShopOrderCard(productName);
+    return this.readShopOrderCardDetails(card);
+  }
 
+  private async resolveShopOrderCard(productName: string, timeoutMs = 60_000): Promise<Locator> {
+    const index = await this.resolveShopOrderCardIndex(productName, timeoutMs);
+    const card = this.shopOrderCards().nth(index);
+    await card.scrollIntoViewIfNeeded();
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    return card;
+  }
+
+  private async readShopOrderCardDetails(card: Locator): Promise<MyOrderShopCardDetails> {
     return {
       productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
       orderId: await this.readShopLabel(card, 'Order Id'),
@@ -249,8 +767,7 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** TC003 EMI shop tab row — no Quantity label; quantity defaults to 1. */
   async getShopEmiOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
-    const card = this.shopOrderCard(productName);
-    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    const card = await this.resolveShopOrderCard(productName);
 
     const quantityLabel = card.getByText(/^Quantity\s*:?/i).first();
     const hasQuantity = await quantityLabel.isVisible({ timeout: 2_000 }).catch(() => false);
@@ -272,26 +789,42 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   async getShopOrderDate(productName: string): Promise<string> {
-    const card = this.shopOrderCard(productName);
-    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    const card = await this.resolveShopOrderCard(productName);
     return this.readShopOrderDate(card);
   }
 
-  async openShopOrderDetail(productName: string): Promise<void> {
+  /** TC001 / TC004 — open View Detail for the single shop order row. */
+  async openShopOrderDetailSingle(productName: string): Promise<void> {
+    await this.openShopOrderDetailForProduct(productName, 'single');
+  }
+
+  /** TC002 / TC003 — open View Detail for one of several shop order rows. */
+  async openShopOrderDetailMulti(productName: string): Promise<void> {
+    await this.openShopOrderDetailForProduct(productName, 'multi');
+  }
+
+  private async openShopOrderDetailForProduct(
+    productName: string,
+    flow: 'single' | 'multi',
+  ): Promise<void> {
     const u = this.page.url();
     if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
       await this.goToMyOrders();
-      await this.clickShopTab();
+      if (flow === 'single') {
+        await this.clickShopTabSingleOrder();
+      } else {
+        await this.clickShopTabMultiProduct();
+      }
     }
 
-    const card = this.shopOrderCard(productName);
-    await card.scrollIntoViewIfNeeded();
-    await card.getByRole('button', { name: /view detail/i }).click();
+    const card = await this.resolveShopOrderCard(productName);
+    await card.getByRole('button', { name: /view detail/i }).first().click();
     const panel = this.shopOrderDetailPanel();
     await panel.waitFor({ state: 'visible', timeout: 15_000 });
     await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(productName, {
       timeout: 20_000,
     });
+    await this.scrollToShopInvoiceSection();
   }
 
   /** TC003 EMI Booked row — click Pay Now on the shop-tab card to open the EMI order summary. */
@@ -299,11 +832,10 @@ export class MyOrderVerificationPage extends BasePage {
     const u = this.page.url();
     if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
       await this.goToMyOrders();
-      await this.clickShopTab();
+      await this.clickShopTabMultiProduct();
     }
 
-    const card = this.shopOrderCard(productName);
-    await card.scrollIntoViewIfNeeded();
+    const card = await this.resolveShopOrderCard(productName);
     await card.getByRole('button', { name: /^pay now$/i }).click();
 
     const panel = this.shopEmiOrderDetailPanel();
@@ -339,10 +871,22 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   /** Navigate to shop order detail before opening the invoice PDF. */
-  async prepareShopOrderDetailForInvoice(productName: string): Promise<void> {
+  async prepareShopOrderDetailForInvoice(
+    productName: string,
+    flow: 'single' | 'multi' = 'single',
+  ): Promise<void> {
+    if (await this.isShopOrderDetailReadyForInvoiceWithProduct(productName)) {
+      await this.scrollToShopInvoiceSection();
+      return;
+    }
     await this.goToMyOrders();
-    await this.clickShopTab();
-    await this.openShopOrderDetail(productName);
+    if (flow === 'single') {
+      await this.clickShopTabSingleOrder();
+      await this.openShopOrderDetailSingle(productName);
+    } else {
+      await this.clickShopTabMultiProduct();
+      await this.openShopOrderDetailMulti(productName);
+    }
     await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
   }
 
@@ -352,12 +896,17 @@ export class MyOrderVerificationPage extends BasePage {
    */
   async openShopEmiOrderDetailForInvoice(productName: string): Promise<void> {
     const u = this.page.url();
-    if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
+    const currentHeading = await this.resolveShopOrderDetailProductHeading();
+    const needMyOrders =
+      !/\/my-orders/i.test(u) ||
+      /\/shop-new\/order\//i.test(u) ||
+      (currentHeading.length > 0 && !currentHeading.includes(productName));
+    if (needMyOrders) {
       await this.goToMyOrders();
-      await this.clickShopTab();
+      await this.clickShopTabMultiProduct();
     }
 
-    const card = this.shopOrderCard(productName);
+    const card = await this.resolveShopOrderCard(productName);
     await card.scrollIntoViewIfNeeded();
 
     const viewDetailBtn = card.getByRole('button', { name: /view detail/i });
@@ -392,19 +941,26 @@ export class MyOrderVerificationPage extends BasePage {
    */
   async ensureShopOrderDetailForInvoice(
     productName: string,
-    options?: { requireMatchingProduct?: boolean },
+    options?: {
+      requireMatchingProduct?: boolean;
+      /** TC001/TC004 = single; TC002/TC003 = multi (default from requireMatchingProduct). */
+      flow?: 'single' | 'multi';
+    },
   ): Promise<void> {
+    const flow = options?.flow ?? (options?.requireMatchingProduct ? 'multi' : 'single');
     const requireProduct = options?.requireMatchingProduct === true;
     if (requireProduct) {
       if (await this.isShopOrderDetailReadyForInvoiceWithProduct(productName)) {
-        this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
+        this.logShopInvoice(0, 'Order detail already open — scroll to Invoice');
+        await this.scrollToShopInvoiceSection();
         return;
       }
     } else if (await this.isShopOrderDetailReadyForInvoice()) {
-      this.logShopInvoice(0, 'Order detail already open — skip My Orders navigation');
+      this.logShopInvoice(0, 'Order detail already open — scroll to Invoice');
+      await this.scrollToShopInvoiceSection();
       return;
     }
-    await this.prepareShopOrderDetailForInvoice(productName);
+    await this.prepareShopOrderDetailForInvoice(productName, flow);
   }
 
   /** TC003 EMI — same as ensureShopOrderDetailForInvoice but opens EMI invoice-ready detail. */
@@ -464,10 +1020,20 @@ export class MyOrderVerificationPage extends BasePage {
         return;
       }
       await this.page.keyboard.press('PageDown');
-      await this.page.waitForTimeout(350);
+      await expect
+        .poll(async () => addressHeading.isVisible({ timeout: 200 }).catch(() => false), {
+          timeout: 1_500,
+          intervals: [100, 200, 400],
+        })
+        .toBeTruthy()
+        .catch(() => false);
     }
     await addressHeading.waitFor({ state: 'visible', timeout: 20_000 });
     await addressHeading.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+    const invoiceBtn = this.shopInvoiceButtonInAddressSection();
+    if (await invoiceBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await invoiceBtn.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+    }
   }
 
   private resetShopInvoiceCapture(): void {
@@ -535,34 +1101,37 @@ export class MyOrderVerificationPage extends BasePage {
   /** Scroll to Address Details, click Invoice, and store the PDF tab/URL. */
   async clickShopInvoice(options?: {
     maxAttempts?: number;
-    retryDelayMs?: number;
     captureTimeoutMs?: number;
     productName?: string;
+    orderId?: string;
     /** TC003 EMI — re-open invoice-ready detail via Pay Now, not View Detail. */
     useEmiOrderDetail?: boolean;
   }): Promise<void> {
     const maxAttempts = options?.maxAttempts ?? 4;
-    const retryDelayMs = options?.retryDelayMs ?? 3_000;
     const captureTimeoutMs = options?.captureTimeoutMs ?? 12_000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       if (attempt > 1) {
-        this.logShopInvoice(
-          0,
-          `Retry ${attempt}/${maxAttempts} — refresh order detail and wait ${retryDelayMs}ms`,
-        );
+        this.logShopInvoice(0, `Retry ${attempt}/${maxAttempts} — refresh order detail`);
         this.resetShopInvoiceCapture();
         if (options?.productName && attempt === 2) {
-          if (options.useEmiOrderDetail) {
+          const detailOpen = await this.addressDetailsHeading().isVisible({ timeout: 2_000 }).catch(() => false);
+          if (detailOpen) {
+            await this.page.reload({ waitUntil: 'domcontentloaded' });
+          } else if (options.useEmiOrderDetail) {
             await this.prepareShopEmiOrderDetailForInvoice(options.productName);
           } else {
-            await this.prepareShopOrderDetailForInvoice(options.productName);
+            await this.prepareShopOrderDetailForInvoice(
+              options.productName,
+              options.useEmiOrderDetail ? 'multi' : 'single',
+            );
           }
         } else {
           await this.page.reload({ waitUntil: 'domcontentloaded' });
-          await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
         }
-        await this.page.waitForTimeout(retryDelayMs);
+        await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
+        await this.scrollToShopInvoiceSection();
+        await this.shopInvoiceButtonInAddressSection().waitFor({ state: 'visible', timeout: 15_000 });
       }
 
       try {
@@ -580,20 +1149,11 @@ export class MyOrderVerificationPage extends BasePage {
     this.logShopInvoice(1, 'Close profile menu if open');
     await this.dismissProfileMenu();
 
-    this.logShopInvoice(2, 'Scroll to Address Details heading');
-    const addressHeading = this.addressDetailsHeading();
-    await addressHeading.waitFor({ state: 'visible', timeout: 15_000 });
-    await addressHeading.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(() => {});
+    this.logShopInvoice(2, 'Scroll to Address Details and Invoice button');
+    await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
+    await this.scrollToShopInvoiceSection();
 
-    this.logShopInvoice(3, 'Find Invoice button and scroll into view');
-    const invoiceBtn = this.shopInvoiceButton();
-    await invoiceBtn.waitFor({ state: 'visible', timeout: 15_000 });
-    await invoiceBtn.scrollIntoViewIfNeeded({ timeout: 10_000 }).catch(async () => {
-      await this.page.keyboard.press('End');
-      await this.page.waitForTimeout(300);
-    });
-
-    this.logShopInvoice(4, `Click Invoice and wait up to ${captureTimeoutMs}ms for PDF`);
+    this.logShopInvoice(3, `Register PDF listener then click Invoice (wait up to ${captureTimeoutMs}ms)`);
     let networkUrl: string | null = null;
     const onResponse = async (response: Response) => {
       if (networkUrl) {
@@ -621,34 +1181,42 @@ export class MyOrderVerificationPage extends BasePage {
     };
     this.page.context().on('response', onResponse);
 
-    await invoiceBtn.click({ force: true });
+    try {
+      await this.clickShopInvoiceButton();
+    } catch (clickError) {
+      this.page.context().off('response', onResponse);
+      throw clickError;
+    }
 
-    const deadline = Date.now() + captureTimeoutMs;
+    this.logShopInvoice(4, 'Wait for invoice PDF URL');
     let pdfTab: Page | null = null;
     let viewerPage: Page | null = null;
 
-    while (Date.now() < deadline && !networkUrl) {
-      for (const tab of this.page.context().pages()) {
-        if (!tab.isClosed() && MyOrderVerificationPage.isInvoicePdfUrl(tab.url())) {
-          networkUrl = tab.url();
-          pdfTab = tab;
-          this.logShopInvoice(4, `Captured PDF URL from tab | ${networkUrl.slice(0, 120)}`);
-          break;
-        }
-      }
-      if (networkUrl) {
-        break;
-      }
-
-      viewerPage = await this.waitForInvoiceViewerPage(400);
-      if (viewerPage && MyOrderVerificationPage.isInvoicePdfUrl(viewerPage.url())) {
-        networkUrl = viewerPage.url();
-        pdfTab = viewerPage;
-        break;
-      }
-
-      await this.page.waitForTimeout(300);
-    }
+    await expect
+      .poll(
+        async () => {
+          if (networkUrl) {
+            return true;
+          }
+          for (const tab of this.page.context().pages()) {
+            if (!tab.isClosed() && MyOrderVerificationPage.isInvoicePdfUrl(tab.url())) {
+              networkUrl = tab.url();
+              pdfTab = tab;
+              this.logShopInvoice(4, `Captured PDF URL from tab | ${networkUrl.slice(0, 120)}`);
+              return true;
+            }
+          }
+          viewerPage = await this.waitForInvoiceViewerPage(250);
+          if (viewerPage && MyOrderVerificationPage.isInvoicePdfUrl(viewerPage.url())) {
+            networkUrl = viewerPage.url();
+            pdfTab = viewerPage;
+            return true;
+          }
+          return false;
+        },
+        { timeout: captureTimeoutMs, intervals: [100, 250, 500] },
+      )
+      .toBeTruthy();
 
     this.page.context().off('response', onResponse);
 
@@ -871,22 +1439,80 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   private shopOrderCard(productName: string): Locator {
-    const escaped = productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return this.page
+    const heading = this.page.getByRole('heading', { level: 3, name: productName, exact: true });
+    const listRow = this.page
+      .locator('div')
+      .filter({ has: heading })
+      .filter({ has: this.page.getByText(/^Order Id:/i) })
+      .filter({ has: this.page.getByRole('button', { name: /^view detail$/i }) });
+    const ochre = this.page
       .locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre')
-      .filter({
-        has: this.page.getByRole('heading', { level: 3, name: new RegExp(escaped, 'i') }),
-      })
+      .filter({ has: heading });
+    return ochre.or(listRow).first();
+  }
+
+  /** Find shop-tab row index by exact product heading (avoids partial regex matching wrong coin weight). */
+  private async resolveShopOrderCardIndex(productName: string, timeoutMs = 60_000): Promise<number> {
+    let foundIndex = -1;
+    await expect
+      .poll(
+        async () => {
+          const cards = this.shopOrderCards();
+          const count = await cards.count().catch(() => 0);
+          for (let i = 0; i < count; i += 1) {
+            const heading = (
+              await this.text(cards.nth(i).getByRole('heading', { level: 3 }).first())
+            ).trim();
+            if (heading === productName) {
+              foundIndex = i;
+              return true;
+            }
+          }
+          await this.scrollShopOrdersListDown();
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+      )
+      .toBeTruthy();
+
+    if (foundIndex < 0) {
+      throw new Error(`Shop order card not found for "${productName}".`);
+    }
+    return foundIndex;
+  }
+
+  private shopOrderCardByOrderId(orderId: string): Locator {
+    return this.page
+      .locator('div')
+      .filter({ has: this.page.getByText(new RegExp(`Order Id:?\\s*${orderId}`, 'i')) })
+      .filter({ has: this.page.getByRole('button', { name: /^view detail$/i }) })
+      .filter({ has: this.page.getByRole('heading', { level: 3 }) })
       .first();
   }
 
   private async readShopOrderDate(card: Locator): Promise<string> {
-    return this.text(card.locator('span').filter({ hasText: /^ORDERED ON/i }).first());
+    const inCard = card.locator('span').filter({ hasText: /^ORDERED ON/i }).first();
+    if (await inCard.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      return this.text(inCard);
+    }
+    const following = card.locator('xpath=following-sibling::*[1]').filter({ hasText: /^ORDERED ON/i }).first();
+    return this.text(following);
   }
 
   private async readShopLabel(card: Locator, label: string): Promise<string> {
     const labelCell = card.getByText(new RegExp(`^${label}\\s*:?`, 'i')).first();
-    return this.text(labelCell.locator('xpath=following-sibling::*[1]').first());
+    const sibling = labelCell.locator('xpath=following-sibling::*[1]').first();
+    let value = await this.text(sibling);
+    if (!value || !/\S/.test(value)) {
+      const rowText = ((await labelCell.locator('xpath=ancestor::*[2]').textContent()) ?? '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const match = rowText.match(new RegExp(`${label}\\s*:?\\s*([^\\n|]+)`, 'i'));
+      if (match?.[1]) {
+        value = match[1].trim();
+      }
+    }
+    return value;
   }
 
   private async text(locator: Locator): Promise<string> {
