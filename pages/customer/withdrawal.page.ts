@@ -11,6 +11,8 @@ export class WithdrawalPage extends BasePage {
   private readonly totalGoldVault: Locator;
   private readonly totalSilverVault: Locator;
   private readonly totalGold: Locator;
+  private readonly totalGoldInGramText: Locator;
+  private readonly totalGoldInRsText: Locator;
   private readonly totalSilver: Locator;
   private readonly totalInvestment: Locator;
   private readonly withdrawingValue: Locator;
@@ -60,6 +62,14 @@ export class WithdrawalPage extends BasePage {
     this.totalGold = page.locator(
       'xpath=(//div[normalize-space()="Total Gold"]/preceding-sibling::div[1])[1]',
     );
+    this.totalGoldInGramText = page
+      .locator('p.text-18.font-gilroybold')
+      .filter({ hasText: /\d+(\.\d+)?\s*gm/i })
+      .first();
+    this.totalGoldInRsText = page
+      .locator('p.text-18.font-gilroybold')
+      .filter({ hasText: /₹\s*[\d,]+(?:\.\d+)?/i })
+      .first();
 
     this.totalSilver = page.locator(
       'xpath=(//div[normalize-space()="Total Silver"]/preceding-sibling::div[1])[1]',
@@ -106,7 +116,22 @@ export class WithdrawalPage extends BasePage {
   }
 
   private convertGoldJewelleryProceedButton(): Locator {
-    return this.page
+    const newUiCardProceed = this.page
+      .locator('div[role="dialog"]')
+      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
+      .first()
+      .locator('div.group.relative')
+      .filter({
+        has: this.page.getByRole('heading', {
+          name: /Get Coins and Bars/i,
+        }),
+      })
+      .first()
+      .locator('button, span.p-button-label, [role="button"]')
+      .filter({ hasText: /^Proceed$/i })
+      .first();
+
+    const oldUiCardProceed = this.page
       .locator(
         'xpath=//div[contains(@class,"border") and contains(@class,"rounded-xl") and .//div[contains(normalize-space(),"Convert into Gold/Jewellery")]]',
       )
@@ -114,6 +139,8 @@ export class WithdrawalPage extends BasePage {
       .locator('span.p-button-label.ng-star-inserted')
       .filter({ hasText: /^Proceed$/i })
       .first();
+
+    return newUiCardProceed.or(oldUiCardProceed).first();
   }
 
   private convertSilverJewelleryProceedButton(): Locator {
@@ -150,9 +177,33 @@ export class WithdrawalPage extends BasePage {
   }
 
   async getTotalGoldValue(): Promise<number> {
-    const text = (await this.totalGold.textContent()) ?? '';
-    const cleaned = text.replace(/[^\d.]/g, '');
-    return cleaned ? parseFloat(cleaned) : 0;
+    const text = ((await this.totalGoldInGramText.textContent()) ?? '').replace(/\s+/g, ' ');
+    const match = text.match(/([\d]+(?:\.\d+)?)\s*gm/i);
+    return match ? Number(match[1]) : 0;
+  }
+
+  async getTotalGoldValueInGramAndLog(): Promise<number> {
+    const totalGoldInGram = await this.getTotalGoldValue();
+    console.log('Total Gold (g):', totalGoldInGram);
+    return totalGoldInGram;
+  }
+
+  async getTotalGoldValueInRsAndLog(): Promise<number> {
+    const rupeeText = ((await this.totalGoldInRsText.textContent()) ?? '').replace(/\s+/g, ' ');
+    const match = rupeeText.match(/₹\s*([\d,]+(?:\.\d+)?)/i);
+    const totalGoldValueInRs = match ? Number(match[1].replace(/,/g, '')) : 0;
+
+    console.log('Total Gold Value (Rs):', totalGoldValueInRs);
+    return totalGoldValueInRs;
+  }
+
+  async getTotalGoldInGramFromGoldVaultAndSipValueAndLog(
+    goldVaultInGram: number,
+    sipValueInGram: number,
+  ): Promise<number> {
+    const totalGoldInGram = Number((goldVaultInGram + sipValueInGram).toFixed(4));
+    console.log('Total Gold In Gram (Gold Vault + SIP Value):', totalGoldInGram);
+    return totalGoldInGram;
   }
 
   async getTotalSilverValue(): Promise<number> {
@@ -166,6 +217,25 @@ export class WithdrawalPage extends BasePage {
     const cleaned = text.replace(/[^\d.]/g, '');
     return cleaned ? parseFloat(cleaned) : 0;
   }
+
+  async getGoldVaultValueInGramAndAmountInRsAndLog(): Promise<{
+    goldVaultInGram: number;
+    goldVaultAmountInRs: number;
+  }> {
+    const goldVaultInGram = await this.getGoldVaultValue();
+    const goldVaultCardText = ((await this.goldVaultSection.textContent()) ?? '').replace(/\s+/g, ' ');
+    const amountMatch = goldVaultCardText.match(/₹\s*([\d,]+(?:\.\d+)?)/i);
+    const goldVaultAmountInRs = amountMatch ? Number(amountMatch[1].replace(/,/g, '')) : 0;
+
+    console.log('Gold Vault Value (g):', goldVaultInGram);
+    console.log('Gold Vault Amount (Rs):', goldVaultAmountInRs);
+
+    return {
+      goldVaultInGram,
+      goldVaultAmountInRs,
+    };
+  }
+
   async getSilverVaultValue(): Promise<number> {
     const text = (await this.totalSilverVault.textContent()) ?? '';
     const cleaned = text.replace(/[^\d.]/g, '');
@@ -721,22 +791,82 @@ export class WithdrawalPage extends BasePage {
     return this.proceedToWithdrawBtn.isEnabled();
   }
 
-  async verifyDepositAndConvertToJewelleryOptionsVisible(): Promise<void> {
-    await this.depositOption.waitFor({ state: 'visible' });
-    await this.page
-      .locator(
-        'xpath=//div[contains(@class,"border") and contains(@class,"rounded-xl") and .//div[contains(normalize-space(),"Convert into Gold/Jewellery")]]',
-      )
-      .first()
-      .waitFor({ state: 'visible' });
+  async verifyGetCoinAndCashOptionVisible(): Promise<void> {
+    await this.verifyGetCoinsAndBarsOptionVisible();
+    await this.verifyGetCashOptionVisible();
+    console.log('[Withdrawal] Two options visible: Get Coins and Bars, Get Cash');
   }
 
   /** Withdraw flow: Deposits (withdraw deposit) + Convert into Silver/Jewellery cards visible. */
 
+  async verifyGetCoinsAndBarsOptionVisible(): Promise<void> {
+    const withdrawOptionDialog = this.page
+      .locator('div[role="dialog"]')
+      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
+      .first();
+    const getCoinsAndBarsHeading = withdrawOptionDialog.getByRole('heading', {
+      name: /Get Coins and Bars/i,
+    });
+
+    await expect(withdrawOptionDialog).toBeVisible({ timeout: 20_000 });
+    await expect(getCoinsAndBarsHeading.first()).toBeVisible({ timeout: 20_000 });
+  }
+
+  async verifyGetCashOptionVisible(): Promise<void> {
+    const withdrawOptionDialog = this.page
+      .locator('div[role="dialog"]')
+      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
+      .first();
+    const getCashHeading = withdrawOptionDialog.getByRole('heading', {
+      name: /^Get Cash$/i,
+    });
+
+    await expect(withdrawOptionDialog).toBeVisible({ timeout: 20_000 });
+    await expect(getCashHeading.first()).toBeVisible({ timeout: 20_000 });
+  }
+
+  async clickGetCoinsAndBarsOption(): Promise<void> {
+    const withdrawOptionDialog = this.page
+      .locator('div[role="dialog"]')
+      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
+      .first();
+    const getCoinsAndBarsHeading = withdrawOptionDialog.getByRole('heading', { name: /Get Coins and Bars/i }).first();
+    await getCoinsAndBarsHeading.waitFor({ state: 'visible', timeout: 15_000 });
+
+    const getCoinsAndBarsCard = getCoinsAndBarsHeading.locator('xpath=ancestor::div[contains(@class,"cursor-pointer")][1]');
+    await getCoinsAndBarsCard.waitFor({ state: 'visible', timeout: 15_000 });
+    await getCoinsAndBarsCard.click({ force: true });
+  }
+
+  async clickGetCashOption(): Promise<void> {
+    const withdrawOptionDialog = this.page
+      .locator('div[role="dialog"]')
+      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
+      .first();
+    const getCashCard = withdrawOptionDialog
+      .locator('div.group.relative')
+      .filter({
+        has: withdrawOptionDialog.getByRole('heading', { name: /^Get Cash$/i }),
+      })
+      .first();
+
+    await getCashCard.waitFor({ state: 'visible', timeout: 15_000 });
+    await getCashCard.click({ force: true });
+  }
+
+  async clickProceedGetCash(): Promise<void> {
+    await this.clickGetCashOption();
+  }
+
+  async verifyGetCashNavigatesToInvestmentList(): Promise<void> {
+    await expect(this.page).toHaveURL(/\/withdraw\/investment-list(?:\/)?(?:\?.*)?$/i, {
+      timeout: 20_000,
+    });
+    console.log('[Withdrawal] Redirected to investment list: /withdraw/investment-list');
+  }
+
   async clickProceedForConvertGoldJewellery(): Promise<void> {
-    const proceedBtn = this.convertGoldJewelleryProceedButton();
-    await proceedBtn.waitFor({ state: 'visible' });
-    await proceedBtn.click();
+    await this.clickGetCoinsAndBarsOption();
   }
 
   /** URL after Proceed on "Convert into Gold/Jewellery" (product list). */
@@ -1081,14 +1211,7 @@ export class WithdrawalPage extends BasePage {
   }
 
   async clickProceedLabelInConvertGoldJewelleryCard(): Promise<void> {
-    const proceedLabel = this.page
-      .locator(
-        'xpath=//div[contains(@class,"border") and contains(@class,"rounded-xl") and .//div[contains(normalize-space(),"Convert into Gold/Jewellery")]]',
-      )
-      .first()
-      .locator('span.p-button-label.ng-star-inserted')
-      .filter({ hasText: /^Proceed$/i })
-      .first();
+    const proceedLabel = this.convertGoldJewelleryProceedButton();
     await proceedLabel.waitFor({ state: 'visible' });
     await proceedLabel.click();
   }

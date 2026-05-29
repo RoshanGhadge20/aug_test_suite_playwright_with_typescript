@@ -456,13 +456,33 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('Create monthly SIP for silver', async () => {
+      // TC005 only: if (today + sipStartAfterDays) lands on day 29/30/31,
+      // move SIP start to day 1 of the next month (works for all months).
+      const tc005SipStartDate = (() => {
+        const base = new Date();
+        base.setHours(0, 0, 0, 0);
+
+        const target = new Date(base);
+        target.setDate(target.getDate() + sipStartAfterDays);
+
+        if ([29, 30, 31].includes(target.getDate())) {
+          return new Date(target.getFullYear(), target.getMonth() + 1, 1);
+        }
+        return target;
+      })();
+
+      const pad = (n: number): string => String(n).padStart(2, '0');
+      console.log(
+        `[TC_005] SIP start date (TC005 rule): ${pad(tc005SipStartDate.getDate())}/${pad(tc005SipStartDate.getMonth() + 1)}/${tc005SipStartDate.getFullYear()}`,
+      );
+
       await buyMetalPage.startSipAndOpenPlanForm({
         metal: 'silver',
         amount: sipMonthlyUpiData.amount,
         frequency: 'monthly',
       });
       planName = await buyMetalPage.enterUniquePlanName(sipMonthlyUpiData.planPrefix);
-      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
+      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays, tc005SipStartDate);
       await buyMetalPage.clickOnCreateSIP();
     });
 

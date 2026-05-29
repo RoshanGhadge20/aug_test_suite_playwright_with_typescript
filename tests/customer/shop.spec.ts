@@ -247,10 +247,10 @@ test.describe('customer shop flows @customer-flows', () => {
 
       await paymentPage.fillContactNumber(shopDataset.mobile);
       console.log(`[${TC(11)}] Razorpay contact number:`, shopDataset.mobile);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
+      await paymentPage.clickRazorpayContinueShop();
+      await paymentPage.selectNetbankingShop();
       console.log(`[${TC(11)}] Selected Netbanking in Razorpay`);
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.completeNetbankingPaymentShop('HDFC Bank');
       console.log(`[${TC(11)}] Completed HDFC Bank netbanking payment`);
 
       const orderPlaced = await shopCheckoutPage.getOrderPlacedDetails();
@@ -517,10 +517,7 @@ test.describe('customer shop flows @customer-flows', () => {
     });
   });
 
-  /**
-   * TC_SHOP_002 â€” multi-product checkout; extends shared page objects only in backward-compatible ways.
-   * Do not change TC_SHOP_001 above to satisfy TC002; add TC002-only logic here or in helpers with TC001-safe defaults.
-   */
+  /** TC_SHOP_002 — multi-product checkout; extends shared page objects only in backward-compatible ways. */
   test('TC_SHOP_002 - Multi-product gold coin shop flow: filter, cart, checkout and invoice', async ({
     page,
     shopPage,
@@ -540,6 +537,7 @@ test.describe('customer shop flows @customer-flows', () => {
     const productNames = shopTc002Dataset.productNames;
     /** Step 5 PDP fields, one object per Excel product name â€” use for later steps (cart, my orders, invoice). */
     const productDetailsByName: Record<string, ShopProductDetails> = {};
+
     const productLinePrices: Record<string, number> = {};
     const cartNetWeightByName: Record<string, string> = {};
     let savedBillingAddress: Awaited<ReturnType<typeof shopCheckoutPage.getBillingAddress>>;
@@ -812,10 +810,10 @@ test.describe('customer shop flows @customer-flows', () => {
 
       await paymentPage.fillContactNumber(shopDataset.mobile);
       console.log(`[${TC(11)}] Razorpay contact number:`, shopDataset.mobile);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
+      await paymentPage.clickRazorpayContinueShop();
+      await paymentPage.selectNetbankingShop();
       console.log(`[${TC(11)}] Selected Netbanking in Razorpay`);
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.completeNetbankingPaymentShop('HDFC Bank');
       console.log(`[${TC(11)}] Completed HDFC Bank netbanking payment`);
 
       placedOrders = await shopCheckoutPage.getPlacedOrders(productNames.length);
@@ -835,6 +833,11 @@ test.describe('customer shop flows @customer-flows', () => {
       await myOrderVerificationPage.goToMyOrders();
       await myOrderVerificationPage.clickShopTabMultiProduct();
 
+      for (const orderId of placedOrders.orderIds) {
+        log(12, `Wait for checkout order id on SHOP tab: ${orderId}`);
+        await myOrderVerificationPage.waitForShopOrderIdOnList(orderId, { timeoutMs: 90_000 });
+      }
+
       log(
         12,
         `Shop tab: ${productNames.length} products â€” expect one order row per product (separate Shop entries when checkout issues one order id per line item)`,
@@ -842,8 +845,16 @@ test.describe('customer shop flows @customer-flows', () => {
 
       for (let i = 0; i < productNames.length; i++) {
         const name = productNames[i];
-        const shopOrder = await myOrderVerificationPage.getShopOrderDetails(name);
-        const orderDate = await myOrderVerificationPage.getShopOrderDate(name);
+        const shopOrder = placedOrders.isSingleSharedOrder
+          ? await myOrderVerificationPage.getShopOrderListDetailsByOrderId(placedOrders.orderIds[0], {
+              skipTabLoadWait: true,
+              productName: name,
+            })
+          : await myOrderVerificationPage.getShopOrderListDetails({
+              productName: name,
+              skipTabLoadWait: true,
+            });
+        const orderDate = shopOrder.orderedOn;
         orderIdByProduct[name] = shopOrder.orderId;
         shopOrdersByName[name] = shopOrder;
 
@@ -926,7 +937,9 @@ test.describe('customer shop flows @customer-flows', () => {
         const expectedNetWeightGm = expectedShopWeightGrams(name, pd, cartNetWeightByName[name] ?? '');
 
         console.log(`\n[${TC(13)}] ${p} â€” ${name}`);
-        await myOrderVerificationPage.openShopOrderDetailMulti(name);
+        await myOrderVerificationPage.openShopOrderDetailMulti(name, {
+          orderId: orderIdByProduct[name],
+        });
 
         const detail = await myOrderVerificationPage.getShopOrderDetailView();
         logActualExpected(13, `${p} Detail product name`, detail.productName, name);
@@ -1042,6 +1055,7 @@ test.describe('customer shop flows @customer-flows', () => {
             log(14, `[${ordinal}] Ensure order detail for "${invoiceProductName}"`);
             await myOrderVerificationPage.ensureShopOrderDetailForInvoice(invoiceProductName, {
               requireMatchingProduct: true,
+              orderId: orderIdByProduct[invoiceProductName],
             });
           });
 
@@ -1467,10 +1481,10 @@ test.describe('customer shop flows @customer-flows', () => {
 
       await paymentPage.fillContactNumber(shopDataset.mobile);
       console.log(`[${TC(11)}] Razorpay contact number:`, shopDataset.mobile);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
+      await paymentPage.clickRazorpayContinueShop();
+      await paymentPage.selectNetbankingShop();
       console.log(`[${TC(11)}] Selected Netbanking in Razorpay`);
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.completeNetbankingPaymentShop('HDFC Bank');
       console.log(`[${TC(11)}] Completed HDFC Bank netbanking payment`);
 
       placedOrders = await shopCheckoutPage.getPlacedOrders(productNames.length);
@@ -1891,7 +1905,7 @@ test.describe('customer shop flows @customer-flows', () => {
    * dashboard portfolio after shop (17, same pattern as buy-metal TC005_7). Savings checkout, My Orders,
    * View Detail, and invoice.
    */
-  test('TC_SHOP_004 - Alt customer login + shop gold coin flow @customer-flows', async ({
+  test('TC_SHOP_004 - Alternate customer login + shop gold coin flow payment by savings@customer-flows', async ({
     page,
     customerLogin,
     dashboardPage,

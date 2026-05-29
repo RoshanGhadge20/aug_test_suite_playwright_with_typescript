@@ -570,18 +570,127 @@ export class MyOrderVerificationPage extends BasePage {
     return found;
   }
 
-  /**
-   * Clicks the first visible Sell control and waits briefly for the Sell list to settle.
-   */
-  private async clickVisibleSellControl(locator: Locator, visibilityTimeout?: number): Promise<boolean> {
-    const visible =
-      visibilityTimeout !== undefined
-        ? await locator.isVisible({ timeout: visibilityTimeout }).catch(() => false)
-        : await locator.isVisible().catch(() => false);
-    if (!visible) return false;
-    await locator.click({ force: true });
-    await this.waitForMyOrdersListReady(10_000);
-    return true;
+  private async isSellTabActive(): Promise<boolean> {
+    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
+    return sellTab.isChecked({ timeout: 400 }).catch(() => false);
+  }
+
+  /** SELL tab selected and list is not BUY/SHOP/Delivery content. */
+  private async isSellTabListRendered(): Promise<boolean> {
+    if (await this.page.getByRole('radio', { name: /^BUY$/i }).first().isChecked({ timeout: 400 }).catch(() => false)) {
+      return false;
+    }
+    if (!(await this.isSellTabActive())) {
+      return false;
+    }
+
+    if (await this.page.getByText(/^ORDERED ON/i).first().isVisible({ timeout: 300 }).catch(() => false)) {
+      return false;
+    }
+    if (
+      await this.page
+        .getByRole('button', { name: /^view detail$/i })
+        .first()
+        .isVisible({ timeout: 300 })
+        .catch(() => false)
+    ) {
+      return false;
+    }
+
+    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+      return true;
+    }
+
+    return this.orderRows
+      .first()
+      .isVisible({ timeout: 400 })
+      .catch(() => false);
+  }
+
+  /** True when SELL-tab rows are populated (not empty skeletons / stale BUY narrations). */
+  private async isSellOrderListHydrated(): Promise<boolean> {
+    if (!(await this.isSellTabListRendered())) {
+      return false;
+    }
+    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+      return true;
+    }
+
+    const rows = this.orderRows;
+    const count = Math.min(await rows.count().catch(() => 0), 8);
+    for (let i = 0; i < count; i += 1) {
+      const row = rows.nth(i);
+      if (!(await row.isVisible({ timeout: 300 }).catch(() => false))) {
+        continue;
+      }
+      const txnId = (
+        (await row
+          .locator('div.text-10:has-text("Transaction ID")')
+          .first()
+          .locator('xpath=following-sibling::div[1]')
+          .first()
+          .textContent()
+          .catch(() => '')) ?? ''
+      )
+        .replace(/\s+/g, ' ')
+        .trim();
+      const narration = (
+        (await row
+          .locator('div.text-10:has-text("Narration")')
+          .first()
+          .locator('xpath=following-sibling::div[1]')
+          .first()
+          .textContent()
+          .catch(() => '')) ?? ''
+      )
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (txnId.replace(/\D/g, '').length >= 3 && narration.length > 0 && !/\bbought\b/i.test(narration)) {
+        return true;
+      }
+      if (txnId.replace(/\D/g, '').length >= 3 && /\bsold\b/i.test(narration)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Wait until SELL tab is active and sell rows are populated (not stale BUY/SHOP content). */
+  private async waitForSellOrderListHydrated(timeoutMs = 45_000): Promise<void> {
+    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
+    let lastTabClickMs = 0;
+
+    await expect
+      .poll(
+        async () => {
+          if (!(await this.isSellTabListRendered())) {
+            return false;
+          }
+          if (await this.isSellOrderListHydrated()) {
+            return true;
+          }
+
+          const now = Date.now();
+          if (lastTabClickMs === 0 || now - lastTabClickMs >= 10_000) {
+            lastTabClickMs = now;
+            await sellTab.scrollIntoViewIfNeeded().catch(() => {});
+            await sellTab.click({ force: true }).catch(() => {});
+            await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+          }
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] },
+      )
+      .toBeTruthy();
+  }
+
+  private async clickSellTabAndWaitForList(hydrateTimeoutMs = 45_000): Promise<void> {
+    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
+    await sellTab.scrollIntoViewIfNeeded();
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await sellTab.click({ force: true });
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.waitForSellOrderListHydrated(hydrateTimeoutMs);
   }
 
   /** TC001 / TC004 — single product on SHOP tab (main-branch click + list hydrate). */
@@ -611,14 +720,12 @@ export class MyOrderVerificationPage extends BasePage {
   /** Read shop-tab list row by order id (preferred when multiple products were ordered). */
   async getShopOrderListDetailsByOrderId(
     orderId: string,
-    options?: { skipTabLoadWait?: boolean },
+    options?: { skipTabLoadWait?: boolean; productName?: string },
   ): Promise<MyOrderShopCardDetails> {
     if (!options?.skipTabLoadWait) {
-      await this.waitForShopOrderIdOnList(orderId);
+      await this.waitForShopOrderIdOnList(orderId, { productName: options?.productName });
     }
-    const card = this.shopOrderCardByOrderId(orderId);
-    await card.scrollIntoViewIfNeeded();
-    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    const card = await this.resolveShopOrderCardByOrderId(orderId, options?.productName);
 
     let orderedOn = '';
     try {
@@ -679,30 +786,8 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   async clickSellTab(): Promise<void> {
-    const row = this.getLatestOrderRow();
-
-    if (await this.clickVisibleSellControl(row.getByRole('radio', { name: /^SELL$/i }).first())) return;
-    if (await this.clickVisibleSellControl(row.getByRole('button', { name: /^SELL$/i }).first())) return;
-    if (await this.clickVisibleSellControl(row.getByRole('tab', { name: /^SELL$/i }).first())) return;
-    if (await this.clickVisibleSellControl(row.getByRole('link', { name: /^SELL$/i }).first())) return;
-    if (await this.clickVisibleSellControl(row.locator('span.p-button-label', { hasText: /^SELL$/i }).first(), 2_000))
-      return;
-
-    // Global fallbacks
-    if (await this.clickVisibleSellControl(this.page.getByRole('radio', { name: /^SELL$/i }).first(), 10_000))
-      return;
-    if (await this.clickVisibleSellControl(this.page.getByRole('button', { name: /^SELL$/i }).first(), 5_000))
-      return;
-    if (await this.clickVisibleSellControl(this.page.getByRole('tab', { name: /^SELL$/i }).first(), 5_000)) return;
-    if (await this.clickVisibleSellControl(this.page.getByRole('link', { name: /^SELL$/i }).first(), 5_000)) return;
-    if (await this.clickVisibleSellControl(this.page.locator('span.p-button-label', { hasText: /^SELL$/i }).first(), 5_000))
-      return;
-
-    // If no explicit Sell control exists, continue if rows are already present.
-    const rowVisible = await this.orderRows.first().isVisible({ timeout: 3_000 }).catch(() => false);
-    if (rowVisible) return;
-
-    throw new Error('SELL tab/control is not visible and no order rows are present.');
+    this.selectedOrderRow = null;
+    await this.clickSellTabAndWaitForList(45_000);
   }
 
   async goToMyOrders(): Promise<void> {
@@ -754,6 +839,17 @@ export class MyOrderVerificationPage extends BasePage {
     return card;
   }
 
+  private async resolveShopOrderCardByOrderId(orderId: string, productName?: string): Promise<Locator> {
+    const index = await this.resolveShopOrderCardIndexByOrderId(orderId, {
+      productName,
+      timeoutMs: 90_000,
+    });
+    const card = this.shopOrderCards().nth(index);
+    await card.scrollIntoViewIfNeeded();
+    await card.waitFor({ state: 'visible', timeout: 45_000 });
+    return card;
+  }
+
   private async readShopOrderCardDetails(card: Locator): Promise<MyOrderShopCardDetails> {
     return {
       productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
@@ -799,16 +895,26 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   /** TC002 / TC003 — open View Detail for one of several shop order rows. */
-  async openShopOrderDetailMulti(productName: string): Promise<void> {
-    await this.openShopOrderDetailForProduct(productName, 'multi');
+  async openShopOrderDetailMulti(
+    productName: string,
+    options?: { orderId?: string },
+  ): Promise<void> {
+    await this.openShopOrderDetailForProduct(productName, 'multi', options?.orderId);
   }
 
   private async openShopOrderDetailForProduct(
     productName: string,
     flow: 'single' | 'multi',
+    orderId?: string,
   ): Promise<void> {
+    const onOrderDetail = await this.shopOrderDetailPanel()
+      .isVisible({ timeout: 500 })
+      .catch(() => false);
     const u = this.page.url();
-    if (!/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u)) {
+    const needMyOrdersList =
+      !/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u) || onOrderDetail || (flow === 'multi' && !!orderId);
+
+    if (needMyOrdersList) {
       await this.goToMyOrders();
       if (flow === 'single') {
         await this.clickShopTabSingleOrder();
@@ -817,9 +923,11 @@ export class MyOrderVerificationPage extends BasePage {
       }
     }
 
-    const card = await this.resolveShopOrderCard(productName);
+    const card = orderId
+      ? await this.resolveShopOrderCardByOrderId(orderId, productName)
+      : await this.resolveShopOrderCard(productName);
     await card.getByRole('button', { name: /view detail/i }).first().click();
-    const panel = this.shopOrderDetailPanel();
+    const panel = this.shopOrderDetailPanelForProduct(productName);
     await panel.waitFor({ state: 'visible', timeout: 15_000 });
     await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(productName, {
       timeout: 20_000,
@@ -874,6 +982,7 @@ export class MyOrderVerificationPage extends BasePage {
   async prepareShopOrderDetailForInvoice(
     productName: string,
     flow: 'single' | 'multi' = 'single',
+    options?: { orderId?: string },
   ): Promise<void> {
     if (await this.isShopOrderDetailReadyForInvoiceWithProduct(productName)) {
       await this.scrollToShopInvoiceSection();
@@ -885,7 +994,7 @@ export class MyOrderVerificationPage extends BasePage {
       await this.openShopOrderDetailSingle(productName);
     } else {
       await this.clickShopTabMultiProduct();
-      await this.openShopOrderDetailMulti(productName);
+      await this.openShopOrderDetailMulti(productName, { orderId: options?.orderId });
     }
     await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
   }
@@ -945,6 +1054,7 @@ export class MyOrderVerificationPage extends BasePage {
       requireMatchingProduct?: boolean;
       /** TC001/TC004 = single; TC002/TC003 = multi (default from requireMatchingProduct). */
       flow?: 'single' | 'multi';
+      orderId?: string;
     },
   ): Promise<void> {
     const flow = options?.flow ?? (options?.requireMatchingProduct ? 'multi' : 'single');
@@ -960,7 +1070,7 @@ export class MyOrderVerificationPage extends BasePage {
       await this.scrollToShopInvoiceSection();
       return;
     }
-    await this.prepareShopOrderDetailForInvoice(productName, flow);
+    await this.prepareShopOrderDetailForInvoice(productName, flow, { orderId: options?.orderId });
   }
 
   /** TC003 EMI — same as ensureShopOrderDetailForInvoice but opens EMI invoice-ready detail. */
@@ -1427,6 +1537,14 @@ export class MyOrderVerificationPage extends BasePage {
       .first();
   }
 
+  private shopOrderDetailPanelForProduct(productName: string): Locator {
+    return this.page
+      .locator('motion.div.flex.flex-col.gap-4, div.flex.flex-col.gap-4')
+      .filter({ has: this.page.getByRole('heading', { level: 3, name: productName }) })
+      .filter({ has: this.page.getByText(/Net weight:/i) })
+      .first();
+  }
+
   /** EMI Pay Now summary (Pay Now + Cancel Booking + DUE ON footer). */
   private shopEmiOrderDetailPanel(): Locator {
     return this.page
@@ -1481,13 +1599,65 @@ export class MyOrderVerificationPage extends BasePage {
     return foundIndex;
   }
 
-  private shopOrderCardByOrderId(orderId: string): Locator {
-    return this.page
+  /** Find shop-tab row index by order id (optional product heading disambiguates shared ids). */
+  private async resolveShopOrderCardIndexByOrderId(
+    orderId: string,
+    options?: { productName?: string; timeoutMs?: number },
+  ): Promise<number> {
+    const target = orderId.replace(/\D/g, '');
+    const timeoutMs = options?.timeoutMs ?? 90_000;
+    let foundIndex = -1;
+
+    await expect
+      .poll(
+        async () => {
+          const cards = this.shopOrderCards();
+          const count = await cards.count().catch(() => 0);
+          for (let i = 0; i < count; i += 1) {
+            const card = cards.nth(i);
+            if (!(await card.isVisible({ timeout: 250 }).catch(() => false))) {
+              continue;
+            }
+            const idText = (await this.readShopLabel(card, 'Order Id').catch(() => '')).replace(/\D/g, '');
+            if (idText !== target) {
+              continue;
+            }
+            if (options?.productName) {
+              const heading = (
+                await this.text(card.getByRole('heading', { level: 3 }).first())
+              ).trim();
+              if (heading !== options.productName) {
+                continue;
+              }
+            }
+            foundIndex = i;
+            return true;
+          }
+          await this.scrollShopOrdersListDown();
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
+      )
+      .toBeTruthy();
+
+    if (foundIndex < 0) {
+      throw new Error(`Shop order card not found for order id "${orderId}".`);
+    }
+    return foundIndex;
+  }
+
+  private shopOrderCardByOrderId(orderId: string, productName?: string): Locator {
+    let card = this.page
       .locator('div')
       .filter({ has: this.page.getByText(new RegExp(`Order Id:?\\s*${orderId}`, 'i')) })
       .filter({ has: this.page.getByRole('button', { name: /^view detail$/i }) })
-      .filter({ has: this.page.getByRole('heading', { level: 3 }) })
-      .first();
+      .filter({ has: this.page.getByRole('heading', { level: 3 }) });
+    if (productName) {
+      card = card.filter({
+        has: this.page.getByRole('heading', { level: 3, name: productName, exact: true }),
+      });
+    }
+    return card.first();
   }
 
   private async readShopOrderDate(card: Locator): Promise<string> {
@@ -1564,6 +1734,7 @@ export class MyOrderVerificationPage extends BasePage {
     ).trim();
   }
 
+
   async getNarrationQuantity(): Promise<number | null> {
     const narration = await this.getNarration();
     const match = narration.match(/([\d.]+)\s*gm/i);
@@ -1589,6 +1760,57 @@ export class MyOrderVerificationPage extends BasePage {
     await this.getLatestOrderRow().waitFor({ state: 'visible', timeout });
   }
 
+  /**
+   * Sell tab — wait for the withdrawal sell row (not a prior "Bought" row).
+   * Sets {@link selectedOrderRow} to the matching row for {@link getLatestSellOrderCardDetails}.
+   */
+  async waitForSellWithdrawalOrderRow(
+    expectedAmount: number,
+    options?: { narrationHint?: string; amountTolerance?: number; timeoutMs?: number },
+  ): Promise<void> {
+    const hint = options?.narrationHint ?? 'Sold';
+    await this.waitForOrderRowByTextAndAmount(
+      hint,
+      expectedAmount,
+      options?.amountTolerance ?? 1,
+      options?.timeoutMs ?? 60_000,
+    );
+  }
+
+  /** Delivery tab — poll until withdrawal product card is visible (UAT may lag after payment). */
+  async waitForWithdrawalDeliveryOrderCard(timeoutMs = 60_000): Promise<Locator> {
+    const card = this.page
+      .locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre')
+      .filter({ has: this.page.locator('h3') })
+      .filter({ has: this.page.getByText(/Transaction\s*Id/i) })
+      .first();
+
+    let lastReloadMs = 0;
+
+    await expect
+      .poll(
+        async () => {
+          if (await card.isVisible({ timeout: 500 }).catch(() => false)) {
+            return true;
+          }
+
+          const now = Date.now();
+          if (lastReloadMs === 0 || now - lastReloadMs >= 12_000) {
+            lastReloadMs = now;
+            await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+            await this.waitForOrderRow().catch(() => {});
+            await this.clickOnDelivery().catch(() => {});
+          }
+          return false;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] },
+      )
+      .toBeTruthy();
+
+    await card.waitFor({ state: 'visible', timeout: 15_000 });
+    return card;
+  }
+
   async waitForOrderRowByText(text: string, timeout = 45_000): Promise<void> {
     await this.page
       .locator('text=No Record Found')
@@ -1598,6 +1820,46 @@ export class MyOrderVerificationPage extends BasePage {
     const row = this.orderRows.filter({ hasText: new RegExp(text, 'i') }).first();
     await row.waitFor({ state: 'visible', timeout });
     this.selectedOrderRow = row;
+  }
+
+  /** Poll My Orders until a row matches text + amount (confirms payment posted a new order). */
+  async waitForOrderRowByTextAndAmount(
+    text: string,
+    expectedAmount: number,
+    amountTolerance = 1,
+    timeoutMs = 60_000,
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const pattern = new RegExp(text, 'i');
+
+    while (Date.now() < deadline) {
+      await this.page
+        .locator('text=No Record Found')
+        .waitFor({ state: 'detached' })
+        .catch(() => {});
+
+      const rows = this.orderRows.filter({ hasText: pattern });
+      const count = await rows.count();
+      for (let i = 0; i < count; i += 1) {
+        const row = rows.nth(i);
+        if (!(await row.isVisible().catch(() => false))) {
+          continue;
+        }
+        this.selectedOrderRow = row;
+        const orderAmount = await this.getAmount();
+        if (Math.abs(orderAmount - expectedAmount) <= amountTolerance) {
+          return;
+        }
+      }
+
+      await this.page.waitForTimeout(3_000);
+      await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      await this.clickSellTab().catch(() => {});
+    }
+
+    throw new Error(
+      `My Orders: no "${text}" row with amount ~${expectedAmount} (±${amountTolerance}) within ${timeoutMs}ms`,
+    );
   }
 
   getLatestOrderRow(): Locator {

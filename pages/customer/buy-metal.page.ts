@@ -273,17 +273,51 @@ export class BuyMetalPage extends BasePage {
     return uniquePlanName;
   }
 
-  async enterStartDatePlusDays(days = 5): Promise<string> {
-    const targetDate = new Date();
-    targetDate.setDate(targetDate.getDate() + days);
+  /**
+   * @param days — offset from today when `targetOverride` is omitted
+   * @param targetOverride — exact calendar date (optional); when set, `days` is ignored
+   */
+  async enterStartDatePlusDays(days = 5, targetOverride?: Date): Promise<string> {
+    const targetDate = targetOverride
+      ? new Date(targetOverride)
+      : (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + days);
+          return d;
+        })();
     const expectedDay = targetDate.getDate();
+    const expectedMonth = targetDate.getMonth() + 1;
+    const expectedYear = targetDate.getFullYear();
     const dayPart = String(expectedDay).padStart(2, '0');
-    const monthPart = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const yearPart = String(targetDate.getFullYear());
+    const monthPart = String(expectedMonth).padStart(2, '0');
+    const yearPart = String(expectedYear);
     const formattedDateDash = `${dayPart}-${monthPart}-${yearPart}`;
     const formattedDateSlash = `${dayPart}/${monthPart}/${yearPart}`;
     const formattedDate = formattedDateSlash;
-    console.log(`[SIP DATE] requested days=${days}, targetDate=${formattedDate}`);
+    console.log(
+      `[SIP DATE] requested days=${targetOverride ? 'override' : days}, targetDate=${formattedDate}`,
+    );
+
+    const matchesTargetDate = (value: string): boolean => {
+      const parts = value.split(/[/-]/).map((p) => Number(p.trim()));
+      if (parts.length < 3) {
+        return false;
+      }
+      const [d, m, y] = parts;
+      return d === expectedDay && m === expectedMonth && y === expectedYear;
+    };
+
+    if (targetOverride) {
+      await this.startDateInput.click();
+      await this.startDateInput.fill(formattedDateSlash);
+      await this.startDateInput.press('Enter');
+      await this.startDateInput.press('Tab');
+      const typedValue = await this.startDateInput.inputValue();
+      if (matchesTargetDate(typedValue)) {
+        console.log(`[SIP DATE] final inputValue=${typedValue}`);
+        return typedValue;
+      }
+    }
     const startDateMeta = await this.startDateInput.evaluate((el) => {
       const input = el as any;
       return {
@@ -323,22 +357,20 @@ export class BuyMetalPage extends BasePage {
     selectedDay = Number(value.split('/')[0]);
     console.log(`[SIP DATE] after calendar click, inputValue=${value}`);
 
-    if (selectedDay !== expectedDay) {
+    if (!matchesTargetDate(value)) {
       console.log(`[SIP DATE] fallback typing targetDate=${formattedDateDash}`);
       await this.startDateInput.fill(formattedDateDash);
       await this.startDateInput.press('Enter');
       await this.startDateInput.press('Tab');
       value = await this.startDateInput.inputValue();
-      selectedDay = Number(value.split('/')[0]);
     }
 
-    if (selectedDay !== expectedDay) {
+    if (!matchesTargetDate(value)) {
       console.log(`[SIP DATE] second fallback typing targetDate=${formattedDateSlash}`);
       await this.startDateInput.fill(formattedDateSlash);
       await this.startDateInput.press('Enter');
       await this.startDateInput.press('Tab');
       value = await this.startDateInput.inputValue();
-      selectedDay = Number(value.split('/')[0]);
     }
 
     console.log(`[SIP DATE] final inputValue=${value}`);

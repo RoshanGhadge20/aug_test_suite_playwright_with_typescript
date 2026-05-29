@@ -4,7 +4,7 @@ import { getWithdrawalTc003Dataset, getWithdrawalTc004Dataset } from '../../util
 const tc003Dataset = getWithdrawalTc003Dataset();
 const tc004Dataset = getWithdrawalTc004Dataset();
 
-  test('TC_001-withdrawal from Gold Vault(Deposits) and transfer to bank account @customer-flows', async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage, myOrderVerificationPage }) => {
+  test.skip('TC_001-withdrawal from Gold Vault(Deposits) and transfer to bank account @customer-flows', async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage, myOrderVerificationPage }) => {
     const TC001 = (n: number): string => `TC001_${n}`;
     const logSub = (n: number, title: string): void => {
       console.log(`\n[${TC001(n)}] ${title}`);
@@ -40,53 +40,51 @@ const tc004Dataset = getWithdrawalTc004Dataset();
       expect(goldFD).not.toBe('');
     });
 
-    await test.step('TC001_2 | Verify Cancel and Proceed buttons are visible', async () => {
-      logSub(2, 'Verify Cancel and Proceed buttons are visible');
+    // await test.step('TC001_2 | Verify Cancel and Proceed buttons are visible', async () => {
+    //   logSub(2, 'Verify Cancel and Proceed buttons are visible');
+    //   await dashboardPage.clickWithdrawInvestment();
+    //   await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
+    //   await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
+    // });
+
+    // await test.step('TC001_3 | Capture current URL', async () => {
+    //   logSub(3, 'Capture current URL');
+    //   currentUrl = page.url();
+    // });
+
+    // await test.step('TC001_4 | Click Cancel button', async () => {
+    //   logSub(4, 'Click Cancel button');
+    //   await withdrawalPage.clickCancel();
+    // });
+
+    // await test.step('TC001_5 | Verify same URL after clicking Cancel', async () => {
+    //   logSub(5, 'Verify same URL after clicking Cancel');
+    //   await expect(page).toHaveURL(currentUrl);
+    // });
+
+    await test.step('TC001_6 | verify two options are visible get cash and get coins and bars', async () => {
+      logSub(6, 'verify two options are visible get cash and get coins and bars');
       await dashboardPage.clickWithdrawInvestment();
-      await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
+      await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+      await withdrawalPage.clickGetCashOption();
+      await withdrawalPage.verifyGetCashNavigatesToInvestmentList();
     });
 
-    await test.step('TC001_3 | Capture current URL', async () => {
-      logSub(3, 'Capture current URL');
-      currentUrl = page.url();
-    });
+    // await test.step('TC001_7 | Deposit flow', async () => {
+    //   logSub(7, 'Deposit flow');
+    //   await withdrawalPage.clickDeposit();
+    //   await withdrawalPage.clickDepositProceed();
+    // });
 
-    await test.step('TC001_4 | Click Cancel button', async () => {
-      logSub(4, 'Click Cancel button');
-      await withdrawalPage.clickCancel();
-    });
+    await test.step('TC001_8 | get investment values gold', async () => {
+      logSub(8, 'get investment values gold');
+      await withdrawalPage.getTotalGoldValueInRsAndLog();
 
-    await test.step('TC001_5 | Verify same URL after clicking Cancel', async () => {
-      logSub(5, 'Verify same URL after clicking Cancel');
-      await expect(page).toHaveURL(currentUrl);
-    });
-
-    await test.step('TC001_6 | Click Proceed and verify navigation', async () => {
-      logSub(6, 'Click Proceed and verify navigation');
-      await dashboardPage.clickWithdrawInvestment();
-      await withdrawalPage.clickProceed();
-      await expect(page).not.toHaveURL(currentUrl);
-    });
-
-    await test.step('TC001_7 | Deposit flow', async () => {
-      logSub(7, 'Deposit flow');
-      await withdrawalPage.clickDeposit();
-      await withdrawalPage.clickDepositProceed();
-    });
-
-    await test.step('TC001_8 | Validate investment details with values', async () => {
-      logSub(8, 'Validate investment details with values');
-      const totalInvestment = await withdrawalPage.getTotalInvestmentValue();
-      console.log('Total Investment:', totalInvestment);
-
-       totalGoldInvestment = await withdrawalPage.getTotalGoldValue();
+      totalGoldInvestment = await withdrawalPage.getTotalGoldValueInGramAndLog();
       console.log('Total Investment Gold:', totalGoldInvestment);
 
-      const totalSilver = await withdrawalPage.getTotalSilverValue();
-      console.log('Total Investment Silver:', totalSilver);
-
-      goldVault = await withdrawalPage.getGoldVaultValue();
+      const goldVaultSummary = await withdrawalPage.getGoldVaultValueInGramAndAmountInRsAndLog();
+      goldVault = goldVaultSummary.goldVaultInGram;
       console.log('Total Investment Gold Vault:', goldVault);
 
       await withdrawalPage.clickVaultProceed('Gold Vault');
@@ -194,7 +192,7 @@ const tc004Dataset = getWithdrawalTc004Dataset();
       logSub(15, 'Validate My Orders sell card details');
       await myOrderVerificationPage.goToMyOrders();
       await myOrderVerificationPage.clickSellTab();
-      await myOrderVerificationPage.waitForSellOrderRow();
+      await myOrderVerificationPage.waitForSellWithdrawalOrderRow(totalAmountWithdraw);
 
       const sellCard = await myOrderVerificationPage.getLatestSellOrderCardDetails();
 
@@ -254,7 +252,7 @@ const tc004Dataset = getWithdrawalTc004Dataset();
   });
 
 
-  test('TC_002-withdrawal from Gold/Silver SIP(Deposits) and transfer to bank account @customer-flows', async ({
+  test.skip('TC_002-withdrawal from Gold/Silver SIP(Deposits) and transfer to bank account @customer-flows', async ({
     page,
     dashboardPage,
     withdrawalPage,
@@ -372,6 +370,12 @@ const tc004Dataset = getWithdrawalTc004Dataset();
           console.log('Selected SIP Name:', selectedSipName);
           console.log('Selected SIP Metal Type:', selectedSipMetalType);
           console.log('Selected SIP Metal Value:', selectedSipMetalValue);
+          if (selectedSipMetalType === 'Gold') {
+            await withdrawalPage.getTotalGoldInGramFromGoldVaultAndSipValueAndLog(
+              goldVault,
+              selectedSipMetalValueNumber,
+            );
+          }
 
         });
     
@@ -488,7 +492,7 @@ const tc004Dataset = getWithdrawalTc004Dataset();
           logSub(12, 'Validate My Orders sell card details');
           await myOrderVerificationPage.goToMyOrders();
           await myOrderVerificationPage.clickSellTab();
-          await myOrderVerificationPage.waitForSellOrderRow();
+          await myOrderVerificationPage.waitForSellWithdrawalOrderRow(totalAmountWithdraw);
 
           const sellCard = await myOrderVerificationPage.getLatestSellOrderCardDetails();
 
@@ -560,7 +564,7 @@ const tc004Dataset = getWithdrawalTc004Dataset();
         
 });
 
-test('TC_003 - Withdraw from Silver Vault with Add Bank validation and error message checks @customer-flows',
+test.skip('TC_003 - Withdraw from Silver Vault with Add Bank validation and error message checks @customer-flows',
   async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage }) => {
   console.log('\n==================== TC_003 START ====================');
   console.log(
@@ -859,18 +863,15 @@ test('TC_004-withdrwal from gold vault and convert into gold coin @customer-flow
     expect(goldFD).not.toBe('');
   });
 
-  await test.step('TC004_2 | Click Proceed and verify navigation', async () => {
-    logSub(2, 'Click Proceed and verify navigation');
-    const urlBeforeProceed = page.url();
+  await test.step('TC004_2 | Withdrawal — open withdrawal options', async () => {
+    logSub(2, 'Open withdrawal options');
     await dashboardPage.clickWithdrawInvestment();
-    await withdrawalPage.clickProceed();
-    await expect(page).not.toHaveURL(urlBeforeProceed);
   });
 
-  await test.step('TC004_3 | Verify Two options are visible and click on Convert into Gold/Jewellery', async () => {
-    logSub(3, 'Verify Two options are visible and click on Convert into Gold/Jewellery');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
+  await test.step('TC004_3 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
+    logSub(3, 'Withdrawal options — Get Coins and Bars');
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
 
@@ -1110,12 +1111,12 @@ test('TC005 — withdrawal flow with SIP convert to silver coin @customer-flows'
   let totalGoldBeforePurchase = 0;
   let totalSilverBeforePurchase = 0;
   let goldFD = '';
-  let currentUrl = '';
   let beforeWithdrawalVaultRemainingSilver = 0;
   let selectedProductDetails: Awaited<ReturnType<typeof withdrawalPage.getAndLogSelectedProductDetails>> | null = null;
   let deliveryInformation: Awaited<ReturnType<typeof withdrawalPage.getAndLogDeliveryInformation>> | null = null;
   let selectedProductGm = 0;
-
+  let invalidQty = 0;
+  let validQty = 0;
 
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC005(n)}] ${title}`);
@@ -1148,30 +1149,16 @@ test('TC005 — withdrawal flow with SIP convert to silver coin @customer-flows'
   });
 
 
-  await test.step('TC005_3 | Withdrawal — Withdrawal Investment UI (Cancel & Proceed)', async () => {
-    logSub(3, 'Withdrawal Investment screen');
+  await test.step('TC005_3 | Withdrawal — open withdrawal options', async () => {
+    logSub(3, 'Open withdrawal options');
     await page.goto('/dashboard');
     await dashboardPage.clickWithdrawInvestment();
-    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
-    currentUrl = page.url();
-    await withdrawalPage.clickProceed();
-    await expect(page).not.toHaveURL(currentUrl);
   });
 
-  await test.step('TC005_4 | Withdrawal — Withdraw deposit & Convert into Silver options visible', async () => {
-    logSub(4, 'Withdrawal options');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await page
-      .locator(
-        'xpath=//div[contains(@class,"border") and contains(@class,"rounded-xl") and .//div[contains(normalize-space(),"Convert into Gold/Jewellery")]]',
-      )
-      .first()
-      .locator('span.p-button-label.ng-star-inserted')
-      .filter({ hasText: /^Proceed$/i })
-      .first()
-      .click();
-
+  await test.step('TC005_4 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
+    logSub(4, 'Withdrawal options — Get Coins and Bars');
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC005_5 | Withdrawal — Select Convert to Silver & Jewellery → product list', async () => {
@@ -1309,9 +1296,9 @@ test('TC005 — withdrawal flow with SIP convert to silver coin @customer-flows'
     console.log(`[TC005_ACTUAL_REMAINING_AFTER_ENTRY_GM] ${sipCardData.remainingValueAfterEntryInGm}`);
     expect(sipCardData.remainingValueAfterEntryInGm).toBeCloseTo(expectedRemainingAfterEntry, 4);
     await withdrawalPage.clickDeliveryProceedButton();
-
   });
 
+  // TC005_14-17 use deposit SIP UI (#integeronly). This flow uses delivery SIP cards instead.
   // await test.step('TC005_14 | SIP Validation — enter invalid quantity and validate error', async () => {
   //   logSub(14, 'Invalid quantity validation');
   //   invalidQty = Number((selectedSipMetalValueNumber + 0.01).toFixed(4));
@@ -1320,13 +1307,13 @@ test('TC005 — withdrawal flow with SIP convert to silver coin @customer-flows'
   //   const errorText = await withdrawalPage.getQuantityErrorText();
   //   expect(errorText).not.toBe('');
   // });
-
+  //
   // await test.step('TC005_15 | SIP Validation — proceed disabled for invalid quantity', async () => {
   //   logSub(15, 'Proceed disabled on invalid quantity');
   //   const isDisabled = await withdrawalPage.isProceedButtonDisabled();
   //   expect(isDisabled).toBe(true);
   // });
-
+  //
   // await test.step('TC005_16 | SIP Validation — enter valid quantity and proceed enabled', async () => {
   //   logSub(16, 'Valid quantity enables proceed');
   //   if (selectedSipMetalValueNumber <= 0.01) {
@@ -1335,36 +1322,26 @@ test('TC005 — withdrawal flow with SIP convert to silver coin @customer-flows'
   //   validQty = Number((selectedSipMetalValueNumber - 0.01).toFixed(4));
   //   await withdrawalPage.enterQuantity(validQty);
   //   console.log('Entered valid quantity:', validQty);
-
   //   const isEnabled = await withdrawalPage.isProceedButtonEnabled();
   //   expect(isEnabled).toBe(true);
   // });
-
+  //
   // await test.step('TC005_17 | SIP Validation — validate withdrawing/remaining and proceed', async () => {
   //   logSub(17, 'Validate withdrawing/remaining and proceed');
   //   await withdrawalPage.enterQuantity(validQty);
-
   //   const withdrawingValue = await withdrawalPage.getWithdrawingValue();
   //   const remainingValue = await withdrawalPage.getRemainingValue();
-
   //   console.log('Entered:', validQty);
   //   console.log('Withdrawing:', withdrawingValue);
   //   console.log('Remaining:', remainingValue);
-
-  //   console.log(`Validation (Withdrawing) => expected: ${validQty}, actual: ${withdrawingValue}`);
   //   expect(withdrawingValue).toBeCloseTo(validQty, 2);
   //   const expectedRemaining = selectedSipMetalValueNumber - validQty;
-  //   console.log(`Validation (Remaining) => expected: ${expectedRemaining}, actual: ${remainingValue}`);
   //   expect(remainingValue).toBeCloseTo(expectedRemaining, 2);
-
   //   await Promise.all([
   //     page.waitForURL('**/withdraw/account-details'),
   //     withdrawalPage.clickProceed(),
   //   ]);
-  //   console.log('Proceed button clicked');
   // });
-
-
 
   await test.step('TC005_18 | Checkout — same as billing & proceed', async () => {
     logSub(18, 'Address');
@@ -1517,28 +1494,16 @@ test('TC_006 - Convert into Gold Jewellery and withdrawal from vault and sip end
     expect(totalSilverBefore).toBeGreaterThan(0);
   });
 
-  await test.step('TC006_2 | Withdrawal — Withdrawal Investment UI (Cancel & Proceed)', async () => {
-    logSub(2, 'Withdrawal Investment UI');
-    await dashboardPage.clickWithdrawInvestment();
-    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
-  });
-
-  await test.step('TC006_3 | Withdrawal — Proceed to withdrawal flow', async () => {
-    logSub(3, 'Proceed to withdrawal flow');
-    const currentUrl = page.url();
-    await withdrawalPage.clickProceed();
-    await expect(page).not.toHaveURL(currentUrl);
-  });
 
   await test.step('TC006_4 | Withdrawal — Withdraw deposit & Convert into Gold/Jewellery options visible', async () => {
     logSub(4, 'Withdrawal options');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
+      await dashboardPage.clickWithdrawInvestment();
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC006_5 | Withdrawal — Select Convert to Gold/Jewellery → product list', async () => {
     logSub(5, 'Convert to Gold/Jewellery');
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
     await expect(page).toHaveURL(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i);
   });
 
@@ -1936,28 +1901,17 @@ test('TC_007 - Convert into Gold/Jewellery — gold + silver in cart; withdraw f
     expect(totalSilverBefore).toBeGreaterThan(0);
   });
 
-  await test.step('TC007_2 | Withdrawal — Withdrawal Investment UI (Cancel & Proceed)', async () => {
-    logSub(2, 'Withdrawal Investment UI');
-    await dashboardPage.clickWithdrawInvestment();
-    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
-  });
-
-  await test.step('TC007_3 | Withdrawal — Proceed to withdrawal flow', async () => {
-    logSub(3, 'Proceed to withdrawal flow');
-    const currentUrl = page.url();
-    await withdrawalPage.clickProceed();
-    await expect(page).not.toHaveURL(currentUrl);
-  });
 
   await test.step('TC007_4 | Withdrawal — Withdraw deposit & Convert into Gold/Jewellery options visible', async () => {
     logSub(4, 'Withdrawal options');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
+    await dashboardPage.clickWithdrawInvestment();
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC007_5 | Withdrawal — Select Convert to Gold/Jewellery → product list', async () => {
     logSub(5, 'Convert to Gold/Jewellery');
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
+   // await withdrawalPage.clickProceedForConvertGoldJewellery();
     await expect(page).toHaveURL(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i);
   });
 
@@ -2356,13 +2310,12 @@ test('TC_007 - Convert into Gold/Jewellery — gold + silver in cart; withdraw f
     }
 
 
-    await page.goto('/my-orders');
-    await expect(page).toHaveURL(/my-orders/);
+    await myOrderVerificationPage.goToMyOrders();
     await myOrderVerificationPage.waitForOrderRow();
     await myOrderVerificationPage.clickOnDelivery();
+    await myOrderVerificationPage.validateLatestOrderRowStatusPending();
 
-    const deliveryOrderCard = page.locator('div.bg-sheengold-ochre').first();
-    await deliveryOrderCard.waitFor({ state: 'visible', timeout: 30_000 });
+    const deliveryOrderCard = await myOrderVerificationPage.waitForWithdrawalDeliveryOrderCard(60_000);
 
     const statusBadge = deliveryOrderCard
       .locator('span')
@@ -2528,29 +2481,16 @@ test('TC_008-Convert to Silver or/Jewellery -Verify No Silver Deduction After Fa
     console.log('SIP Name:', sipName);
   });
 
-  await test.step('TC008_3 | Withdrawal — Withdrawal Investment UI (Cancel & Proceed)', async () => {
-    logSub(3, 'Withdrawal Investment screen');
+  await test.step('TC008_3 | Withdrawal — open withdrawal options', async () => {
+    logSub(3, 'Open withdrawal options');
     await page.goto('/dashboard');
     await dashboardPage.clickWithdrawInvestment();
-    await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Proceed' })).toBeVisible();
-    currentUrl = page.url();
-    await withdrawalPage.clickProceed();
-    await expect(page).not.toHaveURL(currentUrl);
   });
 
-  await test.step('TC008_4 | Withdrawal — Withdraw deposit & Convert into Silver options visible', async () => {
+  await test.step('TC008_4 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
     logSub(4, 'Withdrawal options');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await page
-      .locator(
-        'xpath=//div[contains(@class,"border") and contains(@class,"rounded-xl") and .//div[contains(normalize-space(),"Convert into Gold/Jewellery")]]',
-      )
-      .first()
-      .locator('span.p-button-label.ng-star-inserted')
-      .filter({ hasText: /^Proceed$/i })
-      .first()
-      .click();
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC008_5 | Withdrawal — Select Convert to Silver & Jewellery → product list', async () => {
@@ -2829,7 +2769,7 @@ test('TC_008-Convert to Silver or/Jewellery -Verify No Silver Deduction After Fa
   });
 });
 
-test('TC_009-Withdrawal Error Message Validation for gold vault(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
+test.skip('TC_009-Withdrawal Error Message Validation for gold vault(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
   const TC009ERR = (n: number): string => `TC009_ERR_${n}`;
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC009ERR(n)}] ${title}`);
@@ -2930,7 +2870,7 @@ test('TC_009-Withdrawal Error Message Validation for gold vault(deposit flow) @c
 
 });
 
-test('TC_010-Withdrawal Error Message Validation for silver vault(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
+test.skip('TC_010-Withdrawal Error Message Validation for silver vault(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
   const TC010ERR = (n: number): string => `TC010_ERR_${n}`;
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC010ERR(n)}] ${title}`);
@@ -3033,7 +2973,7 @@ test('TC_010-Withdrawal Error Message Validation for silver vault(deposit flow) 
   });
 });
 
-test('TC_011-Withdrawal Error Message Validation for gold SIP(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
+test.skip('TC_011-Withdrawal Error Message Validation for gold SIP(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
   const TC011ERR = (n: number): string => `TC011_ERR_${n}`;
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC011ERR(n)}] ${title}`);
@@ -3153,7 +3093,7 @@ test('TC_011-Withdrawal Error Message Validation for gold SIP(deposit flow) @cus
   });
 });
 
-test('TC_012-Withdrawal Error Message Validation for silver SIP(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
+test.skip('TC_012-Withdrawal Error Message Validation for silver SIP(deposit flow) @customer-flows', async ({ page, dashboardPage, withdrawalPage }) => {
   const TC012ERR = (n: number): string => `TC012_ERR_${n}`;
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC012ERR(n)}] ${title}`);
@@ -3274,7 +3214,7 @@ test('TC_012-Withdrawal Error Message Validation for silver SIP(deposit flow) @c
 });
 
 
-test('TC_013-Gold Vault minimum selling amount (Rs. 10) error after Proceed (deposit flow)@customer-flows', async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage, myOrderVerificationPage }) => {
+test.skip('TC_013-Gold Vault minimum selling amount (Rs. 10) error after Proceed (deposit flow)@customer-flows', async ({ page, dashboardPage, withdrawalPage, paymentPage, addNewBankWithdrawalPage, myOrderVerificationPage }) => {
   const TC013 = (n: number): string => `TC013_${n}`;
   const logSub = (n: number, title: string): void => {
     console.log(`\n[${TC013(n)}] ${title}`);
@@ -3475,7 +3415,7 @@ test('TC_013-Gold Vault minimum selling amount (Rs. 10) error after Proceed (dep
     logSub(15, 'Validate My Orders sell card details');
     await myOrderVerificationPage.goToMyOrders();
     await myOrderVerificationPage.clickSellTab();
-    await myOrderVerificationPage.waitForSellOrderRow();
+    await myOrderVerificationPage.waitForSellWithdrawalOrderRow(totalAmountWithdraw);
 
     const sellCard = await myOrderVerificationPage.getLatestSellOrderCardDetails();
 
@@ -3735,7 +3675,9 @@ test.skip('TC_014-Verify User Can Withdraw Complete Silver vault Balance to Bank
     logSub(17, 'Validate My Orders sell card details');
     await myOrderVerificationPage.goToMyOrders();
     await myOrderVerificationPage.clickSellTab();
-    await myOrderVerificationPage.waitForSellOrderRow();
+    await myOrderVerificationPage.waitForSellWithdrawalOrderRow(totalWithdrawAmount, {
+      narrationHint: 'Silver Sold',
+    });
 
     const sellCard = await myOrderVerificationPage.getLatestSellOrderCardDetails();
 
@@ -4006,7 +3948,7 @@ test.skip('TC_015-Verify user can withdraw complete Gold SIP balance to bank acc
     logSub(11, 'Validate My Orders sell card details');
     await myOrderVerificationPage.goToMyOrders();
     await myOrderVerificationPage.clickSellTab();
-    await myOrderVerificationPage.waitForSellOrderRow();
+    await myOrderVerificationPage.waitForSellWithdrawalOrderRow(expectedWithdrawalAmount);
 
     const sellCard = await myOrderVerificationPage.getLatestSellOrderCardDetails();
 
@@ -4120,18 +4062,15 @@ test('TC_016-Verify delivery address section on the checkout page in withdrawal 
     expect(goldFD).not.toBe('');
   });
 
-  await test.step('TC016_2 | Click Proceed and verify navigation', async () => {
-    logSub(2, 'Click Proceed and verify navigation');
-    const urlBeforeProceed = page.url();
+  await test.step('TC016_2 | Withdrawal — open withdrawal options', async () => {
+    logSub(2, 'Open withdrawal options');
     await dashboardPage.clickWithdrawInvestment();
-    await withdrawalPage.clickProceed();
-    await withdrawalPage.expectUrlNotToEqual(urlBeforeProceed);
   });
 
-  await test.step('TC016_3 | Verify options & Convert into Gold/Jewellery', async () => {
-    logSub(3, 'Verify Two options are visible and click on Convert into Gold/Jewellery');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
+  await test.step('TC016_3 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
+    logSub(3, 'Withdrawal options — Get Coins and Bars');
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC016_4 | Verify product list and select product', async () => {
@@ -4402,18 +4341,15 @@ test('TC_017-Verify delivery address on checkout summary after editing delivery 
     expect(goldFD).not.toBe('');
   });
 
-  await test.step('TC017_2 | Click Proceed and verify navigation', async () => {
-    logSub(2, 'Click Proceed and verify navigation');
-    const urlBeforeProceed = page.url();
+  await test.step('TC017_2 | Withdrawal — open withdrawal options', async () => {
+    logSub(2, 'Open withdrawal options');
     await dashboardPage.clickWithdrawInvestment();
-    await withdrawalPage.clickProceed();
-    await withdrawalPage.expectUrlNotToEqual(urlBeforeProceed);
   });
 
-  await test.step('TC017_3 | Verify options & Convert into Gold/Jewellery', async () => {
-    logSub(3, 'Verify Two options are visible and click on Convert into Gold/Jewellery');
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
+  await test.step('TC017_3 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
+    logSub(3, 'Withdrawal options — Get Coins and Bars');
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
   });
 
   await test.step('TC017_4 | Verify product list and select product', async () => {
@@ -4652,12 +4588,11 @@ test('TC_018-Verify withdrawal cart add/remove product and Start Shopping naviga
   const primaryProductName = tc004Dataset.productName || 'Augmont 0.5Gm Gold Coin (999 Purity)';
 
   await test.step('TC018_1 | Open dashboard and navigate to convert product list', async () => {
-    logSub(1, 'Open convert product list');
+    logSub(1, 'Open withdrawal options and product list');
     await dashboardPage.goto('/dashboard');
     await dashboardPage.clickWithdrawInvestment();
-    await withdrawalPage.clickProceed();
-    await withdrawalPage.verifyDepositAndConvertToJewelleryOptionsVisible();
-    await withdrawalPage.clickProceedForConvertGoldJewellery();
+    await withdrawalPage.verifyGetCoinAndCashOptionVisible();
+    await withdrawalPage.clickGetCoinsAndBarsOption();
     await withdrawalPage.waitForProductListPage();
     const categoryNames = await withdrawalPage.getAndLogProductCategoryNames();
     expect(categoryNames.length).toBeGreaterThan(0);

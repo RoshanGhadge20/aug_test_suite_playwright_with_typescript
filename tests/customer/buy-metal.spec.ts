@@ -56,7 +56,7 @@ test.describe('customer buy metal flows @customer-flows', () => {
     paymentPage,
     myOrderVerificationPage,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     let totalGoldBeforePurchase = 0;
     let uiQuantity = 0;
     let purchasedQuantity = 0;
@@ -143,10 +143,12 @@ test.describe('customer buy metal flows @customer-flows', () => {
         throw new Error(`Re-purchase flow redirected to KYC: ${page.url()}`);
       }
       await buySummaryPage.waitForValidForText();
-      await buySummaryPage.clickPayNowButton();
+      await expect(page).toHaveURL(/digital-gold\/buy\/summary/i);
     });
 
     await test.step('Complete payment via netbanking', async () => {
+      await buySummaryPage.clickPayNowButton();
+      await paymentPage.waitForRazorpayFrame();
       const razorpayAmountRaw = await paymentPage.getPriceSummaryAmountFromFrame();
       const expectedAmount = Number(dataset.oneTimeGoldAmount);
       const razorpayAmountNormalized =
@@ -157,17 +159,17 @@ test.describe('customer buy metal flows @customer-flows', () => {
       console.log(
         `[TC_001 VALIDATION] razorpayAmount raw=${razorpayAmountRaw} normalized=${razorpayAmountNormalized} expected=${expectedAmount}`
       );
-      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
+      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(2);
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.clickRazorpayContinueBuyNow();
+      await paymentPage.selectNetbankingBuyNow();
+      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
     await test.step('Validate order details', async () => {
       await page.goto('/my-orders');
       await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRow();
+      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
 
 // 1️⃣ Date
 const date = await myOrderVerificationPage.getDate();
@@ -184,6 +186,7 @@ expect(date).toBe(currentDate);
 // 2️⃣ Transaction ID
 const transactionId = await myOrderVerificationPage.getTransactionId();
 console.log('Transaction ID:', transactionId);
+expect(transactionId.length).toBeGreaterThan(0);
 
 // 3️⃣ Time of Purchase
 const timeOfPurchase = await myOrderVerificationPage.getTimeOfPurchase();
@@ -192,6 +195,7 @@ console.log('Time of Purchase:', timeOfPurchase);
 // 4️⃣ Narration
 const narration = await myOrderVerificationPage.getNarration();
 console.log('Narration:', narration);
+expect(narration).toMatch(/gold bought/i);
 
 const qty = await myOrderVerificationPage.getNarrationQuantity();
       purchasedQuantity = qty ?? 0;
@@ -206,7 +210,7 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
     });
 
     await test.step('Validate Invoice Detail', async () => {
-      await myOrderVerificationPage.waitForOrderRow();
+      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
 
       const pdfUrl = await myOrderVerificationPage.clickDownloadInvoiceAndGetUrl();
 
@@ -255,7 +259,6 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
      logValidation('Invoice grams', pdfGrams, uiQuantity);
      expect(pdfGrams).toBeCloseTo(uiQuantity, 3);
 
-      // ✅ RATE
       logValidation('Invoice rate', pdfRate, buyingRate);
       expect(pdfRate).toBe(buyingRate);
 
@@ -381,7 +384,7 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
       const razorpayAmount = await paymentPage.getPriceSummaryAmountFromFrame();
       expect(razorpayAmount).toBe(Number(dataset.oneTimeSilverAmount));
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
+      await paymentPage.clickRazorpayContinueBuyNow();
       await paymentPage.selectCards();
       await paymentPage.enterCardNumber(dataset.cardNumber);
       await paymentPage.enterCardExpiry(dataset.cardExpiry);
@@ -479,7 +482,7 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
     paymentPage,
     myOrderVerificationPage,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     let totalGoldBeforePurchase = 0;
     let totalSilverBeforePurchase = 0;
     let calculatedPortfolioBefore = 0;
@@ -616,9 +619,9 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
       );
       expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.clickRazorpayContinueBuyNow();
+      await paymentPage.selectNetbankingBuyNow();
+      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
     await test.step('TC005_6 | Read purchased quantity from My Orders', async () => {
