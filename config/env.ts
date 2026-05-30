@@ -1,66 +1,81 @@
 import { z } from 'zod';
 import * as dotenv from 'dotenv';
-import { ENVIRONMENTS, type EnvName } from './environments';
+import { ENVIRONMENTS, type EnvName, getTargetEnv } from './environments';
 
 dotenv.config();
 
 const nonEmpty = z.string().min(1);
 const url = z.string().url();
 
-const envSchema = z.object({
-  TEST_BASE_URL_ADMIN: url,
-  TEST_BASE_URL_CUSTOMER: url,
-  TEST_BASE_URL_BUSINESS: url,
-  TEST_BASE_URL_NEW_ADMIN: url,
-  TEST_BASE_URL_BACKEND: url,
-  TEST_BASE_URL_EMI: url,
-  TEST_ADMIN_USER_MOBILE: nonEmpty,
-  TEST_ADMIN_USER_OTP: nonEmpty,
-  TEST_CUSTOMER_USER_MOBILE: nonEmpty,
-  TEST_CUSTOMER_USER_OTP: nonEmpty,
-  TEST_BUSINESS_USER_MOBILE: nonEmpty,
-  TEST_BUSINESS_USER_OTP: nonEmpty,
-  TEST_NEW_ADMIN_USER_MOBILE: nonEmpty,
-  TEST_NEW_ADMIN_USER_OTP: nonEmpty,
-  TEST_BACKEND_USER_MOBILE: nonEmpty,
-  TEST_BACKEND_USER_OTP: nonEmpty,
-  TEST_EMI_USER_MOBILE: nonEmpty,
-  TEST_EMI_USER_OTP: nonEmpty,
+/**
+ * Build the Zod shape for one env prefix's keys. When `required` is false every key is `.optional()`
+ * — used for the env we are NOT targeting this run, so only the active env (TARGET_ENV/DEFAULT_ENV)
+ * needs to be filled in `.env`. The inactive block is still accepted if present.
+ */
+function envBlockShape(prefix: 'TEST' | 'UAT', required: boolean): z.ZodRawShape {
+  const u = required ? url : url.optional();
+  const s = required ? nonEmpty : nonEmpty.optional();
+  return {
+    [`${prefix}_BASE_URL_ADMIN`]: u,
+    [`${prefix}_BASE_URL_CUSTOMER`]: u,
+    [`${prefix}_BASE_URL_BUSINESS`]: u,
+    [`${prefix}_BASE_URL_NEW_ADMIN`]: u,
+    [`${prefix}_BASE_URL_BACKEND`]: u,
+    [`${prefix}_BASE_URL_EMI`]: u,
+    // Admin role login credentials (mobile per role) — required for the active env; OTP is shared via ADMIN_OTP
+    [`${prefix}_ADMIN_APPRAISER_MOBILE`]: s,
+    [`${prefix}_ADMIN_BM_MOBILE`]: s,
+    [`${prefix}_ADMIN_OPS_MOBILE`]: s,
+    [`${prefix}_ADMIN_PARTNER_MOBILE`]: s,
+    // User panel credentials are always optional — panels may not run in every suite
+    [`${prefix}_ADMIN_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_ADMIN_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_CUSTOMER_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_CUSTOMER_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_BUSINESS_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_BUSINESS_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_NEW_ADMIN_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_NEW_ADMIN_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_BACKEND_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_BACKEND_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_EMI_USER_MOBILE`]: nonEmpty.optional(),
+    [`${prefix}_EMI_USER_OTP`]: nonEmpty.optional(),
+  };
+}
 
-  UAT_BASE_URL_ADMIN: url,
-  UAT_BASE_URL_CUSTOMER: url,
-  UAT_BASE_URL_BUSINESS: url,
-  UAT_BASE_URL_NEW_ADMIN: url,
-  UAT_BASE_URL_BACKEND: url,
-  UAT_BASE_URL_EMI: url,
-  UAT_ADMIN_USER_MOBILE: nonEmpty,
-  UAT_ADMIN_USER_OTP: nonEmpty,
-  UAT_CUSTOMER_USER_MOBILE: nonEmpty,
-  UAT_CUSTOMER_USER_OTP: nonEmpty,
-  UAT_BUSINESS_USER_MOBILE: nonEmpty,
-  UAT_BUSINESS_USER_OTP: nonEmpty,
-  UAT_NEW_ADMIN_USER_MOBILE: nonEmpty,
-  UAT_NEW_ADMIN_USER_OTP: nonEmpty,
-  UAT_BACKEND_USER_MOBILE: nonEmpty,
-  UAT_BACKEND_USER_OTP: nonEmpty,
-  UAT_EMI_USER_MOBILE: nonEmpty,
-  UAT_EMI_USER_OTP: nonEmpty,
-
+const commonShape: z.ZodRawShape = {
   DEFAULT_ENV: z.enum(ENVIRONMENTS).default('test'),
   HEADLESS: z.string().default('true').transform((v) => v !== 'false'),
 
   API_PORT: z.coerce.number().int().positive().default(3000),
   API_KEY: z.string().min(8),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
-});
+  ADMIN_OTP: z.string().default('1234'),
+};
 
-type EnvBlockKeys<Prefix extends string> =
+/** Schema requiring only the ACTIVE env's keys; the other env block is optional. */
+function buildSchema(activePrefix: 'TEST' | 'UAT') {
+  const inactivePrefix = activePrefix === 'TEST' ? 'UAT' : 'TEST';
+  return z.object({
+    ...envBlockShape(activePrefix, true),
+    ...envBlockShape(inactivePrefix, false),
+    ...commonShape,
+  });
+}
+
+type EnvUrlKeys<Prefix extends string> =
   | `${Prefix}_BASE_URL_ADMIN`
   | `${Prefix}_BASE_URL_CUSTOMER`
   | `${Prefix}_BASE_URL_BUSINESS`
   | `${Prefix}_BASE_URL_NEW_ADMIN`
   | `${Prefix}_BASE_URL_BACKEND`
-  | `${Prefix}_BASE_URL_EMI`
+  | `${Prefix}_BASE_URL_EMI`;
+
+type EnvCredKeys<Prefix extends string> =
+  | `${Prefix}_ADMIN_APPRAISER_MOBILE`
+  | `${Prefix}_ADMIN_BM_MOBILE`
+  | `${Prefix}_ADMIN_OPS_MOBILE`
+  | `${Prefix}_ADMIN_PARTNER_MOBILE`
   | `${Prefix}_ADMIN_USER_MOBILE`
   | `${Prefix}_ADMIN_USER_OTP`
   | `${Prefix}_CUSTOMER_USER_MOBILE`
@@ -74,20 +89,25 @@ type EnvBlockKeys<Prefix extends string> =
   | `${Prefix}_EMI_USER_MOBILE`
   | `${Prefix}_EMI_USER_OTP`;
 
-export type AppEnv = Record<EnvBlockKeys<'TEST'>, string>
-  & Record<EnvBlockKeys<'UAT'>, string>
+export type AppEnv = Record<EnvUrlKeys<'TEST'>, string>
+  & Record<EnvUrlKeys<'UAT'>, string>
+  & Partial<Record<EnvCredKeys<'TEST'>, string>>
+  & Partial<Record<EnvCredKeys<'UAT'>, string>>
   & {
     DEFAULT_ENV: EnvName;
     HEADLESS: boolean;
     API_PORT: number;
     API_KEY: string;
     LOG_LEVEL: 'debug' | 'info' | 'warn' | 'error';
+    ADMIN_OTP: string;
   };
 
 export function loadEnv(source: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env): AppEnv {
-  const parsed = envSchema.safeParse(source);
+  const target = getTargetEnv(source as NodeJS.ProcessEnv);
+  const activePrefix = target === 'uat' ? 'UAT' : 'TEST';
+  const parsed = buildSchema(activePrefix).safeParse(source);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
+    const issues = parsed.error.issues.map((i: z.core.$ZodIssue) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment configuration: ${issues}`);
   }
   return parsed.data as unknown as AppEnv;

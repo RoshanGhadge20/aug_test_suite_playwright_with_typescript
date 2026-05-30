@@ -2,6 +2,8 @@ import { env } from './env';
 import type { Panel, ApiService } from './constants';
 import type { EnvName } from './environments';
 import { getTargetEnv } from './environments';
+import type { AdminRole } from './roles';
+import { roleMobileKey } from './roles';
 
 export interface Credential { mobile: string; otp: string; }
 
@@ -57,6 +59,12 @@ export function apiUrl(service: ApiService, envName: EnvName = getTargetEnv()): 
 
 export function apiCreds(service: ApiService, envName: EnvName = getTargetEnv()): Credential {
   return BUNDLES[envName].apiCreds[service];
+}
+
+export function adminRoleCreds(role: AdminRole, envName: EnvName = getTargetEnv()): Credential {
+  const e = env as unknown as Record<string, string>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return { mobile: e[roleMobileKey(role, prefix)], otp: e.ADMIN_OTP || '1234' };
 }
 
 /** Full URL for digital-gold spot rates (gBuy / gSell), aligned with `{TEST|UAT}_BASE_URL_BACKEND`. */

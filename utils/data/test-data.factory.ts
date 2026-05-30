@@ -25,4 +25,16 @@ export const TestDataFactory = {
       lastName: 'User',
     };
   },
+  mobile(): string {
+    return this.phone();
+  },
+  pan(): string {
+    const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const letters = (n: number) => Array.from({ length: n }, () => L[Math.floor(Math.random() * 26)]).join('');
+    const digits = String(Math.floor(1000 + Math.random() * 9000));
+    return `${letters(5)}${digits}${letters(1)}`;
+  },
+  stamp(): string {
+    return `_${randomUUID().slice(0, 8)}`;
+  },
 };

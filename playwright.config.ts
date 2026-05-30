@@ -46,9 +46,11 @@ export default defineConfig({
   projects: [
     { name: 'auth-setup', testDir: './setup', testMatch: /auth\.setup\.ts/ },
     {
+      // NOTE: the admin app stores its auth token in sessionStorage, which Playwright's storageState
+      // cannot persist — so we do NOT use storageState/auth-setup here. The admin fixture logs in
+      // (in-context) as appraiser before each test instead. See fixtures/admin.fixture.ts.
       name: 'admin',
-      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), storageState: storageStateIfExists(targetEnv, 'admin') },
-      dependencies: ['auth-setup'],
+      use: { ...devices['Desktop Chrome'], baseURL: panelUrl('admin', targetEnv), geolocation: { latitude: 18.5204, longitude: 73.8567 }, permissions: ['geolocation'] },
       testMatch: /tests\/admin\/.*\.spec\.ts/,
     },
     {

@@ -19,3 +19,15 @@ describe('TestDataFactory', () => {
     expect(u.password.length).toBeGreaterThanOrEqual(8);
   });
 });
+
+describe('admin data generators', () => {
+  it('mobile is 10 digits starting 6-9', () => {
+    expect(TestDataFactory.mobile()).toMatch(/^[6-9]\d{9}$/);
+  });
+  it('pan matches AAAAA9999A shape', () => {
+    expect(TestDataFactory.pan()).toMatch(/^[A-Z]{5}\d{4}[A-Z]$/);
+  });
+  it('stamp is unique-ish and filename-safe', () => {
+    expect(TestDataFactory.stamp()).toMatch(/^_[A-Za-z0-9_]+$/);
+  });
+});

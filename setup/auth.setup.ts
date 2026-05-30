@@ -1,7 +1,7 @@
 import { test as setup } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { panelUrl, panelCreds } from '../config/urls';
+import { panelUrl, panelCreds, adminRoleCreds } from '../config/urls';
 import { storageStatePath } from '../config/constants';
 import { getTargetEnv } from '../config/environments';
 import { AdminLoginPage } from '../pages/admin/login.page';
@@ -21,25 +21,26 @@ function ensureStorageDir(storagePath: string): void {
 }
 
 setup('authenticate admin', async ({ browser }) => {
-  setup.skip(true, 'Skipped due to TARGET_PANEL filter');
   const storagePath = storageStatePath(targetEnv, 'admin');
+  setup.skip(fs.existsSync(storagePath), `Reusing cached admin storage state (${storagePath}); delete it to force re-login`);
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('admin', targetEnv) });
   const page = await ctx.newPage();
   const login = new AdminLoginPage(page);
-  const { mobile, otp } = panelCreds('admin', targetEnv);
+  const { mobile, otp } = adminRoleCreds('appraiser', targetEnv);
   await login.login(mobile, otp);
   await ctx.storageState({ path: storagePath });
   await ctx.close();
 });
 
 setup('authenticate customer', async ({ browser }) => {
+  const { mobile, otp } = panelCreds('customer', targetEnv);
+  setup.skip(!mobile || !otp, `No customer credentials configured for ${targetEnv} — skipping`);
   const storagePath = storageStatePath(targetEnv, 'customer');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('customer', targetEnv) });
   const page = await ctx.newPage();
   const login = new CustomerLoginPage(page);
-  const { mobile, otp } = panelCreds('customer', targetEnv);
   console.log(`[customer login] env=${targetEnv} mobile=${mobile}`);
   await login.login(mobile, otp);
   await ctx.storageState({ path: storagePath });
