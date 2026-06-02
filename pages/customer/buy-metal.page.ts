@@ -130,13 +130,31 @@ export class BuyMetalPage extends BasePage {
     await this.oneTimeClick.click();
   }
 
-  async clickOnCreateSIP(): Promise<void> {
+  /** Wait until overlays are gone and Create SIP is ready to click. */
+  private async waitForCreateSipButtonReady(): Promise<void> {
     const blockUI = this.page.locator('.p-blockui-document');
-    await blockUI.waitFor({ state: 'hidden' }).catch(() => {});
-    await this.createSipClick.waitFor({ state: 'visible', timeout: 20_000 });
-    await expect(this.createSipClick).toBeEnabled({ timeout: 20_000 });
+    await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+    await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+    const amountVisible = await this.amountInput.isVisible().catch(() => false);
+    if (amountVisible) {
+      await expect(this.amountInput).toBeEnabled({ timeout: 20_000 }).catch(() => {});
+    }
+
+    await this.createSipClick.waitFor({ state: 'visible', timeout: 30_000 });
+    await expect(this.createSipClick).toBeEnabled({ timeout: 30_000 });
+    await this.createSipClick.scrollIntoViewIfNeeded();
+    // Brief settle for Angular/PrimeNG after frequency/amount changes.
+    await this.page.waitForTimeout(500);
+  }
+
+  async clickOnCreateSIP(): Promise<void> {
+    await this.waitForCreateSipButtonReady();
     await this.createSipClick.click();
     await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+    const blockUI = this.page.locator('.p-blockui-document');
+    await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
   }
 
   private async isOnSipPlanForm(): Promise<boolean> {
@@ -234,6 +252,7 @@ export class BuyMetalPage extends BasePage {
     const weekly = this.page.getByText('Weekly', { exact: true });
     await weekly.waitFor({ state: 'visible', timeout: 20_000 });
     await weekly.click();
+    await this.page.locator('.p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
   }
 
   async selectMonthlyFrequency(): Promise<void> {
@@ -241,6 +260,7 @@ export class BuyMetalPage extends BasePage {
     const monthly = this.page.getByText('Monthly', { exact: true });
     await monthly.waitFor({ state: 'visible', timeout: 20_000 });
     await monthly.click();
+    await this.page.locator('.p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
   }
 
   async selectInvestmentDay(day: string): Promise<void> {
@@ -268,7 +288,10 @@ export class BuyMetalPage extends BasePage {
 
   async enterUniquePlanName(prefix = 'Sip_plan_weekly'): Promise<string> {
     const uniquePlanName = `${prefix}_${Date.now()}`;
-    await this.planNameInput.waitFor({ state: 'visible', timeout: 20_000 });
+    const blockUI = this.page.locator('.p-blockui-document');
+    await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+    await this.planNameInput.waitFor({ state: 'visible', timeout: 30_000 });
+    await expect(this.planNameInput).toBeEnabled({ timeout: 20_000 });
     await this.planNameInput.fill(uniquePlanName);
     return uniquePlanName;
   }

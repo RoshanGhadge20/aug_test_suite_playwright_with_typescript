@@ -1931,13 +1931,57 @@ export class MyOrderVerificationPage extends BasePage {
     return (globalNormalized ?? globalBadgeText).trim();
   }
 
-  async validateLatestOrderRowStatusPending(): Promise<void> {
-    const status = (await this.getStatusFromLatestOrderRow()).trim();
+  /** After Delivery tab click — wait until order card or status is rendered (UAT can lag). */
+  async waitForDeliveryTabContent(timeoutMs = 60_000): Promise<void> {
+    const blockUI = this.page.locator('.p-blockui-document');
+    await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+    await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+    const deliveryCard = this.page
+      .locator('motion.div.bg-sheengold-ochre, div.bg-sheengold-ochre')
+      .filter({ has: this.page.locator('h3') })
+      .filter({ has: this.page.getByText(/Transaction\s*Id/i) })
+      .first();
+
+    const productCard = this.getProductOrderCardRoot();
+
+    await expect
+      .poll(
+        async () => {
+          if (await deliveryCard.isVisible({ timeout: 500 }).catch(() => false)) {
+            return true;
+          }
+          if (await productCard.isVisible({ timeout: 500 }).catch(() => false)) {
+            return true;
+          }
+          const status = (await this.getStatusFromLatestOrderRow()).trim();
+          return status.length > 0;
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] },
+      )
+      .toBeTruthy();
+  }
+
+  async validateLatestOrderRowStatusPending(timeoutMs = 60_000): Promise<void> {
     console.log('[My orders list] Expected: pre-completion delivery status (e.g. Pending, Processing, Payment Received)');
-    console.log('[My orders list] Actual status:', status || 'N/A');
-    if (!status) {
-      throw new Error('My orders list: could not resolve order status (empty).');
-    }
+
+    let status = '';
+    await expect
+      .poll(
+        async () => {
+          status = (await this.getStatusFromLatestOrderRow()).trim();
+          return status.length > 0 && MyOrderVerificationPage.isPreCompletionDeliveryStatus(status);
+        },
+        {
+          timeout: timeoutMs,
+          intervals: [500, 1000, 2000, 3000],
+          message: 'My orders list: delivery status did not load after clicking Delivery',
+        },
+      )
+      .toBeTruthy();
+
+    console.log('[My orders list] Actual status:', status);
     if (!MyOrderVerificationPage.isPreCompletionDeliveryStatus(status)) {
       throw new Error(
         `My orders list status mismatch. Expected a pre-completion delivery status, actual "${status}"`,
@@ -2130,43 +2174,38 @@ export class MyOrderVerificationPage extends BasePage {
     const deliveryRadio = row.getByRole('radio', { name: /^DELIVERY$/i }).first();
     if (await deliveryRadio.isVisible().catch(() => false)) {
       await deliveryRadio.click({ force: true });
-      return;
+    } else {
+      const button = row.getByRole('button', { name: /^DELIVERY$/i }).first();
+      if (await button.isVisible().catch(() => false)) {
+        await button.click({ force: true });
+      } else {
+        const labelledControl = row.locator('[role="radio"][aria-label="DELIVERY"]').first();
+        if (await labelledControl.isVisible().catch(() => false)) {
+          await labelledControl.click({ force: true });
+        } else {
+          const label = row.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
+          if (await label.isVisible({ timeout: 2_000 }).catch(() => false)) {
+            await label.click({ force: true });
+          } else {
+            const globalRadio = this.page.getByRole('radio', { name: /^DELIVERY$/i }).first();
+            if (await globalRadio.isVisible({ timeout: 10_000 }).catch(() => false)) {
+              await globalRadio.click({ force: true });
+            } else {
+              const globalButton = this.page.getByRole('button', { name: /^DELIVERY$/i }).first();
+              if (await globalButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+                await globalButton.click({ force: true });
+              } else {
+                const globalLabel = this.page.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
+                await globalLabel.waitFor({ state: 'visible', timeout: 15_000 });
+                await globalLabel.click({ force: true });
+              }
+            }
+          }
+        }
+      }
     }
 
-    const button = row.getByRole('button', { name: /^DELIVERY$/i }).first();
-    if (await button.isVisible().catch(() => false)) {
-      await button.click({ force: true });
-      return;
-    }
-
-    const labelledControl = row.locator('[role="radio"][aria-label="DELIVERY"]').first();
-    if (await labelledControl.isVisible().catch(() => false)) {
-      await labelledControl.click({ force: true });
-      return;
-    }
-
-    const label = row.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
-    if (await label.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await label.click({ force: true });
-      return;
-    }
-
-    // Final fallback: click any visible DELIVERY control on the page.
-    const globalRadio = this.page.getByRole('radio', { name: /^DELIVERY$/i }).first();
-    if (await globalRadio.isVisible({ timeout: 10_000 }).catch(() => false)) {
-      await globalRadio.click({ force: true });
-      return;
-    }
-
-    const globalButton = this.page.getByRole('button', { name: /^DELIVERY$/i }).first();
-    if (await globalButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      await globalButton.click({ force: true });
-      return;
-    }
-
-    const globalLabel = this.page.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
-    await globalLabel.waitFor({ state: 'visible', timeout: 15_000 });
-    await globalLabel.click({ force: true });
+    await this.waitForDeliveryTabContent();
   }
 
   async getLatestSellOrderCardDetails(): Promise<MyOrderSellCardDetails> {

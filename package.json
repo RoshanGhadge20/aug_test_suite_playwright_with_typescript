@@ -8,7 +8,7 @@
   "scripts": {
     "test": "playwright test",
     "test:admin": "playwright test --project=admin",
-    "test:customer": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer",
+    "test:customer": "playwright test --project=auth-setup --grep \"authenticate customer\" && playwright test --project=customer --no-deps",
     "test:business": "playwright test --project=business",
     "test:new-admin": "playwright test --project=new-admin",
     "test:api": "playwright test --project=api-backend --project=api-emi",
