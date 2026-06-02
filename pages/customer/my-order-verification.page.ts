@@ -1333,14 +1333,15 @@ export class MyOrderVerificationPage extends BasePage {
     if (!networkUrl) {
       throw new Error('Invoice PDF URL not found after clicking Invoice.');
     }
+    const resolvedUrl = networkUrl as string;
 
     this.logShopInvoice(5, 'Resolve PDF URL from capture');
-    this.invoicePdfHref = networkUrl;
+    this.invoicePdfHref = resolvedUrl;
     this.invoicePdfPage = pdfTab ?? viewerPage ?? this.page;
     if (this.invoicePdfPage) {
       await this.invoicePdfPage.bringToFront();
     }
-    this.logShopInvoice(6, `PDF ready | url=${this.invoicePdfHref.slice(0, 100)}`);
+    this.logShopInvoice(6, `PDF ready | url=${resolvedUrl.slice(0, 100)}`);
   }
 
   private async dismissProfileMenu(): Promise<void> {
