@@ -1,10 +1,17 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { ShopCartPriceDetails } from './shop-cart.page';
-
-export type ShopCheckoutPriceDetails = ShopCartPriceDetails & {
-  savings: number;
+/** TC001 / TC002 checkout Price Details — no Savings row. */
+export type ShopCheckoutPriceDetails = {
+  metalPrice: number;
+  makingAndDeliveryCharges: number;
+  tax: number;
+  grandTotal: number;
   paidFromFunds: number;
+};
+
+/** TC004 checkout Price Details after Use Saving. */
+export type ShopCheckoutPriceDetailsWithSavings = ShopCheckoutPriceDetails & {
+  savings: number;
 };
 
 /** TC003 — EMI Details panel on order summary (after OTP). */
@@ -119,8 +126,22 @@ export class ShopCheckoutPage extends BasePage {
     });
   }
 
+  /** TC001 / TC002 — metal, charges, tax, paid-from-funds, grand total (no Savings row). */
   async getPriceDetails(): Promise<ShopCheckoutPriceDetails> {
     const section = await this.priceSection();
+    return {
+      metalPrice: await this.priceRow('Metal Price', section),
+      makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges', section),
+      paidFromFunds: await this.priceRow('Paid From Funds', section),
+      tax: await this.priceRow('Tax', section),
+      grandTotal: await this.priceRow('Grand Total', section),
+    };
+  }
+
+  /** TC004 only — {@link getPriceDetails} plus Savings row after Use Saving. */
+  async getPriceDetailsWithSavings(): Promise<ShopCheckoutPriceDetailsWithSavings> {
+    const section = await this.priceSection();
+    await section.getByText('Savings', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
     return {
       metalPrice: await this.priceRow('Metal Price', section),
       makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges', section),
@@ -172,14 +193,9 @@ export class ShopCheckoutPage extends BasePage {
     };
   }
 
+  /** TC001 / TC002 — metal + charges + tax − paid-from-funds (no savings). */
   getCalculatedGrandTotal(price: ShopCheckoutPriceDetails): number {
-    return (
-      price.metalPrice +
-      price.makingAndDeliveryCharges +
-      price.tax -
-      price.savings -
-      price.paidFromFunds
-    );
+    return price.metalPrice + price.makingAndDeliveryCharges + price.tax - price.paidFromFunds;
   }
 
   /** Reads the billing card you select (default: first card with green tick, else first saved). */

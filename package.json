@@ -16,6 +16,7 @@
     "test:api:emi": "playwright test --project=api-emi",
     "test:smoke": "playwright test --grep @smoke",
     "test:regression": "playwright test --grep @regression",
+    "report:html": "playwright show-report reports/html",
     "test:unit": "SKIP_ENV_VALIDATION=true vitest run",
     "test:unit:watch": "SKIP_ENV_VALIDATION=true vitest",
     "api:dev": "tsx watch src/api/index.ts",

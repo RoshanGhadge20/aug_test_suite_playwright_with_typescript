@@ -1,7 +1,14 @@
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
+export type DashboardPortfolioMetrics = {
+  totalGoldGrams: number;
+  totalSilverGrams: number;
+  portfolioInr: number;
+};
+
 export class DashBoardPage extends BasePage {
+  private static readonly portfolioFieldTimeoutMs = 5_000;
   private readonly viewAllBtn: Locator;
   private readonly mySipsHeading: Locator;
   private readonly sipTextBlocks: Locator;
@@ -49,59 +56,113 @@ export class DashBoardPage extends BasePage {
     this.withdrawInvestmentButton = page.getByRole('button', { name: /Withdraw Investment/i });
   }
 
-  /** Portfolio block can load after hero/carousel; wait before reading gold/silver/portfolio INR. */
-  async waitForDashboardPortfolioSection(timeoutMs = 45_000): Promise<void> {
+  private portfolioCard(): Locator {
+    return this.page.locator('div:has-text("My Portfolio")').first();
+  }
+
+  private portfolioGoldLine(): Locator {
+    return this.portfolioCard().locator('p').filter({ hasText: /Total Gold/i }).first();
+  }
+
+  /** Dynamic wait — exits as soon as My Portfolio / Total Gold is visible (no fixed multi-second sleeps). */
+  async waitForDashboardPortfolioSection(timeoutMs = 20_000): Promise<void> {
+    if (/\/login/i.test(this.page.url())) {
+      throw new Error(
+        'Cannot read portfolio: session is on login page. Re-run: npx playwright test --project=auth-setup',
+      );
+    }
+
     const blockers = this.page.locator('div.p-blockui[aria-busy="true"], .p-blockui-document');
-    const deadline = Date.now() + timeoutMs;
-    let reloadCount = 0;
+    await blockers.first().waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
 
-    while (Date.now() < deadline) {
-      if (/\/login/i.test(this.page.url())) {
+    const goldLine = this.portfolioGoldLine();
+    try {
+      await expect(goldLine).toBeVisible({ timeout: timeoutMs });
+      return;
+    } catch {
+      if (!/\/dashboard/i.test(this.page.url())) {
         throw new Error(
-          'Cannot read portfolio: session is on login page. Re-run: npx playwright test --project=auth-setup',
+          'Dashboard portfolio (My Portfolio / Total Gold) did not become visible in time. Check UAT dashboard layout or session.',
         );
-      }
-
-      await blockers.first().waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
-
-      const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-      const goldLine = portfolioCard.locator('p').filter({ hasText: /Total Gold/i }).first();
-
-      if (await goldLine.isVisible().catch(() => false)) {
-        return;
-      }
-
-      await this.page.evaluate(() => {
-        const scoped = globalThis as unknown as {
-          scrollTo?: (x: number, y: number) => void;
-          document?: { body?: { scrollHeight?: number } };
-        };
-        const h = scoped.document?.body?.scrollHeight ?? 0;
-        scoped.scrollTo?.(0, h);
-      });
-      await this.page.waitForTimeout(600);
-      await this.page.evaluate(() => {
-        const g = globalThis as { scrollTo?: (x: number, y: number) => void };
-        g.scrollTo?.(0, 0);
-      });
-      await this.page.waitForTimeout(400);
-
-      if (await goldLine.isVisible().catch(() => false)) {
-        return;
-      }
-
-      if (reloadCount < 2 && /\/dashboard/i.test(this.page.url())) {
-        reloadCount += 1;
-        await this.page.reload({ waitUntil: 'domcontentloaded' });
-        await this.page.waitForTimeout(1_200);
-      } else {
-        await this.page.waitForTimeout(600);
       }
     }
 
-    throw new Error(
-      'Dashboard portfolio (My Portfolio / Total Gold) did not become visible in time. Check UAT dashboard layout or session.',
-    );
+    await this.page.reload({ waitUntil: 'domcontentloaded' });
+    await blockers.first().waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
+    await expect(goldLine).toBeVisible({
+      timeout: Math.min(10_000, timeoutMs),
+    });
+  }
+
+  /**
+   * Read gold (g), silver (g), and portfolio INR in one pass after a single portfolio wait.
+   * Use `skipPortfolioWait: true` when step already called `waitForDashboardPortfolioSection`.
+   */
+  async readPortfolioMetrics(options?: {
+    waitTimeoutMs?: number;
+    skipPortfolioWait?: boolean;
+  }): Promise<DashboardPortfolioMetrics> {
+    if (!options?.skipPortfolioWait) {
+      await this.waitForDashboardPortfolioSection(options?.waitTimeoutMs ?? 20_000);
+    }
+
+    return {
+      totalGoldGrams: await this.readTotalGoldGrams(),
+      totalSilverGrams: await this.readTotalSilverGrams(),
+      portfolioInr: await this.readPortfolioInr(),
+    };
+  }
+
+  private async readTotalGoldGrams(): Promise<number> {
+    const goldLabel = this.portfolioGoldLine();
+    await goldLabel.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    const valueNode = goldLabel.locator('xpath=preceding-sibling::p[1]');
+    await valueNode.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    const text = (await valueNode.textContent())?.trim() ?? '';
+    const value = Number(text.replace(/[^\d.]/g, ''));
+    if (Number.isNaN(value)) {
+      throw new Error(`Unable to parse Total Gold value from: "${text}"`);
+    }
+    return value;
+  }
+
+  private async readTotalSilverGrams(): Promise<number> {
+    const silverLabel = this.portfolioCard().locator('p').filter({ hasText: /Total Silver/i }).first();
+    await silverLabel.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    const valueNode = silverLabel.locator('xpath=preceding-sibling::p[1]');
+    await valueNode.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    const text = (await valueNode.textContent())?.trim() ?? '';
+    const value = Number(text.replace(/[^\d.]/g, ''));
+    if (Number.isNaN(value)) {
+      throw new Error(`Unable to parse Total Silver value from: "${text}"`);
+    }
+    return value;
+  }
+
+  private async readPortfolioInr(): Promise<number> {
+    const portfolioCard = this.portfolioCard();
+    const primary = portfolioCard
+      .locator('p.text-36.font-cabinetgroteskbold')
+      .filter({ hasText: /[\d,.]/ })
+      .first();
+
+    let text = '';
+    if (await primary.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      text = (await primary.textContent()) ?? '';
+    } else {
+      const fallback = this.page
+        .getByText('My Portfolio')
+        .first()
+        .locator('xpath=following::p[contains(@class,"text-36")][1]');
+      await fallback.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+      text = (await fallback.textContent()) ?? '';
+    }
+
+    const n = parseFloat(String(text).replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(n)) {
+      throw new Error(`Unable to parse portfolio value from: "${String(text).slice(0, 120)}"`);
+    }
+    return n;
   }
 
   async verifyDashboardLoaded(): Promise<void> {
@@ -246,37 +307,13 @@ export class DashBoardPage extends BasePage {
   }
 
   async getTotalGoldValue(): Promise<number> {
-    await this.waitForDashboardPortfolioSection(45_000);
-    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-    const goldLabel = portfolioCard.locator('p').filter({ hasText: /Total Gold/i }).first();
-    await goldLabel.waitFor({ state: 'visible', timeout: 25_000 });
-
-    const valueNode = goldLabel.locator('xpath=preceding-sibling::p[1]');
-    await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
-
-    const text = (await valueNode.textContent())?.trim() ?? '';
-    const value = Number(text.replace(/[^\d.]/g, ''));
-    if (Number.isNaN(value)) {
-      throw new Error(`Unable to parse Total Gold value from: "${text}"`);
-    }
-    return value;
+    await this.waitForDashboardPortfolioSection(20_000);
+    return this.readTotalGoldGrams();
   }
 
   async getTotalSilverValue(): Promise<number> {
-    await this.waitForDashboardPortfolioSection(45_000);
-    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-    const silverLabel = portfolioCard.locator('p').filter({ hasText: /Total Silver/i }).first();
-    await silverLabel.waitFor({ state: 'visible', timeout: 25_000 });
-
-    const valueNode = silverLabel.locator('xpath=preceding-sibling::p[1]');
-    await valueNode.waitFor({ state: 'visible', timeout: 20_000 });
-
-    const text = (await valueNode.textContent())?.trim() ?? '';
-    const value = Number(text.replace(/[^\d.]/g, ''));
-    if (Number.isNaN(value)) {
-      throw new Error(`Unable to parse Total Silver value from: "${text}"`);
-    }
-    return value;
+    await this.waitForDashboardPortfolioSection(20_000);
+    return this.readTotalSilverGrams();
   }
 
   async getWalletBalance(): Promise<number> {
@@ -289,30 +326,8 @@ export class DashBoardPage extends BasePage {
   }
 
   async getPortfolioValueNumber(): Promise<number> {
-    await this.waitForDashboardPortfolioSection(45_000);
-    const portfolioCard = this.page.locator('div:has-text("My Portfolio")').first();
-    const primary = portfolioCard
-      .locator('p.text-36.font-cabinetgroteskbold')
-      .filter({ hasText: /[\d,.]/ })
-      .first();
-
-    let text = '';
-    if (await primary.isVisible().catch(() => false)) {
-      text = (await primary.textContent()) ?? '';
-    } else {
-      const fallback = this.page
-        .getByText('My Portfolio')
-        .first()
-        .locator('xpath=following::p[contains(@class,"text-36")][1]');
-      await fallback.waitFor({ state: 'visible', timeout: 20_000 });
-      text = (await fallback.textContent()) ?? '';
-    }
-
-    const n = parseFloat(String(text).replace(/[^\d.]/g, ''));
-    if (!Number.isFinite(n)) {
-      throw new Error(`Unable to parse portfolio value from: "${String(text).slice(0, 120)}"`);
-    }
-    return n;
+    await this.waitForDashboardPortfolioSection(20_000);
+    return this.readPortfolioInr();
   }
 
   async getGoldFDValue(): Promise<string> {

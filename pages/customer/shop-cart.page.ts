@@ -19,6 +19,7 @@ export type ShopCartPriceDetails = {
   metalPrice: number;
   makingAndDeliveryCharges: number;
   tax: number;
+  savings: number;
   grandTotal: number;
 };
 
@@ -192,8 +193,76 @@ export class ShopCartPage extends BasePage {
       metalPrice: await this.priceRow('Metal Price'),
       makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges'),
       tax: await this.priceRow('Tax'),
+      savings: await this.getSavingsAmount(),
       grandTotal: await this.priceRow('Grand Total'),
     };
+  }
+
+  /** Clicks the Use Savings toggle on the cart page (PrimeNG hidden input + visible box). */
+  async clickUseSavingCheckbox(): Promise<void> {
+    await this.waitForCart();
+    const savingsLabel = this.page.getByText(/^Use Savings:/i);
+    await savingsLabel.scrollIntoViewIfNeeded();
+    const savingsRow = this.page.locator('div').filter({ has: savingsLabel });
+    const hiddenInput = savingsRow.locator(
+      'input[type="checkbox"][data-pc-section="hiddenInput"], input.p-element[type="checkbox"]',
+    ).first();
+    await hiddenInput.waitFor({ state: 'attached', timeout: 15_000 });
+
+    const isChecked = async (): Promise<boolean> =>
+      (await hiddenInput.getAttribute('aria-checked')) === 'true' ||
+      (await hiddenInput.isChecked().catch(() => false));
+
+    if (!(await isChecked())) {
+      const visibleToggle = savingsRow.locator('p-checkbox .p-checkbox-box, .p-checkbox-box').first();
+      if (await visibleToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await visibleToggle.click();
+      } else {
+        await savingsLabel.locator('xpath=preceding-sibling::*[1]').click({ force: true });
+      }
+    }
+    await expect(hiddenInput).toHaveAttribute('aria-checked', 'true', { timeout: 10_000 });
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+  }
+
+  /**
+   * TC004 — cart payable after Use Saving (metal + charges + tax − savings).
+   * Cart has no paid-from-funds row; TC001/002 checkout uses getCalculatedGrandTotal on shop-checkout page.
+   */
+  getCalculatedCartGrandTotal(price: ShopCartPriceDetails): number {
+    return Number(
+      (price.metalPrice + price.makingAndDeliveryCharges + price.tax - price.savings).toFixed(2),
+    );
+  }
+
+  /** Reads the Savings row amount from cart Price Details (0 if row is hidden). */
+  async getSavingsAmount(): Promise<number> {
+    await this.priceDetailsSection.waitFor({ state: 'visible', timeout: 10_000 });
+    const labelCell = this.priceDetailsSection.getByText(/^Savings$/i);
+    const visible = await labelCell.isVisible({ timeout: 2_000 }).catch(() => false);
+    if (!visible) {
+      return 0;
+    }
+    return this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]')));
+  }
+
+  /**
+   * TC004 — applied savings after Use Savings toggle (Savings row or line-total delta).
+   */
+  async getAppliedCartSavingsAmount(): Promise<number> {
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.priceDetailsSection
+      .getByText(/^Savings$/i)
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .catch(() => {});
+    const fromRow = await this.getSavingsAmount();
+    if (fromRow > 0) {
+      return fromRow;
+    }
+    const price = await this.getCartPriceDetails();
+    return Number(
+      (price.metalPrice + price.makingAndDeliveryCharges + price.tax - price.grandTotal).toFixed(2),
+    );
   }
 
   /** TC003 only — mixed EMI cart uses TAX and Initial Payment rows. */

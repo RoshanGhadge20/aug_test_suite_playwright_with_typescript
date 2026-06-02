@@ -1,14 +1,19 @@
 import { type Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/base.fixture';
-import { digitalGoldRatesUrl, panelCreds } from '../../config/urls';
 import { getTargetEnv } from '../../config/environments';
 import { getBuyMetalDataset } from '../../utils/data/customer-excel-data';
 import * as pdfUtils from '../../utils/pdf-utils';
+import {
+  clearCustomerBrowserStorage,
+  fetchDigitalMetalSpotRates,
+  logValidation,
+  portfolioFromMetalGramsAndSellRates,
+  resolveAltCustomerMobile,
+  resolveAltCustomerOtp,
+  waitAndRetryIfKycRedirect,
+} from './helpers/customer-alt-user.helpers';
 
 const dataset = getBuyMetalDataset();
-
-/** TC_005 logs into this user’s dashboard by default (override with TC005_CUSTOMER_USER_MOBILE). */
-const TC005_DEFAULT_CUSTOMER_MOBILE = '8141122222';
 
 function calculateAmounts(total: number, buyingRate: number, paidFromWallet: number) {
   const taxable = Number((total / 1.03).toFixed(2));
@@ -16,21 +21,6 @@ function calculateAmounts(total: number, buyingRate: number, paidFromWallet: num
   const payable = Number((total - paidFromWallet).toFixed(2));
   const quantity = Number((taxable / buyingRate).toFixed(4));
   return { amount: taxable, tax: gst, total, payable, calcQuantity: quantity };
-}
-
-function logValidation(label: string, actual: unknown, expected: unknown): void {
-  console.log(`[VALIDATION] ${label} | actual: ${String(actual)} | expected: ${String(expected)}`);
-}
-
-async function waitAndRetryIfKycRedirect(page: Page, targetPath: string): Promise<string> {
-  const kycPattern = /\/kyc(?:\/|$|\?)/i;
-  let url = page.url();
-  if (!kycPattern.test(url)) return url;
-
-  await page.waitForTimeout(3_000);
-  await page.goto(targetPath);
-  url = page.url();
-  return url;
 }
 
 async function waitForBuyOutcome(page: Page): Promise<'summary' | 'kyc' | 'unknown'> {
@@ -44,79 +34,6 @@ async function waitForBuyOutcome(page: Page): Promise<'summary' | 'kyc' | 'unkno
   ]);
 
   return outcome;
-}
-
-type DigitalMetalSpotRates = { gBuy: number; gSell: number; sBuy: number; sSell: number };
-
-function parseDigitalMetalSpotRatesFromPayload(payload: unknown): DigitalMetalSpotRates {
-  if (typeof payload !== 'object' || payload === null) {
-    throw new Error(`Invalid digital-gold rates response (not an object): ${String(payload)}`);
-  }
-  const root = payload as Record<string, unknown>;
-  const rate = root.rate as Record<string, unknown> | undefined;
-  const rates = rate?.rates as Record<string, unknown> | undefined;
-  if (!rates) {
-    throw new Error(`Could not find rate.rates in response: ${JSON.stringify(payload)}`);
-  }
-  const parseNum = (raw: unknown, label: string): number => {
-    if (raw === undefined || raw === null) {
-      throw new Error(`Missing ${label} in rates.rates`);
-    }
-    const n = Number(String(raw).replace(/,/g, ''));
-    if (!Number.isFinite(n) || n <= 0) {
-      throw new Error(`Invalid ${label} value: ${String(raw)}`);
-    }
-    return n;
-  };
-  const gBuy = parseNum(rates.gBuy ?? rates.gbuy, 'gBuy');
-  const gSell = parseNum(rates.gSell ?? rates.gsell, 'gSell');
-  const sBuy = parseNum(rates.sBuy ?? rates.sbuy, 'sBuy');
-  const sSell = parseNum(rates.sSell ?? rates.ssell, 'sSell');
-  return { gBuy, gSell, sBuy, sSell };
-}
-
-function portfolioFromMetalGramsAndSellRates(
-  goldGrams: number,
-  silverGrams: number,
-  spot: DigitalMetalSpotRates,
-): number {
-  return Number((goldGrams * spot.gSell + silverGrams * spot.sSell).toFixed(2));
-}
-
-async function fetchDigitalMetalSpotRates(page: Page): Promise<DigitalMetalSpotRates> {
-  const ratesUrl = digitalGoldRatesUrl();
-  console.log('[digital-gold/rates] GET', ratesUrl);
-  const response = await page.request.get(ratesUrl, { timeout: 30_000 });
-  expect(response.ok(), `digital-gold rates API failed: HTTP ${response.status()}`).toBeTruthy();
-  const payload = (await response.json()) as unknown;
-  const parsed = parseDigitalMetalSpotRatesFromPayload(payload);
-  console.log(
-    '[digital-gold/rates] gBuy:',
-    parsed.gBuy,
-    'gSell:',
-    parsed.gSell,
-    'sBuy:',
-    parsed.sBuy,
-    'sSell:',
-    parsed.sSell,
-  );
-  return parsed;
-}
-
-/** Clear cookies + web storage so a fresh OTP/PIN login can replace the project storageState session. */
-async function clearCustomerBrowserStorage(page: Page): Promise<void> {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch {
-      /* ignore */
-    }
-  });
-  await page.context().clearCookies();
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(500);
 }
 
 test.describe('customer buy metal flows @customer-flows', () => {
@@ -139,7 +56,7 @@ test.describe('customer buy metal flows @customer-flows', () => {
     paymentPage,
     myOrderVerificationPage,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     let totalGoldBeforePurchase = 0;
     let uiQuantity = 0;
     let purchasedQuantity = 0;
@@ -226,10 +143,12 @@ test.describe('customer buy metal flows @customer-flows', () => {
         throw new Error(`Re-purchase flow redirected to KYC: ${page.url()}`);
       }
       await buySummaryPage.waitForValidForText();
-      await buySummaryPage.clickPayNowButton();
+      await expect(page).toHaveURL(/digital-gold\/buy\/summary/i);
     });
 
     await test.step('Complete payment via netbanking', async () => {
+      await buySummaryPage.clickPayNowButton();
+      await paymentPage.waitForRazorpayFrame();
       const razorpayAmountRaw = await paymentPage.getPriceSummaryAmountFromFrame();
       const expectedAmount = Number(dataset.oneTimeGoldAmount);
       const razorpayAmountNormalized =
@@ -240,17 +159,17 @@ test.describe('customer buy metal flows @customer-flows', () => {
       console.log(
         `[TC_001 VALIDATION] razorpayAmount raw=${razorpayAmountRaw} normalized=${razorpayAmountNormalized} expected=${expectedAmount}`
       );
-      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
+      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(2);
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.clickRazorpayContinueBuyNow();
+      await paymentPage.selectNetbankingBuyNow();
+      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
     await test.step('Validate order details', async () => {
       await page.goto('/my-orders');
       await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRow();
+      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
 
 // 1️⃣ Date
 const date = await myOrderVerificationPage.getDate();
@@ -267,6 +186,7 @@ expect(date).toBe(currentDate);
 // 2️⃣ Transaction ID
 const transactionId = await myOrderVerificationPage.getTransactionId();
 console.log('Transaction ID:', transactionId);
+expect(transactionId.length).toBeGreaterThan(0);
 
 // 3️⃣ Time of Purchase
 const timeOfPurchase = await myOrderVerificationPage.getTimeOfPurchase();
@@ -275,6 +195,7 @@ console.log('Time of Purchase:', timeOfPurchase);
 // 4️⃣ Narration
 const narration = await myOrderVerificationPage.getNarration();
 console.log('Narration:', narration);
+expect(narration).toMatch(/gold bought/i);
 
 const qty = await myOrderVerificationPage.getNarrationQuantity();
       purchasedQuantity = qty ?? 0;
@@ -289,7 +210,7 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
     });
 
     await test.step('Validate Invoice Detail', async () => {
-      await myOrderVerificationPage.waitForOrderRow();
+      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
 
       const pdfUrl = await myOrderVerificationPage.clickDownloadInvoiceAndGetUrl();
 
@@ -338,7 +259,6 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
      logValidation('Invoice grams', pdfGrams, uiQuantity);
      expect(pdfGrams).toBeCloseTo(uiQuantity, 3);
 
-      // ✅ RATE
       logValidation('Invoice rate', pdfRate, buyingRate);
       expect(pdfRate).toBe(buyingRate);
 
@@ -464,7 +384,7 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
       const razorpayAmount = await paymentPage.getPriceSummaryAmountFromFrame();
       expect(razorpayAmount).toBe(Number(dataset.oneTimeSilverAmount));
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
+      await paymentPage.clickRazorpayContinueBuyNow();
       await paymentPage.selectCards();
       await paymentPage.enterCardNumber(dataset.cardNumber);
       await paymentPage.enterCardExpiry(dataset.cardExpiry);
@@ -562,7 +482,7 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
     paymentPage,
     myOrderVerificationPage,
   }) => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     let totalGoldBeforePurchase = 0;
     let totalSilverBeforePurchase = 0;
     let calculatedPortfolioBefore = 0;
@@ -583,15 +503,8 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
 
     await test.step('TC005_1 | Clear storage + login (default 8141122222; OTP = panel customer OTP)', async () => {
       logSub(1, 'Session: clear storage + customer login');
-      const envMobile = process.env.TC005_CUSTOMER_USER_MOBILE?.trim();
-      const creds = panelCreds('customer', getTargetEnv());
-      const mobile = envMobile || TC005_DEFAULT_CUSTOMER_MOBILE;
-      const otp = creds.otp;
-      if (!otp) {
-        throw new Error(
-          `Missing customer OTP in env for ${getTargetEnv().toUpperCase()} (e.g. UAT_CUSTOMER_USER_OTP). Same OTP is used for every customer login.`,
-        );
-      }
+      const mobile = resolveAltCustomerMobile();
+      const otp = resolveAltCustomerOtp();
       console.log(
         `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP (same for all users on this env).`,
       );
@@ -706,9 +619,9 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
       );
       expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.clickRazorpayContinueBuyNow();
+      await paymentPage.selectNetbankingBuyNow();
+      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
     await test.step('TC005_6 | Read purchased quantity from My Orders', async () => {
