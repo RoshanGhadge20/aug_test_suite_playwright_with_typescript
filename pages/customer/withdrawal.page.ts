@@ -949,6 +949,10 @@ export class WithdrawalPage extends BasePage {
     while (Date.now() < deadline) {
       if (await proceedButton.isEnabled()) {
         await proceedButton.click();
+        const blockUI = this.page.locator('.p-blockui-document');
+        await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+        await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+        await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
         return;
       }
       await this.page.waitForTimeout(300);

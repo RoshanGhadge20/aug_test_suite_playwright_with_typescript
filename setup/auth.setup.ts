@@ -10,7 +10,7 @@ import { BusinessLoginPage } from '../pages/business/login.page';
 import { NewAdminLoginPage } from '../pages/new-admin/login.page';
 
 const targetEnv = getTargetEnv();
-//const targetPanel = process.env.TARGET_PANEL;
+const targetPanel = process.env.TARGET_PANEL;
 
 // function shouldAuthenticate(panel: 'admin' | 'customer' | 'business' | 'new-admin'): boolean {
 //   return !targetPanel || targetPanel === panel;
