@@ -1,5 +1,6 @@
 import path from 'path';
 import * as XLSX from 'xlsx';
+import { panelCreds, shopCheckoutOtp } from '../../config/urls';
 
 /** Customer test data workbook: `testdata/customer/customer-data.xlsx` */
 export const CUSTOMER_DATA_DIR = path.resolve(process.cwd(), 'testdata', 'customer');
@@ -81,10 +82,13 @@ function updateFirstDataRowCellByHeader(
   workbookCache.set(filePath, XLSX.readFile(filePath));
 }
 
+export type BuyMetalType = 'gold' | 'silver';
+
 export interface BuyMetalDataset {
   oneTimeGoldAmount: string;
   oneTimeSilverAmount: string;
   contactNumber: string;
+  netbankingBankName: string;
   cardHolderName: string;
   metalGold: string;
   metalSilver: string;
@@ -104,6 +108,7 @@ export function getBuyMetalDataset(): BuyMetalDataset {
     oneTimeGoldAmount: normalizeCell(firstRow.oneTimeGoldAmount),
     oneTimeSilverAmount: normalizeCell(firstRow.oneTimeSilverAmount),
     contactNumber: normalizeCell(firstRow.contactNumber),
+    netbankingBankName: normalizeCell(firstRow.netbankingBankName ?? firstRow.BankName ?? 'HDFC Bank'),
     cardHolderName: normalizeCell(firstRow.cardHolderName),
     metalGold: normalizeCell(firstRow.metalGold),
     metalSilver: normalizeCell(firstRow.metalSilver),
@@ -114,12 +119,25 @@ export function getBuyMetalDataset(): BuyMetalDataset {
   };
 }
 
+export type SipMetalType = 'gold' | 'silver';
+export type SipFrequencyType = 'weekly' | 'monthly';
+
+export function parseSipMetalType(value: string): SipMetalType {
+  return value.toLowerCase().includes('silver') ? 'silver' : 'gold';
+}
+
+export function parseSipFrequencyType(value: string): SipFrequencyType {
+  return value.toLowerCase().includes('month') ? 'monthly' : 'weekly';
+}
+
 export interface SipFlowsDataset {
   SIPEmandateAmount: string;
   SIPInvestmentDay: string;
   SIPRecreateInvestmentDay: string;
   SIPStartAfterDays: string;
   SIPDurationWeekly: string;
+  SIPMetal: SipMetalType;
+  SIPFrequency: SipFrequencyType;
   SIPStatus: string;
   GoldLabel: string;
   SilverLabel: string;
@@ -134,6 +152,7 @@ export interface SipFlowsDataset {
   SIPWeeklyAmount: string;
   SIPWeeklyInvestmentDay: string;
   SIPWeeklyFrequency: string;
+  SIPWeeklyGoldMetal: string;
   SIPWeeklySilverMetal: string;
   SIPMonthlyAmount: string;
   SIPMonthlyFrequency: string;
@@ -154,6 +173,10 @@ export function getSipFlowsDataset(): SipFlowsDataset {
     SIPRecreateInvestmentDay: normalizeCell(firstRow.SIPRecreateInvestmentDay ?? firstRow.SIPInvestmentDay),
     SIPStartAfterDays: normalizeCell(firstRow.SIPStartAfterDays ?? 5),
     SIPDurationWeekly: normalizeCell(firstRow.SIPDurationWeekly),
+    SIPMetal: parseSipMetalType(normalizeCell(firstRow.SIPMetal ?? firstRow.metal)),
+    SIPFrequency: parseSipFrequencyType(
+      normalizeCell(firstRow.SIPFrequency ?? firstRow.SIPDurationWeekly ?? 'weekly'),
+    ),
     SIPStatus: normalizeCell(firstRow.SIPStatus ?? 'Pending'),
     GoldLabel: normalizeCell(firstRow.GoldLabel ?? 'Gold'),
     SilverLabel: normalizeCell(firstRow.SilverLabel ?? 'Silver'),
@@ -168,6 +191,7 @@ export function getSipFlowsDataset(): SipFlowsDataset {
     SIPWeeklyAmount: normalizeCell(firstRow.SIPWeeklyAmount),
     SIPWeeklyInvestmentDay: normalizeCell(firstRow.SIPWeeklyInvestmentDay),
     SIPWeeklyFrequency: normalizeCell(firstRow.SIPWeeklyFrequency),
+    SIPWeeklyGoldMetal: normalizeCell(firstRow.SIPWeeklyGoldMetal ?? firstRow.metal),
     SIPWeeklySilverMetal: normalizeCell(firstRow.SIPWeeklySilverMetal),
     SIPMonthlyAmount: normalizeCell(firstRow.SIPMonthlyAmount),
     SIPMonthlyFrequency: normalizeCell(firstRow.SIPMonthlyFrequency),
@@ -275,15 +299,14 @@ export function saveWithdrawalTc006ProductName(productName: string): void {
   );
 }
 
-const SHOP_TC001_DEFAULT_MOBILE = '9561273901';
 const SHOP_TC001_DEFAULT_OTP = '1234';
 
 export interface ShopDataset {
   /** TC_SHOP_001 product list selection (`ShopTc001ProductName` column on `shop` sheet). */
   productName: string;
-  /** OTP checkout mobile (`ShopTc001Mobile` on `shop` sheet, else `SHOP_TC001_MOBILE` env). */
+  /** Checkout OTP mobile — same as customer login (`panelCreds('customer')`). */
   mobile: string;
-  /** OTP checkout code (`ShopTc001Otp` on `shop` sheet, else `SHOP_TC001_OTP` env). */
+  /** Checkout OTP code only — Excel `ShopTc001Otp`, else `{TEST|UAT}_SHOP_USER_OTP` (default `1234`). */
   otp: string;
 }
 
@@ -294,15 +317,15 @@ export function getShopDataset(): ShopDataset {
     throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
   }
 
-  const excelMobile = normalizeCell(firstRow.ShopTc001Mobile);
   const excelOtp = normalizeCell(firstRow.ShopTc001Otp);
+  const { mobile: loginMobile } = panelCreds('customer');
 
   return {
     productName: normalizeCell(
       firstRow.ShopTc001ProductName ?? 'Augmont 0.1Gm Gold Coin (999 Purity)',
     ),
-    mobile: excelMobile || process.env.SHOP_TC001_MOBILE?.trim() || SHOP_TC001_DEFAULT_MOBILE,
-    otp: excelOtp || process.env.SHOP_TC001_OTP?.trim() || SHOP_TC001_DEFAULT_OTP,
+    mobile: loginMobile,
+    otp: excelOtp || shopCheckoutOtp() || process.env.SHOP_TC001_OTP?.trim() || SHOP_TC001_DEFAULT_OTP,
   };
 }
 
@@ -352,6 +375,28 @@ export interface ShopTc003Dataset {
   buyNowProductName: string;
 }
 
+/** Optional Excel overrides for generic EMI purchase journeys (`ShopTc007*` / `ShopTc009*` on `shop` sheet). */
+export interface ShopEmiJourneyDataset {
+  productName: string;
+  emiPlanTenure: string;
+}
+
+export function getShopEmiJourneyDataset(
+  testCaseKey: '007' | '009',
+  defaults: ShopEmiJourneyDataset,
+): ShopEmiJourneyDataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) return defaults;
+
+  const productKey = `ShopTc${testCaseKey}ProductName` as keyof typeof firstRow;
+  const tenureKey = `ShopTc${testCaseKey}EmiPlanTenure` as keyof typeof firstRow;
+
+  return {
+    productName: normalizeCell(firstRow[productKey]) || defaults.productName,
+    emiPlanTenure: normalizeCell(firstRow[tenureKey]) || defaults.emiPlanTenure,
+  };
+}
+
 /** TC_SHOP_003 products from `shop` sheet. Mobile/OTP use {@link getShopDataset}. */
 export function getShopTc003Dataset(): ShopTc003Dataset {
   const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
@@ -364,5 +409,24 @@ export function getShopTc003Dataset(): ShopTc003Dataset {
       normalizeCell(firstRow.ShopTc003EmiProductName) || SHOP_TC003_DEFAULT_EMI_PRODUCT,
     buyNowProductName:
       normalizeCell(firstRow.ShopTc003BuyNowProductName) || SHOP_TC003_DEFAULT_BUY_NOW_PRODUCT,
+  };
+}
+
+const SHOP_TC011_DEFAULT_PRODUCT = 'Augmont 0.5Gm Gold Coin (999 Purity)';
+
+export interface ShopTc011Dataset {
+  /** Higher-priced product so savings only partially cover checkout (AT-1647). */
+  productName: string;
+}
+
+/** TC_SHOP_012 — product from `shop` sheet (`ShopTc011ProductName`). Defaults to 0.5Gm coin. */
+export function getShopTc011Dataset(): ShopTc011Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    productName: normalizeCell(firstRow.ShopTc011ProductName) || SHOP_TC011_DEFAULT_PRODUCT,
   };
 }

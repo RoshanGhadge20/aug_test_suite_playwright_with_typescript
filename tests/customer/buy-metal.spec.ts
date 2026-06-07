@@ -1,55 +1,52 @@
-import { type Page } from '@playwright/test';
 import { test, expect } from '../../fixtures/base.fixture';
 import { getTargetEnv } from '../../config/environments';
-import { getBuyMetalDataset } from '../../utils/data/customer-excel-data';
-import * as pdfUtils from '../../utils/pdf-utils';
+import { panelCreds } from '../../config/urls';
+import {
+  getBuyMetalDataset,
+  type BuyMetalType,
+} from '../../utils/data/customer-excel-data';
+import type { OneTimeSummaryResult } from '../../pages/customer/buy-summary.page';
 import {
   clearCustomerBrowserStorage,
-  fetchDigitalMetalSpotRates,
   logValidation,
-  portfolioFromMetalGramsAndSellRates,
+  persistCustomerStorageState,
   resolveAltCustomerMobile,
   resolveAltCustomerOtp,
-  waitAndRetryIfKycRedirect,
 } from './helpers/customer-alt-user.helpers';
 
 const dataset = getBuyMetalDataset();
 
-function calculateAmounts(total: number, buyingRate: number, paidFromWallet: number) {
-  const taxable = Number((total / 1.03).toFixed(2));
-  const gst = Number((total - taxable).toFixed(2));
-  const payable = Number((total - paidFromWallet).toFixed(2));
-  const quantity = Number((taxable / buyingRate).toFixed(4));
-  return { amount: taxable, tax: gst, total, payable, calcQuantity: quantity };
+const paymentConfig = {
+  contactNumber: dataset.contactNumber,
+  netbankingBankName: dataset.netbankingBankName,
+  cardNumber: dataset.cardNumber,
+  cardExpiry: dataset.cardExpiry,
+  cardCvv: dataset.cardCvv,
+  cardHolderName: dataset.cardHolderName,
+  cardOtp: dataset.cardOtp,
+};
+
+function buyOrderRowText(metalName: string): string {
+  const label = metalName.charAt(0).toUpperCase() + metalName.slice(1).toLowerCase();
+  return `${label} Bought`;
 }
 
-async function waitForBuyOutcome(page: Page): Promise<'summary' | 'kyc' | 'unknown'> {
-  const summaryPattern = /digital-gold\/buy\/summary/i;
-  const kycPattern = /\/kyc(?:\/|$|\?)/i;
+function metalAmount(metal: BuyMetalType): string {
+  return metal === 'gold' ? dataset.oneTimeGoldAmount : dataset.oneTimeSilverAmount;
+}
 
-  const outcome = await Promise.race([
-    page.waitForURL(summaryPattern, { timeout: 15_000 }).then(() => 'summary' as const),
-    page.waitForURL(kycPattern, { timeout: 15_000 }).then(() => 'kyc' as const),
-    page.waitForTimeout(15_000).then(() => 'unknown' as const),
-  ]);
-
-  return outcome;
+function metalName(metal: BuyMetalType): string {
+  return metal === 'gold' ? dataset.metalGold : dataset.metalSilver;
 }
 
 test.describe('customer buy metal flows @customer-flows', () => {
+  // TC_005 logs in with a different user — skip the default dashboard open.
   test.beforeEach(async ({ page }, testInfo) => {
-    if (/TC_005|TC005/i.test(testInfo.title)) {
-      return;
-    }
+    if (/TC_005/i.test(testInfo.title)) return;
     await page.goto('/dashboard');
-    const url = await waitAndRetryIfKycRedirect(page, '/dashboard');
-    if (/\/login(?:\/|$|\?)/i.test(url) || /\/kyc(?:\/|$|\?)/i.test(url)) {
-      throw new Error(`Customer session is not valid (${url}). Run: npx playwright test --project=auth-setup`);
-    }
   });
 
   test('TC_001-Buy Gold one-time using Netbanking + cancel + re-purchase flow', async ({
-    page,
     dashboardPage,
     buyMetalPage,
     buySummaryPage,
@@ -57,263 +54,86 @@ test.describe('customer buy metal flows @customer-flows', () => {
     myOrderVerificationPage,
   }) => {
     test.setTimeout(180_000);
-    let totalGoldBeforePurchase = 0;
-    let uiQuantity = 0;
-    let purchasedQuantity = 0;
-    let buyingRate = 0;
-    let tax = 0;
-    let amount = 0;
-    let payable = 0;
+
+    const tc001Data = {
+      metal: 'gold' as const,
+      amount: metalAmount('gold'),
+      metalName: metalName('gold'),
+      orderRowText: buyOrderRowText(dataset.metalGold),
+    };
+
+    let metalBeforeGrams = 0;
+    let summary: OneTimeSummaryResult;
     let paidAmount = 0;
+    let purchasedQuantity = 0;
 
-    await test.step('Get current gold value', async () => {
-      await page.goto('/dashboard');
-      await page.waitForTimeout(3_000);
-      totalGoldBeforePurchase = await dashboardPage.getTotalGoldValue();
-      console.log('Captured total gold before purchase (g):', totalGoldBeforePurchase);
-      expect(totalGoldBeforePurchase).toBeGreaterThan(0);
+    await test.step('captureBuyMetalGramsBeforePurchase', async () => {
+      metalBeforeGrams = await dashboardPage.captureBuyMetalGramsBeforePurchase(tc001Data.metal);
     });
 
-    await test.step('Get wallet balance from profile', async () => {
-      await page.goto('/my-profile');
-      await expect(page).toHaveURL(/my-profile/);
-      const walletBalance = await dashboardPage.getWalletBalance();
-      const expectedWalletBalance = 0;
-      console.log(
-        `Wallet balance validation | actual: ${walletBalance} | minimum expected: ${expectedWalletBalance}`,
-      );
-      expect(walletBalance).toBeGreaterThanOrEqual(expectedWalletBalance);
+    await test.step('validateWalletBalanceOnProfile', async () => {
+      await dashboardPage.validateWalletBalanceOnProfile(0);
     });
 
-    await test.step('Navigate to Buy Gold and place order', async () => {
-      await page.goto('/digital-gold');
-      await buyMetalPage.enterAmount(dataset.oneTimeGoldAmount);
-      await buyMetalPage.clickOnOneTime();
-      await page.waitForTimeout(10_000);
-      await buyMetalPage.clickOnBuyGold();
+    await test.step('placeOneTimeOrder', async () => {
+      await buyMetalPage.placeOneTimeOrder(tc001Data.metal, tc001Data.amount);
     });
 
-    await test.step('Verify summary values', async () => {
-      await buySummaryPage.waitForValidForText();
-      uiQuantity = await buySummaryPage.getQuantity();
-      buyingRate = await buySummaryPage.getBuyingGoldRate();
-      console.log('Buying gold rate:', buyingRate);
-      const investingAmount = await buySummaryPage.getInvestingAmount();
-      expect(investingAmount).toBe(Number(dataset.oneTimeGoldAmount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-
-      amount = await buySummaryPage.getAmount();
-      tax = await buySummaryPage.getTax();
-      const total = await buySummaryPage.getTotalAmount();
-      const paid = await buySummaryPage.getPaidFromWallet();
-      payable = await buySummaryPage.getAmountPayable();
-      const calculated = calculateAmounts(total, buyingRate, paid);
-      logValidation('Summary quantity', uiQuantity, calculated.calcQuantity);
-      logValidation('Summary taxable amount', amount, calculated.amount);
-      logValidation('Summary tax', tax, calculated.tax);
-      logValidation('Summary payable', payable, calculated.payable);
-      // Silver quantity UI can differ at 4th decimal because of rate/rounding timing.
-      expect(uiQuantity).toBeCloseTo(calculated.calcQuantity, 3);
-      expect(amount).toBeCloseTo(calculated.amount, 2);
-      expect(tax).toBeCloseTo(calculated.tax, 2);
-      expect(payable).toBeCloseTo(calculated.payable, 2);
-      await expect(page).toHaveURL(/digital-gold\/buy\/summary/i);
+    await test.step('validateOneTimeSummary', async () => {
+      summary = await buySummaryPage.validateOneTimeSummary(tc001Data.amount);
     });
 
-    await test.step('Cancel flow then stay on summary', async () => {
-      await buySummaryPage.clickCancel();
-      await expect(page.getByText('Yes, Cancel', { exact: true })).toBeVisible();
-      await expect(page.getByText('No, Complete Process', { exact: true })).toBeVisible();
-      await buySummaryPage.clickNoCompleteProcess();
-      await expect(page).toHaveURL(/summary/);
+    await test.step('cancelBuyFlow', async () => {
+      await buySummaryPage.cancelBuyFlow(tc001Data.metal);
     });
 
-    await test.step('Cancel and return to buy page', async () => {
-      await buySummaryPage.clickCancel();
-      await buySummaryPage.clickYesCancel();
-      await expect(page).toHaveURL(/digital-gold/);
+    await test.step('repurchaseOneTimeOrder', async () => {
+      await buyMetalPage.repurchaseOneTimeOrder(tc001Data.metal, tc001Data.amount);
+      await buySummaryPage.expectOnBuySummaryPage(tc001Data.metal);
     });
 
-    await test.step('Re-purchase after cancellation', async () => {
-      await buyMetalPage.clickOnOneTimeRadioBtn();
-      await buyMetalPage.enterAmount(dataset.oneTimeGoldAmount);
-      await buyMetalPage.clickOnBuyGold();
-      const outcome = await waitForBuyOutcome(page);
-      if (outcome === 'kyc') {
-        throw new Error(`Re-purchase flow redirected to KYC: ${page.url()}`);
-      }
-      await buySummaryPage.waitForValidForText();
-      await expect(page).toHaveURL(/digital-gold\/buy\/summary/i);
-    });
-
-    await test.step('Complete payment via netbanking', async () => {
+    await test.step('completeNetbankingBuyNowPayment', async () => {
       await buySummaryPage.clickPayNowButton();
-      await paymentPage.waitForRazorpayFrame();
-      const razorpayAmountRaw = await paymentPage.getPriceSummaryAmountFromFrame();
-      const expectedAmount = Number(dataset.oneTimeGoldAmount);
-      const razorpayAmountNormalized =
-        razorpayAmountRaw > expectedAmount * 10
-          ? Number((razorpayAmountRaw / 100).toFixed(2))
-          : razorpayAmountRaw;
-      paidAmount = razorpayAmountNormalized;
-      console.log(
-        `[TC_001 VALIDATION] razorpayAmount raw=${razorpayAmountRaw} normalized=${razorpayAmountNormalized} expected=${expectedAmount}`
+      paidAmount = await paymentPage.completeNetbankingBuyNowPayment(
+        paymentConfig.contactNumber,
+        Number(tc001Data.amount),
+        paymentConfig.netbankingBankName,
       );
-      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(2);
-      await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinueBuyNow();
-      await paymentPage.selectNetbankingBuyNow();
-      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
-    await test.step('Validate order details', async () => {
-      await page.goto('/my-orders');
-      await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
-
-// 1️⃣ Date
-const date = await myOrderVerificationPage.getDate();
-console.log('Date:', date);
-const today = new Date();
-const dd = String(today.getDate()).padStart(2, '0');
-const mm = String(today.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
-const yyyy = today.getFullYear();
-const currentDate = `${dd}/${mm}/${yyyy}`;
-logValidation('Order date', date, currentDate);
-
-expect(date).toBe(currentDate);
-
-// 2️⃣ Transaction ID
-const transactionId = await myOrderVerificationPage.getTransactionId();
-console.log('Transaction ID:', transactionId);
-expect(transactionId.length).toBeGreaterThan(0);
-
-// 3️⃣ Time of Purchase
-const timeOfPurchase = await myOrderVerificationPage.getTimeOfPurchase();
-console.log('Time of Purchase:', timeOfPurchase);
-
-// 4️⃣ Narration
-const narration = await myOrderVerificationPage.getNarration();
-console.log('Narration:', narration);
-expect(narration).toMatch(/gold bought/i);
-
-const qty = await myOrderVerificationPage.getNarrationQuantity();
-      purchasedQuantity = qty ?? 0;
-logValidation('Order quantity', qty, uiQuantity);
-expect(qty).toBeCloseTo(uiQuantity, 3);
-
-// 5️⃣ Amount
-const amount = await myOrderVerificationPage.getAmount();
-const expectedAmount = paidAmount || Number(dataset.oneTimeGoldAmount);
-logValidation('Order amount', amount, expectedAmount);
-expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
+    await test.step('validateOneTimeBuyOrder', async () => {
+      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
+        orderRowText: tc001Data.orderRowText,
+        narrationMatch: new RegExp(`${tc001Data.metalName} bought`, 'i'),
+        expectedQuantity: summary!.quantity,
+        expectedAmount: paidAmount || Number(tc001Data.amount),
+      });
+      purchasedQuantity = order.quantity;
     });
 
-    await test.step('Validate Invoice Detail', async () => {
-      await myOrderVerificationPage.waitForOrderRowByText('Gold Bought');
-
-      const pdfUrl = await myOrderVerificationPage.clickDownloadInvoiceAndGetUrl();
-
-      let response = await page.request.get(pdfUrl, { timeout: 30_000 });
-      if (!response.ok()) {
-        await page.waitForTimeout(2_000);
-        response = await page.request.get(pdfUrl, { timeout: 30_000 });
-      }
-      expect(response.ok()).toBeTruthy();
-
-      const pdfBuffer = await response.body();
-
-      // Read & normalize PDF text
-      const rawPdfText = await pdfUtils.readPdfFromBuffer(pdfBuffer);
-      const pdfText = pdfUtils.normalizePdfText(rawPdfText);
-
-      // ---------------- Invoice header ----------------
-      const invoiceNo = pdfUtils.extractInvoiceNumber(pdfText);
-      const invoiceDate = pdfUtils.extractInvoiceDate(pdfText);
-
-      expect(invoiceNo).toBeTruthy();
-      expect(invoiceDate).toBeTruthy();
-
-      console.log('Invoice No:', invoiceNo);
-      console.log('Invoice Date:', invoiceDate);
-
-      // ---------------- GST & CIN ----------------
-      const gstin = pdfUtils.extractGstin(pdfText);
-      const cin = pdfUtils.extractCin(pdfText);
-
-      expect(gstin).toBeTruthy();
-      expect(cin).toBeTruthy();
-
-      console.log('GSTIN:', gstin);
-      console.log('CIN:', cin);
-
-      // ---------------- Gold validation ----------------
-      const pdfGrams = pdfUtils.extractGoldGrams(pdfText);
-      const pdfRate = pdfUtils.extractGoldRate(pdfText);
-      const invoiceAmount = pdfUtils.extractGoldAmount(pdfText);
-      const netPayable = pdfUtils.extractNetPayableAmount(pdfText);
-      const totalGst = pdfUtils.extractTotalGstAmount(pdfText);
-
-      // ✅ GOLD GRAMS (round down to 4 decimals)
-     // expect(pdfUtils.roundDown4(pdfGrams)).toBe(pdfUtils.roundDown4(uiQuantity));
-     logValidation('Invoice grams', pdfGrams, uiQuantity);
-     expect(pdfGrams).toBeCloseTo(uiQuantity, 3);
-
-      logValidation('Invoice rate', pdfRate, buyingRate);
-      expect(pdfRate).toBe(buyingRate);
-
-      // ✅ TAXABLE AMOUNT
-      logValidation('Invoice taxable amount', invoiceAmount, amount);
-      expect(Math.abs(invoiceAmount - amount)).toBeLessThanOrEqual(1);
-
-      // ✅ NET PAYABLE
-      const expectedNetPayable = paidAmount || payable;
-      logValidation('Invoice net payable', netPayable, expectedNetPayable);
-      expect(Math.abs(netPayable - expectedNetPayable)).toBeLessThanOrEqual(1);
-
-      // ✅ GST (allow rounding safety)
-      const invoiceGst = Number(totalGst.toFixed(2));
-      const expectedGst = Number(tax.toFixed(2));
-      logValidation('Invoice total GST', invoiceGst, expectedGst);
-      expect(Math.abs(invoiceGst - expectedGst)).toBeLessThanOrEqual(1);
-
-      console.log({
-        pdfGrams,
-        pdfRate,
-        invoiceAmount,
-        netPayable,
-        totalGst
+    await test.step('validateBuyMetalInvoice', async () => {
+      await myOrderVerificationPage.validateBuyMetalInvoice({
+        metal: tc001Data.metal,
+        orderRowText: tc001Data.orderRowText,
+        uiQuantity: summary!.quantity,
+        buyingRate: summary!.buyingRate,
+        taxableAmount: summary!.amount,
+        tax: summary!.tax,
+        payable: summary!.payable,
+        paidAmount,
       });
     });
 
-    await test.step('Validate total gold after purchase', async () => {
-      await page.goto('/dashboard');
-      console.log('Total Gold before Pur(g):', totalGoldBeforePurchase);
-
-      let totalGoldAfterPurchase = await dashboardPage.getTotalGoldValue();
-      const expectedGold = Number(
-        (totalGoldBeforePurchase + (purchasedQuantity || uiQuantity)).toFixed(4)
+    await test.step('validateBuyMetalGramsAfterPurchase', async () => {
+      await dashboardPage.validateBuyMetalGramsAfterPurchase(
+        tc001Data.metal,
+        metalBeforeGrams,
+        purchasedQuantity || summary!.quantity,
       );
-
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        if (Math.abs(totalGoldAfterPurchase - expectedGold) <= 0.001) {
-          break;
-        }
-        await page.waitForTimeout(5_000);
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        totalGoldAfterPurchase = await dashboardPage.getTotalGoldValue();
-      }
-
-      console.log('Total Gold after Pur(g):', totalGoldAfterPurchase);
-
-      logValidation('Total gold after purchase', totalGoldAfterPurchase, expectedGold);
-      expect(totalGoldAfterPurchase).toBeCloseTo(expectedGold, 3);
-
     });
   });
 
   test('TC_002-Buy Silver one-time using Card', async ({
-    page,
     dashboardPage,
     buyMetalPage,
     buySummaryPage,
@@ -321,80 +141,45 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
     myOrderVerificationPage,
   }) => {
     test.setTimeout(180_000);
-    let totalSilverBeforePurchase = 0;
-    let uiQuantity = 0;
 
-    await test.step('Get current Silver value', async () => {
-      await page.goto('/dashboard');
-      await page.waitForTimeout(3_000);
-      totalSilverBeforePurchase = await dashboardPage.getTotalSilverValue();
-      console.log('Captured total silver before purchase (g):', totalSilverBeforePurchase);
-      expect(totalSilverBeforePurchase).toBeGreaterThan(0);
+    const tc002Data = {
+      metal: 'silver' as const,
+      amount: metalAmount('silver'),
+      metalName: metalName('silver'),
+      orderRowText: buyOrderRowText(dataset.metalSilver),
+    };
+
+    let metalBeforeGrams = 0;
+    let summary: OneTimeSummaryResult;
+    let purchasedQuantity = 0;
+
+    await test.step('captureBuyMetalGramsBeforePurchase', async () => {
+      metalBeforeGrams = await dashboardPage.captureBuyMetalGramsBeforePurchase(tc002Data.metal);
     });
 
-    await test.step('Get wallet balance from profile', async () => {
-      await page.goto('/my-profile');
-      await expect(page).toHaveURL(/my-profile/);
-      const walletBalance = await dashboardPage.getWalletBalance();
-      const expectedWalletBalance = 0;
-      console.log(
-        `Wallet balance validation | actual: ${walletBalance} | minimum expected: ${expectedWalletBalance}`,
-      );
-      expect(walletBalance).toBeGreaterThanOrEqual(expectedWalletBalance);
+    await test.step('validateWalletBalanceOnProfile', async () => {
+      await dashboardPage.validateWalletBalanceOnProfile(0);
     });
 
-
-    await test.step('Navigate to Buy Silver and place order', async () => {
-      await page.goto('/digital-silver');
-      await buyMetalPage.waitForBuyFormReady();
-      await buyMetalPage.enterAmount(dataset.oneTimeSilverAmount);
-      await buyMetalPage.clickOnOneTime();
-      await page.waitForTimeout(10_000)
-      await buyMetalPage.clickOnBuySilver();
+    await test.step('placeOneTimeOrder', async () => {
+      await buyMetalPage.placeOneTimeOrder(tc002Data.metal, tc002Data.amount);
     });
 
-    await test.step('Verify summary and pay now', async () => {
-      await buySummaryPage.waitForValidForText();
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-      uiQuantity = await buySummaryPage.getQuantity();
-      const buyingRate = await buySummaryPage.getBuyingGoldRate();
-      console.log('Buying silver rate:', buyingRate);
-      const investingAmount = await buySummaryPage.getInvestingAmount();
-      const amount = await buySummaryPage.getAmount();
-      const tax = await buySummaryPage.getTax();
-      const total = await buySummaryPage.getTotalAmount();
-      const paid = await buySummaryPage.getPaidFromWallet();
-      const payable = await buySummaryPage.getAmountPayable();
-      const calculated = calculateAmounts(total, buyingRate, paid);
-      logValidation('TC002 Summary quantity', uiQuantity, calculated.calcQuantity);
-      logValidation('TC002 Summary amount', amount, calculated.amount);
-      logValidation('TC002 Summary tax', tax, calculated.tax);
-      logValidation('TC002 Summary payable', payable, calculated.payable);
-      logValidation('TC002 Summary investing amount', investingAmount, Number(dataset.oneTimeSilverAmount));
-
-      expect(investingAmount).toBe(Number(dataset.oneTimeSilverAmount));
-      expect(uiQuantity).toBeCloseTo(calculated.calcQuantity, 3);
-      expect(amount).toBeCloseTo(calculated.amount, 2);
-      expect(tax).toBeCloseTo(calculated.tax, 2);
-      expect(payable).toBeCloseTo(calculated.payable, 2);
-      await buySummaryPage.clickPayNowButton();
+    await test.step('validateOneTimeSummaryAndPayNow', async () => {
+      summary = await buySummaryPage.validateOneTimeSummaryAndPayNow(tc002Data.amount);
     });
 
-    await test.step('Complete card payment flow', async () => {
-      const razorpayAmount = await paymentPage.getPriceSummaryAmountFromFrame();
-      expect(razorpayAmount).toBe(Number(dataset.oneTimeSilverAmount));
-      await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinueBuyNow();
-      await paymentPage.selectCards();
-      await paymentPage.enterCardNumber(dataset.cardNumber);
-      await paymentPage.enterCardExpiry(dataset.cardExpiry);
-      await paymentPage.enterCardCVV(dataset.cardCvv);
-      await paymentPage.enterCardHolderName(dataset.cardHolderName);
-      await paymentPage.clickCardContinue();
-      await paymentPage.clickOnMaybeLaterButton();
+    await test.step('completeCardBuyNowPayment', async () => {
       try {
-        await paymentPage.enterOtp(dataset.cardOtp);
-        await paymentPage.clickOnOtpContinueButton();
+        await paymentPage.completeCardBuyNowPayment({
+          contactNumber: paymentConfig.contactNumber,
+          expectedAmount: Number(tc002Data.amount),
+          cardNumber: paymentConfig.cardNumber,
+          cardExpiry: paymentConfig.cardExpiry,
+          cardCvv: paymentConfig.cardCvv,
+          cardHolderName: paymentConfig.cardHolderName,
+          cardOtp: paymentConfig.cardOtp,
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const isGatewayCardRejection = /international cards are not supported|invalid card/i.test(message);
@@ -406,71 +191,25 @@ expect(Math.abs(amount - expectedAmount)).toBeLessThanOrEqual(1);
       }
     });
 
-    await test.step('Validate order details silver', async () => {
-      await page.goto('/my-orders');
-      await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRowByText('Silver Bought');
+    await test.step('validateOneTimeBuyOrder', async () => {
+      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
+        orderRowText: tc002Data.orderRowText,
+        narrationMatch: new RegExp(`${tc002Data.metalName} bought`, 'i'),
+        expectedQuantity: summary!.quantity,
+        expectedAmount: Number(tc002Data.amount),
+        amountTolerance: 2,
+        quantityPrecision: 2,
+      });
+      purchasedQuantity = order.quantity;
+    });
 
-// 1️⃣ Date
-const date = await myOrderVerificationPage.getDate();
-console.log('Date:', date);
-const today = new Date();
-const dd = String(today.getDate()).padStart(2, '0');
-const mm = String(today.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
-const yyyy = today.getFullYear();
-const currentDate = `${dd}/${mm}/${yyyy}`;
-logValidation('Order date', date, currentDate);
-
-expect(date).toBe(currentDate);
-
-// 2️⃣ Transaction ID
-const transactionId = await myOrderVerificationPage.getTransactionId();
-console.log('Transaction ID:', transactionId);
-
-// 3️⃣ Time of Purchase
-const timeOfPurchase = await myOrderVerificationPage.getTimeOfPurchase();
-console.log('Time of Purchase:', timeOfPurchase);
-
-// 4️⃣ Narration
-const narration = await myOrderVerificationPage.getNarration();
-console.log('Narration:', narration);
-
-const qty = await myOrderVerificationPage.getNarrationQuantity();
-logValidation('Order quantity', qty, uiQuantity);
-expect(qty).toBeCloseTo(uiQuantity, 3);
-
-// 5️⃣ Amount
-const amount = await myOrderVerificationPage.getAmount();
-const expectedAmount = Number(dataset.oneTimeSilverAmount);
-logValidation('Order amount', amount, expectedAmount);
-expect(amount).toBeCloseTo(expectedAmount, 2);
-
-  });
-  await test.step('Validate total Silver after purchase', async () => {
-    await page.goto('/dashboard');
-    console.log('Total Silver before Pur(g):', totalSilverBeforePurchase);
-
-    let totalSilverAfterPurchase = await dashboardPage.getTotalSilverValue();
-    const expectedSilver = Number(
-      (totalSilverBeforePurchase + uiQuantity).toFixed(4)
-    );
-
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      if (Math.abs(totalSilverAfterPurchase - expectedSilver) <= 0.001) {
-        break;
-      }
-      await page.waitForTimeout(5_000);
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      totalSilverAfterPurchase = await dashboardPage.getTotalSilverValue();
-    }
-
-    console.log('Total Silver after Pur(g):', totalSilverAfterPurchase);
-
-    logValidation('Total silver after purchase', totalSilverAfterPurchase, expectedSilver);
-    expect(totalSilverAfterPurchase).toBeCloseTo(expectedSilver, 3);
-
-  });
-
+    await test.step('validateBuyMetalGramsAfterPurchase', async () => {
+      await dashboardPage.validateBuyMetalGramsAfterPurchase(
+        tc002Data.metal,
+        metalBeforeGrams,
+        purchasedQuantity || summary!.quantity,
+      );
+    });
   });
 
   test('TC_005-Buy Gold one-time — capture portfolio, purchase, validate portfolio', async ({
@@ -483,206 +222,101 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
     myOrderVerificationPage,
   }) => {
     test.setTimeout(180_000);
+
+    const tc005Data = {
+      metal: 'gold' as const,
+      amount: metalAmount('gold'),
+      metalName: metalName('gold'),
+      orderRowText: buyOrderRowText(dataset.metalGold),
+    };
+
     let totalGoldBeforePurchase = 0;
-    let totalSilverBeforePurchase = 0;
-    let calculatedPortfolioBefore = 0;
-    let uiPortfolioBefore = 0;
-    let uiQuantity = 0;
+    let summary: OneTimeSummaryResult;
     let purchasedQuantity = 0;
-    let buyingRate = 0;
-    let taxableAmount = 0;
     let paidAmount = 0;
     let gBuyFromRatesApi = 0;
-    let gSellFromRatesApi = 0;
-    let sSellFromRatesApi = 0;
 
     const TC005 = (n: number): string => `TC005_${n}`;
     const logSub = (n: number, title: string): void => {
       console.log(`\n[${TC005(n)}] ${title}`);
     };
 
-    await test.step('TC005_1 | Clear storage + login (default 8141122222; OTP = panel customer OTP)', async () => {
+    await test.step('clearStorageAndLogin', async () => {
       logSub(1, 'Session: clear storage + customer login');
       const mobile = resolveAltCustomerMobile();
       const otp = resolveAltCustomerOtp();
       console.log(
-        `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP (same for all users on this env).`,
+        `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
       );
       await clearCustomerBrowserStorage(page);
       await customerLogin.login(mobile, otp);
       await page.goto('/dashboard');
-      await page.waitForLoadState('domcontentloaded');
-      const url = await waitAndRetryIfKycRedirect(page, '/dashboard');
-      if (/\/login(?:\/|$|\?)/i.test(url) || /\/kyc(?:\/|$|\?)/i.test(url)) {
-        throw new Error(
-          `[${TC005(1)}] Session invalid after login (${url}). Check ${mobile} is registered on UAT and KYC/session allows dashboard.`,
-        );
-      }
+      await persistCustomerStorageState(page);
     });
 
-    await test.step('TC005_2 | Dashboard grams + API rates; portfolio = gold×gSell + silver×sSell (before)', async () => {
+    await test.step('validateBuyMetalPortfolioBeforePurchase', async () => {
       logSub(2, 'Grams + digital-gold rates; UI vs calculated portfolio (before)');
-      await page.goto('/dashboard');
-      await page.waitForTimeout(3_000);
-      const spot = await fetchDigitalMetalSpotRates(page);
-      gBuyFromRatesApi = spot.gBuy;
-      gSellFromRatesApi = spot.gSell;
-      sSellFromRatesApi = spot.sSell;
-      totalGoldBeforePurchase = await dashboardPage.getTotalGoldValue();
-      totalSilverBeforePurchase = await dashboardPage.getTotalSilverValue();
-      calculatedPortfolioBefore = portfolioFromMetalGramsAndSellRates(
-        totalGoldBeforePurchase,
-        totalSilverBeforePurchase,
-        spot,
-      );
-      uiPortfolioBefore = await dashboardPage.getPortfolioValueNumber();
-      console.log(`[${TC005(2)}] Total gold before (g):`, totalGoldBeforePurchase);
-      console.log(`[${TC005(2)}] Total silver before (g):`, totalSilverBeforePurchase);
-      console.log(
-        `[${TC005(2)}] UI portfolio before (getPortfolioValueNumber): ₹${uiPortfolioBefore} | calculatedPortfolio: ₹${calculatedPortfolioBefore}`,
-      );
-      console.log(
-        `[${TC005(2)}] Formula: ${totalGoldBeforePurchase}×gSell(${spot.gSell}) + ${totalSilverBeforePurchase}×sSell(${spot.sSell}) = ₹${calculatedPortfolioBefore}`,
-      );
-      expect(totalGoldBeforePurchase).toBeGreaterThan(0);
-      expect(totalSilverBeforePurchase).toBeGreaterThanOrEqual(0);
-      expect(uiPortfolioBefore).toBeGreaterThan(0);
-      logValidation(`${TC005(2)} UI portfolio before vs formula`, uiPortfolioBefore, calculatedPortfolioBefore);
-      expect(uiPortfolioBefore).toBeCloseTo(calculatedPortfolioBefore, 2);
+      const snapshot = await dashboardPage.validateBuyMetalPortfolioBeforePurchase(TC005(2));
+      totalGoldBeforePurchase = snapshot.totalGoldGrams;
     });
 
-    await test.step('TC005_3 | Navigate to Buy Gold, fetch digital-gold rates, open summary', async () => {
-      logSub(3, 'Navigate to Buy Gold, rates API, open buy summary');
-      await page.goto('/digital-gold');
-      await buyMetalPage.enterAmount(dataset.oneTimeGoldAmount);
-      await buyMetalPage.clickOnOneTime();
-      await page.waitForTimeout(10_000);
-      const spot = await fetchDigitalMetalSpotRates(page);
+    await test.step('placeOneTimeOrder', async () => {
+      logSub(3, 'Navigate to buy, rates API, open buy summary');
+      await buyMetalPage.prepareOneTimeOrder(tc005Data.metal, tc005Data.amount);
+      const spot = await dashboardPage.fetchDigitalMetalSpotRates();
       gBuyFromRatesApi = spot.gBuy;
-      gSellFromRatesApi = spot.gSell;
-      sSellFromRatesApi = spot.sSell;
-      const orderTotal = Number(dataset.oneTimeGoldAmount);
-      const estimatedTaxable = Number((orderTotal / 1.03).toFixed(2));
-      const estimatedQty = Number((estimatedTaxable / gBuyFromRatesApi).toFixed(4));
-      const estimatedInvestmentRs = Number((gSellFromRatesApi * estimatedQty).toFixed(2));
-      console.log(
-        `[${TC005(3)}] Pre-buy (API) gBuy=${gBuyFromRatesApi} gSell=${gSellFromRatesApi} estQty=${estimatedQty}g estInvestment≈₹${estimatedInvestmentRs} (taxable≈₹${estimatedTaxable})`,
-      );
-      await buyMetalPage.clickOnBuyGold();
-      const outcome = await waitForBuyOutcome(page);
+      const outcome = await buyMetalPage.confirmOneTimeBuy(tc005Data.metal);
       if (outcome === 'kyc') {
         throw new Error(`[${TC005(3)}] Buy flow redirected to KYC: ${page.url()}`);
       }
       await buySummaryPage.waitForValidForText();
     });
 
-    await test.step('TC005_4 | Verify summary, capture taxable amount, Pay now', async () => {
-      logSub(4, 'Verify summary lines, capture taxable amount, Pay now');
-      uiQuantity = await buySummaryPage.getQuantity();
-      buyingRate = await buySummaryPage.getBuyingGoldRate();
-      const investingAmount = await buySummaryPage.getInvestingAmount();
-      expect(investingAmount).toBe(Number(dataset.oneTimeGoldAmount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-
-      taxableAmount = await buySummaryPage.getAmount();
-      const tax = await buySummaryPage.getTax();
-      const total = await buySummaryPage.getTotalAmount();
-      const paid = await buySummaryPage.getPaidFromWallet();
-      const payable = await buySummaryPage.getAmountPayable();
-      const calculated = calculateAmounts(total, buyingRate, paid);
-      logValidation(`${TC005(4)} Summary quantity`, uiQuantity, calculated.calcQuantity);
-      logValidation(`${TC005(4)} Summary taxable amount`, taxableAmount, calculated.amount);
-      logValidation(`${TC005(4)} Summary tax`, tax, calculated.tax);
-      logValidation(`${TC005(4)} Summary payable`, payable, calculated.payable);
-      expect(uiQuantity).toBeCloseTo(calculated.calcQuantity, 3);
-      expect(taxableAmount).toBeCloseTo(calculated.amount, 2);
-      expect(tax).toBeCloseTo(calculated.tax, 2);
-      expect(payable).toBeCloseTo(calculated.payable, 2);
-      logValidation(`${TC005(4)} Summary API gBuy vs UI buying rate`, gBuyFromRatesApi, buyingRate);
-      expect(Math.abs(gBuyFromRatesApi - buyingRate)).toBeLessThanOrEqual(3);
-      console.log(`[${TC005(4)}] API gSell / sSell (for portfolio formula):`, gSellFromRatesApi, sSellFromRatesApi);
-      await expect(page).toHaveURL(/digital-gold\/buy\/summary/i);
-      await buySummaryPage.clickPayNowButton();
+    await test.step('validateOneTimeSummary', async () => {
+      logSub(4, 'Verify summary lines, capture taxable amount');
+      summary = await buySummaryPage.validateOneTimeSummary(tc005Data.amount);
+      logValidation(`${TC005(4)} Summary API gBuy vs UI buying rate`, gBuyFromRatesApi, summary.buyingRate);
+      expect(Math.abs(gBuyFromRatesApi - summary.buyingRate)).toBeLessThanOrEqual(3);
     });
 
-    await test.step('TC005_5 | Complete payment via netbanking', async () => {
+    await test.step('completeNetbankingBuyNowPayment', async () => {
       logSub(5, 'Complete payment via netbanking');
-      const razorpayAmountRaw = await paymentPage.getPriceSummaryAmountFromFrame();
-      const expectedAmount = Number(dataset.oneTimeGoldAmount);
-      const razorpayAmountNormalized =
-        razorpayAmountRaw > expectedAmount * 10
-          ? Number((razorpayAmountRaw / 100).toFixed(2))
-          : razorpayAmountRaw;
-      paidAmount = razorpayAmountNormalized;
-      console.log(
-        `[${TC005(5)}] razorpay raw=${razorpayAmountRaw} normalized=${razorpayAmountNormalized} expected=${expectedAmount}`,
+      await buySummaryPage.clickPayNowButton();
+      paidAmount = await paymentPage.completeNetbankingBuyNowPayment(
+        paymentConfig.contactNumber,
+        Number(tc005Data.amount),
+        paymentConfig.netbankingBankName,
       );
-      expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
-      await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinueBuyNow();
-      await paymentPage.selectNetbankingBuyNow();
-      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
-    await test.step('TC005_6 | Read purchased quantity from My Orders', async () => {
+    await test.step('validateOneTimeBuyOrder', async () => {
       logSub(6, 'Read purchased quantity from My Orders');
-      await page.goto('/my-orders');
-      await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRow();
-      const qty = await myOrderVerificationPage.getNarrationQuantity();
-      purchasedQuantity = qty ?? 0;
-      logValidation(`${TC005(6)} Order quantity`, qty, uiQuantity);
-      expect(qty).toBeCloseTo(uiQuantity, 3);
-      const orderAmount = await myOrderVerificationPage.getAmount();
-      const expectedAmount = paidAmount || Number(dataset.oneTimeGoldAmount);
-      logValidation(`${TC005(6)} Order amount`, orderAmount, expectedAmount);
-      expect(Math.abs(orderAmount - expectedAmount)).toBeLessThanOrEqual(1);
+      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
+        orderRowText: tc005Data.orderRowText,
+        narrationMatch: new RegExp(`${tc005Data.metalName} bought`, 'i'),
+        expectedQuantity: summary!.quantity,
+        expectedAmount: paidAmount || Number(tc005Data.amount),
+      });
+      purchasedQuantity = order.quantity;
     });
 
-    await test.step('TC005_7 | Portfolio = gold×gSell + silver×sSell (after) + total gold grams', async () => {
+    await test.step('validateBuyMetalPortfolioAfterPurchase', async () => {
       logSub(7, 'Dashboard: UI portfolio vs formula (after) + total gold grams');
-      await page.goto('/dashboard');
-      const goldQty = purchasedQuantity || uiQuantity;
+      const goldQty = purchasedQuantity || summary!.quantity;
       const expectedGold = Number((totalGoldBeforePurchase + goldQty).toFixed(4));
+      await dashboardPage.validateBuyMetalPortfolioAfterPurchase(TC005(7), expectedGold);
+    });
 
-      let uiPortfolioAfter = 0;
-      let totalGoldAfterPurchase = 0;
-      let totalSilverAfterPurchase = 0;
-      let calculatedPortfolioAfter = 0;
-
-      for (let attempt = 0; attempt < 6; attempt += 1) {
-        totalGoldAfterPurchase = await dashboardPage.getTotalGoldValue();
-        totalSilverAfterPurchase = await dashboardPage.getTotalSilverValue();
-        uiPortfolioAfter = await dashboardPage.getPortfolioValueNumber();
-        const spotAtDashboard = await fetchDigitalMetalSpotRates(page);
-        calculatedPortfolioAfter = portfolioFromMetalGramsAndSellRates(
-          totalGoldAfterPurchase,
-          totalSilverAfterPurchase,
-          spotAtDashboard,
-        );
-        const portfolioOk = Math.abs(uiPortfolioAfter - calculatedPortfolioAfter) < 0.005;
-        const goldOk = Math.abs(totalGoldAfterPurchase - expectedGold) <= 0.001;
-        if (portfolioOk && goldOk && uiPortfolioAfter > 0) {
-          break;
-        }
-        await page.waitForTimeout(5_000);
-        await page.reload({ waitUntil: 'domcontentloaded' });
-      }
-
-      console.log(`[${TC005(7)}] Total gold after (g):`, totalGoldAfterPurchase);
-      console.log(`[${TC005(7)}] Total silver after (g):`, totalSilverAfterPurchase);
+    await test.step('restoreDefaultCustomerSession', async () => {
+      logSub(8, 'Clear session + login default customer (fresh storage state)');
+      const { mobile, otp } = panelCreds('customer', getTargetEnv());
       console.log(
-        `[${TC005(7)}] UI portfolio after (getPortfolioValueNumber): ₹${uiPortfolioAfter} | calculatedPortfolio: ₹${calculatedPortfolioAfter}`,
+        `[${TC005(8)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
       );
-      console.log(
-        `[${TC005(7)}] Formula (API at read time): ${totalGoldAfterPurchase}×gSell + ${totalSilverAfterPurchase}×sSell = ₹${calculatedPortfolioAfter}`,
-      );
-      logValidation(`${TC005(7)} Total gold after (g)`, totalGoldAfterPurchase, expectedGold);
-      logValidation(`${TC005(7)} UI portfolio after vs formula`, uiPortfolioAfter, calculatedPortfolioAfter);
-      expect(uiPortfolioAfter).toBeGreaterThan(0);
-      expect(Number.isFinite(uiPortfolioAfter)).toBe(true);
-      expect(totalGoldAfterPurchase).toBeCloseTo(expectedGold, 3);
-      expect(uiPortfolioAfter).toBeCloseTo(calculatedPortfolioAfter, 2);
+      await clearCustomerBrowserStorage(page);
+      await customerLogin.login(mobile, otp);
+      await page.goto('/dashboard');
+      await persistCustomerStorageState(page);
     });
   });
 

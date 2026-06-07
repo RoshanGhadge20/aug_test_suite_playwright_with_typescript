@@ -10,17 +10,33 @@ import { BusinessLoginPage } from '../pages/business/login.page';
 import { NewAdminLoginPage } from '../pages/new-admin/login.page';
 
 const targetEnv = getTargetEnv();
-const targetPanel = process.env.TARGET_PANEL;
+const targetPanel = process.env.TARGET_PANEL as
+  | 'admin'
+  | 'customer'
+  | 'business'
+  | 'new-admin'
+  | undefined;
 
-// function shouldAuthenticate(panel: 'admin' | 'customer' | 'business' | 'new-admin'): boolean {
-//   return !targetPanel || targetPanel === panel;
-// }
+type AuthPanel = 'admin' | 'customer' | 'business' | 'new-admin';
+
+/** When unset, skip business/new-admin. Skip admin when only the customer project is on the CLI. */
+function shouldAuthenticate(panel: AuthPanel): boolean {
+  if (targetPanel) return targetPanel === panel;
+  const argv = process.argv.join(' ');
+  const customerOnly =
+    /--project(?:=|\s+)customer\b/.test(argv) &&
+    !/--project(?:=|\s+)admin\b/.test(argv);
+  if (customerOnly && panel === 'admin') return false;
+  if (panel === 'business' || panel === 'new-admin') return false;
+  return true;
+}
 
 function ensureStorageDir(storagePath: string): void {
   fs.mkdirSync(path.dirname(storagePath), { recursive: true });
 }
 
 setup('authenticate admin', async ({ browser }) => {
+  setup.skip(!shouldAuthenticate('admin'), `Skipped admin auth (TARGET_PANEL=${targetPanel ?? 'customer-only run'})`);
   const storagePath = storageStatePath(targetEnv, 'admin');
   setup.skip(fs.existsSync(storagePath), `Reusing cached admin storage state (${storagePath}); delete it to force re-login`);
   ensureStorageDir(storagePath);
@@ -34,6 +50,7 @@ setup('authenticate admin', async ({ browser }) => {
 });
 
 setup('authenticate customer', async ({ browser }) => {
+  setup.skip(!shouldAuthenticate('customer'), `Skipped customer auth (TARGET_PANEL=${targetPanel ?? 'n/a'})`);
   const { mobile, otp } = panelCreds('customer', targetEnv);
   setup.skip(!mobile || !otp, `No customer credentials configured for ${targetEnv} — skipping`);
   const storagePath = storageStatePath(targetEnv, 'customer');
@@ -48,7 +65,7 @@ setup('authenticate customer', async ({ browser }) => {
 });
 
 setup('authenticate business', async ({ browser }) => {
-  setup.skip(true, 'Skipped due to TARGET_PANEL filter');
+  setup.skip(!shouldAuthenticate('business'), 'Skipped business auth (set TARGET_PANEL=business to enable)');
   const storagePath = storageStatePath(targetEnv, 'business');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('business', targetEnv) });
@@ -61,7 +78,7 @@ setup('authenticate business', async ({ browser }) => {
 });
 
 setup('authenticate new-admin', async ({ browser }) => {
-  setup.skip(true, 'Skipped due to TARGET_PANEL filter');
+  setup.skip(!shouldAuthenticate('new-admin'), 'Skipped new-admin auth (set TARGET_PANEL=new-admin to enable)');
   const storagePath = storageStatePath(targetEnv, 'new-admin');
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('new-admin', targetEnv) });

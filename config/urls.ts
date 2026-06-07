@@ -53,6 +53,13 @@ export function panelCreds(panel: Panel, envName: EnvName = getTargetEnv()): Cre
   return BUNDLES[envName].panelCreds[panel];
 }
 
+/** Shop checkout OTP (TC_SHOP_* specs). Separate from login OTP; defaults to `1234`. */
+export function shopCheckoutOtp(envName: EnvName = getTargetEnv()): string {
+  const e = env as unknown as Record<string, string>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return e[`${prefix}_SHOP_USER_OTP`]?.trim() || '1234';
+}
+
 export function apiUrl(service: ApiService, envName: EnvName = getTargetEnv()): string {
   return BUNDLES[envName].apis[service];
 }

@@ -1,13 +1,14 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { expect, type Page } from '@playwright/test';
-import { digitalGoldRatesUrl } from '../../../config/urls';
+import { storageStatePath } from '../../../config/constants';
 import { getTargetEnv } from '../../../config/environments';
 import { panelCreds } from '../../../config/urls';
-import type { DashBoardPage } from '../../../pages/customer/dashboard.page';
 import type { ShopCheckoutPriceDetailsWithSavings } from '../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../pages/customer/my-order-verification.page';
 
 // ---------------------------------------------------------------------------
-// Alt customer credentials (buy-metal TC005, shop TC_SHOP_004)
+// Alt customer credentials (buy-metal TC005, etc.) — not used by TC_SHOP_004 (main panel user)
 // Override mobile: TC005_CUSTOMER_USER_MOBILE or ALT_CUSTOMER_MOBILE
 // ---------------------------------------------------------------------------
 
@@ -111,188 +112,16 @@ export async function clearCustomerBrowserStorage(page: Page): Promise<void> {
     .catch(() => {});
 }
 
-// ---------------------------------------------------------------------------
-// Dashboard portfolio (digital-gold spot rates API)
-// ---------------------------------------------------------------------------
-
-export type DigitalMetalSpotRates = { gBuy: number; gSell: number; sBuy: number; sSell: number };
-
-function parseDigitalMetalSpotRatesFromPayload(payload: unknown): DigitalMetalSpotRates {
-  if (typeof payload !== 'object' || payload === null) {
-    throw new Error(`Invalid digital-gold rates response (not an object): ${String(payload)}`);
-  }
-  const root = payload as Record<string, unknown>;
-  const rate = root.rate as Record<string, unknown> | undefined;
-  const rates = rate?.rates as Record<string, unknown> | undefined;
-  if (!rates) {
-    throw new Error(`Could not find rate.rates in response: ${JSON.stringify(payload)}`);
-  }
-  const parseNum = (raw: unknown, label: string): number => {
-    if (raw === undefined || raw === null) {
-      throw new Error(`Missing ${label} in rates.rates`);
-    }
-    const n = Number(String(raw).replace(/,/g, ''));
-    if (!Number.isFinite(n) || n <= 0) {
-      throw new Error(`Invalid ${label} value: ${String(raw)}`);
-    }
-    return n;
-  };
-  const gBuy = parseNum(rates.gBuy ?? rates.gbuy, 'gBuy');
-  const gSell = parseNum(rates.gSell ?? rates.gsell, 'gSell');
-  const sBuy = parseNum(rates.sBuy ?? rates.sbuy, 'sBuy');
-  const sSell = parseNum(rates.sSell ?? rates.ssell, 'sSell');
-  return { gBuy, gSell, sBuy, sSell };
-}
-
-export async function fetchDigitalMetalSpotRates(page: Page): Promise<DigitalMetalSpotRates> {
-  const ratesUrl = digitalGoldRatesUrl();
-  console.log('[digital-gold/rates] GET', ratesUrl);
-  const response = await page.request.get(ratesUrl, { timeout: 30_000 });
-  expect(response.ok(), `digital-gold rates API failed: HTTP ${response.status()}`).toBeTruthy();
-  const payload = (await response.json()) as unknown;
-  const parsed = parseDigitalMetalSpotRatesFromPayload(payload);
-  console.log(
-    '[digital-gold/rates] gBuy:',
-    parsed.gBuy,
-    'gSell:',
-    parsed.gSell,
-    'sBuy:',
-    parsed.sBuy,
-    'sSell:',
-    parsed.sSell,
-  );
-  return parsed;
-}
-
-export function portfolioFromMetalGramsAndSellRates(
-  goldGrams: number,
-  silverGrams: number,
-  spot: DigitalMetalSpotRates,
-): number {
-  return Number((goldGrams * spot.gSell + silverGrams * spot.sSell).toFixed(2));
-}
-
-export type DashboardPortfolioGramExpectations = {
-  expectedGoldGrams?: number;
-  expectedSilverGrams?: number;
-};
-
-export type DashboardPortfolioSnapshot = {
-  totalGoldGrams: number;
-  totalSilverGrams: number;
-  uiPortfolioInr: number;
-  calculatedPortfolioInr: number;
-  spot: DigitalMetalSpotRates;
-};
-
 /**
- * Dashboard portfolio check with retries (buy-metal TC005_7 pattern):
- * UI portfolio vs gold×gSell + silver×sSell, optional gram expectations.
- * When subtractFromCalculatedPortfolioInr is set (e.g. shop grand total after Use Savings),
- * expected UI = calculated − that amount.
+ * Write the active browser session to `storage/<env>/customer.json` so later tests
+ * in the same Playwright run load the JWT from TC_005 (or any fresh login), not the
+ * pre-run auth-setup token that UAT may invalidate on re-login.
  */
-export async function assertDashboardPortfolioWithRetry(
-  page: Page,
-  dashboardPage: DashBoardPage,
-  options: {
-    logLabel: string;
-    gramExpectations?: DashboardPortfolioGramExpectations;
-    /** Shop savings — UI portfolio = calculated portfolio − this value (INR). */
-    subtractFromCalculatedPortfolioInr?: number;
-    maxAttempts?: number;
-    reloadDelayMs?: number;
-  },
-): Promise<DashboardPortfolioSnapshot> {
-  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-  await dashboardPage.waitForDashboardPortfolioSection(12_000).catch(() => {});
-
-  const maxAttempts = options.maxAttempts ?? 6;
-  const reloadDelayMs = options.reloadDelayMs ?? 5_000;
-  const gram = options.gramExpectations;
-  const portfolioDeduction = options.subtractFromCalculatedPortfolioInr ?? 0;
-  const expectedUiPortfolio = (calculated: number): number =>
-    Number((calculated - portfolioDeduction).toFixed(2));
-
-  let snapshot: DashboardPortfolioSnapshot = {
-    totalGoldGrams: 0,
-    totalSilverGrams: 0,
-    uiPortfolioInr: 0,
-    calculatedPortfolioInr: 0,
-    spot: { gBuy: 0, gSell: 0, sBuy: 0, sSell: 0 },
-  };
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const spot = await fetchDigitalMetalSpotRates(page);
-    const metrics = await dashboardPage.readPortfolioMetrics({ skipPortfolioWait: true });
-    const calculated = portfolioFromMetalGramsAndSellRates(
-      metrics.totalGoldGrams,
-      metrics.totalSilverGrams,
-      spot,
-    );
-
-    snapshot = {
-      totalGoldGrams: metrics.totalGoldGrams,
-      totalSilverGrams: metrics.totalSilverGrams,
-      uiPortfolioInr: metrics.portfolioInr,
-      calculatedPortfolioInr: calculated,
-      spot,
-    };
-
-    const expectedUi = expectedUiPortfolio(snapshot.calculatedPortfolioInr);
-    const portfolioOk = Math.abs(snapshot.uiPortfolioInr - expectedUi) <= 2;
-    const goldOk =
-      gram?.expectedGoldGrams === undefined
-        ? true
-        : Math.abs(snapshot.totalGoldGrams - gram.expectedGoldGrams) <= 0.01;
-    const silverOk =
-      gram?.expectedSilverGrams === undefined
-        ? true
-        : Math.abs(snapshot.totalSilverGrams - gram.expectedSilverGrams) <= 0.01;
-
-    if (portfolioOk && goldOk && silverOk && snapshot.uiPortfolioInr > 0) {
-      break;
-    }
-    if (attempt < maxAttempts - 1) {
-      await page.waitForTimeout(reloadDelayMs);
-      await page.reload({ waitUntil: 'domcontentloaded' });
-    }
-  }
-
-  const label = options.logLabel;
-  console.log(`[${label}] Total gold (g):`, snapshot.totalGoldGrams);
-  console.log(`[${label}] Total silver (g):`, snapshot.totalSilverGrams);
-  console.log(
-    `[${label}] UI portfolio: ₹${snapshot.uiPortfolioInr} | calculated: ₹${snapshot.calculatedPortfolioInr} (gold×gSell + silver×sSell)`,
-  );
-  console.log(
-    `[${label}] Formula: ${snapshot.totalGoldGrams}×gSell(${snapshot.spot.gSell}) + ${snapshot.totalSilverGrams}×sSell(${snapshot.spot.sSell}) = ₹${snapshot.calculatedPortfolioInr}`,
-  );
-  const expectedUi = expectedUiPortfolio(snapshot.calculatedPortfolioInr);
-  if (portfolioDeduction > 0) {
-    console.log(
-      `[${label}] Expected UI = calculated − grand total: ₹${snapshot.calculatedPortfolioInr} − ₹${portfolioDeduction} = ₹${expectedUi}`,
-    );
-  }
-
-  if (gram?.expectedGoldGrams !== undefined) {
-    logValidation(`${label} Total gold (g)`, snapshot.totalGoldGrams, gram.expectedGoldGrams);
-    expect(snapshot.totalGoldGrams).toBeCloseTo(gram.expectedGoldGrams, 2);
-  }
-  if (gram?.expectedSilverGrams !== undefined) {
-    logValidation(`${label} Total silver (g)`, snapshot.totalSilverGrams, gram.expectedSilverGrams);
-    expect(snapshot.totalSilverGrams).toBeCloseTo(gram.expectedSilverGrams, 2);
-  }
-
-  const portfolioValidationLabel =
-    portfolioDeduction > 0
-      ? `${label} UI portfolio vs calculated − grand total`
-      : `${label} UI portfolio vs formula`;
-  logValidation(portfolioValidationLabel, snapshot.uiPortfolioInr, expectedUi);
-  expect(snapshot.uiPortfolioInr).toBeGreaterThan(0);
-  expect(Number.isFinite(snapshot.uiPortfolioInr)).toBe(true);
-  expect(snapshot.uiPortfolioInr).toBeCloseTo(expectedUi, 2);
-
-  return snapshot;
+export async function persistCustomerStorageState(page: Page): Promise<void> {
+  const storagePath = storageStatePath(getTargetEnv(), 'customer');
+  fs.mkdirSync(path.dirname(storagePath), { recursive: true });
+  await page.context().storageState({ path: storagePath });
+  console.log(`[customer session] Persisted storage state to ${storagePath}`);
 }
 
 // ---------------------------------------------------------------------------

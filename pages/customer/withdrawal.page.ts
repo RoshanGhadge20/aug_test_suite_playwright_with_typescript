@@ -1,6 +1,32 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
+export type WithdrawalSelectedProductDetails = {
+  productName: string;
+  purity: string;
+  productWeight: string;
+  makingAndDeliveryCharges: string;
+  makingAndDeliveryChargesAmount: number;
+  expectedDeliveryDate: string;
+  quantity: number;
+};
+
+export type WithdrawalDeliveryInformation = {
+  firstName: string;
+  lastName: string;
+  address: string;
+  pincode: string;
+  state: string;
+  cityOrDistrict: string;
+};
+
+export type WithdrawalInvestmentListSummary = {
+  goldRequired: number;
+  silverRequired: number;
+  goldAvailable: number;
+  silverAvailable: number;
+};
+
 export class WithdrawalPage extends BasePage {
   private readonly cancelButton: Locator;
   private readonly proceedButton: Locator;
@@ -2638,6 +2664,339 @@ export class WithdrawalPage extends BasePage {
       }
     }
     return out;
+  }
+
+  /** TC004+ — open Get Coins and Bars and land on product list. */
+  async openConvertToCoinsAndBarsProductList(): Promise<void> {
+    await this.verifyGetCoinAndCashOptionVisible();
+    await this.clickGetCoinsAndBarsOption();
+    await this.waitForProductListPage();
+  }
+
+  /** TC004/005/016 — browse coin catalog and select product (optional silver catalog check). */
+  async browseAndSelectCoinProduct(
+    productName: string,
+    options?: { requireSilverInCatalog?: boolean; maxAttempts?: number },
+  ): Promise<void> {
+    await this.waitForProductListPage();
+    const categoryNames = await this.getAndLogProductCategoryNames();
+    expect(categoryNames.length).toBeGreaterThan(0);
+
+    const maxAttempts = options?.maxAttempts ?? 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      await this.selectCoinCategoryIfNotSelected();
+      if (options?.requireSilverInCatalog) {
+        const products = await this.getAndLogProductCountAndNames();
+        if (products.count === 0 || !products.names.some((name) => name.includes('Silver'))) {
+          if (attempt >= maxAttempts) {
+            expect(products.count).toBeGreaterThan(0);
+            expect(products.names.some((name) => name.includes('Silver'))).toBeTruthy();
+          } else {
+            await this.settleMs(700);
+            continue;
+          }
+        }
+      }
+      try {
+        await this.selectProductByName(productName);
+        return;
+      } catch (error) {
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+        await this.settleMs(700);
+      }
+    }
+  }
+
+  /** TC007/008 — select coin product with product-list reload retries. */
+  async selectCoinProductWithRetry(
+    productName: string,
+    productType: 'Coin' | 'Jewellery' = 'Coin',
+    maxAttempts = 3,
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.page.goto('/withdraw/product-list');
+        await expect(this.page).toHaveURL(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i);
+        await this.selectCoinCategoryIfNotSelected();
+        await this.selectProductByName(productName, productType);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`[Withdrawal] Coin product select attempt ${attempt} failed: ${message}`);
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+        await this.settleMs(1_000);
+      }
+    }
+  }
+
+  /** TC006/007 — select jewellery product with one reload retry. */
+  async selectJewelleryProductWithRetry(
+    productName: string,
+    productType: 'Coin' | 'Jewellery' = 'Jewellery',
+    maxAttempts = 2,
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await this.selectJewelleryCategoryIfNotSelected();
+        await this.selectProductByName(productName, productType);
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.log(`[Withdrawal] Jewellery product select attempt ${attempt} failed: ${message}`);
+        if (attempt >= maxAttempts) {
+          throw error;
+        }
+        await this.page.goto('/withdraw/product-list');
+        await expect(this.page).toHaveURL(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i);
+      }
+    }
+  }
+
+  /** TC004+ — keep a single cart line at expected quantity. */
+  async normalizeCartToSingleProduct(productName: string, expectedQuantity = 1): Promise<void> {
+    const productCountInCart = await this.getCountOfProductInCart();
+    if (productCountInCart > 1) {
+      await this.removeExtraProductsFromCart(productName);
+    }
+    const selectedProductQty = await this.getSelectedProductQuantityInCart(productName);
+    if (selectedProductQty > expectedQuantity) {
+      await this.reduceSelectedProductQuantityInCart(productName, expectedQuantity);
+    }
+    await this.validateSelectedProductCardInCart(productName, expectedQuantity);
+  }
+
+  /** TC004/016 — cart payable must equal making & delivery charges × quantity. */
+  async validateCartPayableMatchesMakingCharges(
+    makingAndDeliveryChargesAmount: number,
+    quantity = 1,
+  ): Promise<void> {
+    const totalAmountPayable = await this.getCartTotalAmountPayable();
+    const expectedAmountPayable = makingAndDeliveryChargesAmount * quantity;
+    console.log('Cart Total Amount Payable:', totalAmountPayable);
+    console.log('Making & Delivery Charges Amount:', makingAndDeliveryChargesAmount);
+    console.log('Expected Amount Payable:', expectedAmountPayable);
+    expect(totalAmountPayable).toBe(expectedAmountPayable);
+  }
+
+  /** TC007 — keep gold + silver lines at qty 1 each (remove extras, reduce if needed). */
+  async normalizeCartToTwoProducts(goldProductName: string, silverProductName: string): Promise<void> {
+    const normalizedKeepNames = [goldProductName, silverProductName]
+      .map((name) => name.replace(/\s+/g, ' ').trim().toLowerCase())
+      .filter((name) => name.length > 0);
+    const cartCards = this.page.locator('div.border.border-sheengold.rounded-2xl.p-4.mb-4');
+    await cartCards.first().waitFor({ state: 'visible' });
+
+    let safetyCleanup = 0;
+    while ((await cartCards.count()) > normalizedKeepNames.length) {
+      const cardCount = await cartCards.count();
+      let removed = false;
+      for (let i = 0; i < cardCount; i += 1) {
+        const card = cartCards.nth(i);
+        const cardText = ((await card.textContent()) ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const shouldKeep = normalizedKeepNames.some((name) => cardText.includes(name));
+        if (shouldKeep) {
+          continue;
+        }
+        const removeBtn = card.getByRole('button', { name: /Remove Item/i }).first();
+        await removeBtn.waitFor({ state: 'visible' });
+        await removeBtn.click();
+        const expectedCount = cardCount - 1;
+        await this.page.waitForFunction(
+          ({ selector, expected }) => {
+            const scopedGlobal = globalThis as {
+              document?: { querySelectorAll?: (s: string) => { length: number } };
+            };
+            return (scopedGlobal.document?.querySelectorAll?.(selector)?.length ?? 0) <= expected;
+          },
+          { selector: 'div.border.border-sheengold.rounded-2xl.p-4.mb-4', expected: expectedCount },
+          { timeout: 10_000 },
+        );
+        removed = true;
+        break;
+      }
+      if (!removed) {
+        break;
+      }
+      safetyCleanup += 1;
+      if (safetyCleanup > 20) {
+        throw new Error('Safety stop while removing extra cart products.');
+      }
+    }
+
+    const productCountInCart = await this.getCountOfProductInCart();
+    expect(productCountInCart).toBe(2);
+
+    const goldQtyInitial = await this.getSelectedProductQuantityInCart(goldProductName);
+    const silverQtyInitial = await this.getSelectedProductQuantityInCart(silverProductName);
+    const totalQuantityInitial = goldQtyInitial + silverQtyInitial;
+    if (totalQuantityInitial > 2) {
+      if (goldQtyInitial > 1) {
+        await this.reduceSelectedProductQuantityInCart(goldProductName, goldQtyInitial - 1);
+      }
+      if (silverQtyInitial > 1) {
+        await this.reduceSelectedProductQuantityInCart(silverProductName, silverQtyInitial - 1);
+      }
+    }
+
+    await this.validateSelectedProductCardInCart(goldProductName, 1);
+    await this.validateSelectedProductCardInCart(silverProductName, 1);
+  }
+
+  /** TC006/007/008 — assert checkout payment summary totals. */
+  async validateWithdrawalCheckoutPaymentSummary(options?: {
+    expectedTotal?: number;
+  }): Promise<{ totalAmount: number; paidFromFunds: number; netPayableAmount: number }> {
+    const summary = await this.checkoutPageGetPaymentSummary();
+    expect(summary.totalAmount).toBeGreaterThan(0);
+    expect(summary.netPayableAmount).toBeCloseTo(summary.totalAmount - summary.paidFromFunds, 2);
+    if (options?.expectedTotal !== undefined) {
+      expect(summary.totalAmount).toBeCloseTo(options.expectedTotal, 2);
+    }
+    return summary;
+  }
+
+  async getAndLogInvestmentListSummary(): Promise<WithdrawalInvestmentListSummary> {
+    const goldRequired = await this.getInvestmentListTotalGoldRequired();
+    const silverRequired = await this.getInvestmentListTotalSilverRequired();
+    const goldAvailable = await this.getInvestmentListTotalGoldAvailable();
+    const silverAvailable = await this.getInvestmentListTotalSilverAvailable();
+    console.log('Investment List Total Gold Required:', goldRequired);
+    console.log('Investment List Total Silver Required:', silverRequired);
+    console.log('Investment List Total Gold Available:', goldAvailable);
+    console.log('Investment List Total Silver Available:', silverAvailable);
+    return {
+      goldRequired,
+      silverRequired,
+      goldAvailable,
+      silverAvailable,
+    };
+  }
+
+  /**
+   * TC004/008/016 — same-as-billing delivery address then proceed to checkout.
+   * Set `openAddressFormFirst` when investment screen must click Proceed before address fields.
+   */
+  async proceedThroughDeliveryWithSameBillingAddress(options?: {
+    openAddressFormFirst?: boolean;
+  }): Promise<WithdrawalDeliveryInformation> {
+    if (options?.openAddressFormFirst) {
+      await this.clickDeliveryProceedButton();
+    }
+    await this.clickSameAsBillingAddressCheckbox();
+    await this.settleMs(500);
+    const deliveryInformation = await this.getAndLogDeliveryInformation();
+    await this.clickDeliveryProceedButton();
+    return deliveryInformation;
+  }
+
+  /** TC004+ — validate checkout summary, select netbanking, proceed to Razorpay. */
+  async completeWithdrawalCheckoutWithNetbanking(params: {
+    selectedProductDetails: WithdrawalSelectedProductDetails;
+    deliveryInformation: WithdrawalDeliveryInformation;
+    quantity?: number;
+  }): Promise<void> {
+    const quantity = params.quantity ?? 1;
+    await this.checkoutPageValidateSelectedProductAgainstProductDetails({
+      productName: params.selectedProductDetails.productName,
+      makingAndDeliveryChargesAmount: params.selectedProductDetails.makingAndDeliveryChargesAmount,
+      quantity,
+    });
+    await this.checkoutPageValidateDeliveryAddressAgainstDeliveryInfo(params.deliveryInformation);
+    await this.checkoutPageValidatePaymentSummaryAgainstMakingCharges(
+      params.selectedProductDetails.makingAndDeliveryChargesAmount,
+    );
+    await this.checkoutPageGetAndLogPaymentTypes();
+    await this.checkoutPageSelectPaymentTypeNetbanking();
+    await this.checkoutPageClickProceedToPay();
+  }
+
+  /** TC004/016 — assert vault total gold covers required conversion amount. */
+  assertGoldVaultMeetsRequiredGold(params: {
+    vaultTotalGold: number;
+    goldRequired: number;
+    stepLabel?: string;
+  }): void {
+    const label = params.stepLabel ?? 'GoldVault';
+    const hasRequiredGoldForVault = params.vaultTotalGold >= params.goldRequired;
+    console.log(`[${label}] beforeWithdrawalVaultTotalGold:`, params.vaultTotalGold);
+    console.log(`[${label}] investmentListTotalGoldRequired:`, params.goldRequired);
+    console.log(
+      `[${label}] Precondition Check -> expected: GoldVault >= TotalGoldRequired | actual: ${params.vaultTotalGold} >= ${params.goldRequired} | result: ${hasRequiredGoldForVault ? 'PASS' : 'FAIL'}`,
+    );
+    if (!hasRequiredGoldForVault) {
+      console.log(
+        `[${label}][FAIL] Insufficient vault value: Gold Vault Total Gold (${params.vaultTotalGold}) is less than Total Gold Required (${params.goldRequired}).`,
+      );
+    }
+    expect(
+      hasRequiredGoldForVault,
+      `[${label}][FAIL] Insufficient vault value: Gold Vault Total Gold (${params.vaultTotalGold}) must be >= Total Gold Required (${params.goldRequired}).`,
+    ).toBe(true);
+    console.log(
+      `[${label}][PASS] Gold Vault Total Gold (${params.vaultTotalGold}) >= Total Gold Required (${params.goldRequired}).`,
+    );
+  }
+
+  /**
+   * TC004/016 — boundary quantity checks on Gold Vault then enter valid required quantity.
+   * Returns the valid quantity entered (equal to gold required).
+   */
+  async validateGoldVaultQuantityBoundariesAndSetValid(params: {
+    goldRequired: number;
+    remainingGoldBefore: number;
+    stepLabel?: string;
+  }): Promise<number> {
+    expect(params.goldRequired).toBeGreaterThan(0);
+
+    const lessThanRequiredQty = Number((params.goldRequired - 0.01).toFixed(4));
+    const greaterThanRequiredQty = Number((params.goldRequired + 0.01).toFixed(4));
+    console.log('Invalid quantity (less than Total Gold Required):', lessThanRequiredQty);
+    console.log('Invalid quantity (greater than Total Gold Required):', greaterThanRequiredQty);
+
+    await this.enterQuantity(lessThanRequiredQty);
+    let vaultTotals = await this.getGoldVaultCardTotals();
+    expect(vaultTotals.remainingGold).toBeCloseTo(
+      Number((params.remainingGoldBefore - lessThanRequiredQty).toFixed(4)),
+      4,
+    );
+
+    await this.enterQuantity(greaterThanRequiredQty);
+    vaultTotals = await this.getGoldVaultCardTotals();
+    expect(vaultTotals.remainingGold).toBeCloseTo(
+      Number((params.remainingGoldBefore - greaterThanRequiredQty).toFixed(4)),
+      4,
+    );
+
+    await this.enterQuantity(params.goldRequired);
+    console.log('Valid quantity (equal to Total Gold Required):', params.goldRequired);
+    vaultTotals = await this.getGoldVaultCardTotals();
+    expect(vaultTotals.remainingGold).toBeCloseTo(
+      Number((params.remainingGoldBefore - params.goldRequired).toFixed(4)),
+      4,
+    );
+    await this.validateTotalGoldValueDelivery(params.goldRequired);
+    return params.goldRequired;
+  }
+
+  /** TC006/007 — common product detail field assertions after PDP load. */
+  assertWithdrawalProductDetailsPopulated(
+    details: WithdrawalSelectedProductDetails,
+    options?: { requireMakingChargesLabel?: boolean },
+  ): number {
+    expect(details.productName).toBeTruthy();
+    expect(details.productWeight).not.toBe('');
+    if (options?.requireMakingChargesLabel !== false) {
+      expect(details.makingAndDeliveryCharges).toMatch(/Making/i);
+    }
+    expect(details.makingAndDeliveryChargesAmount).toBeGreaterThan(0);
+    expect(details.expectedDeliveryDate).not.toBe('');
+    const grams = Number((details.productWeight.match(/[\d.]+/)?.[0] ?? '0').trim());
+    expect(grams).toBeGreaterThan(0);
+    return grams;
   }
 
 }

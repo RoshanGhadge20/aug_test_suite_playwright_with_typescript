@@ -40,6 +40,7 @@ function envBlockShape(prefix: 'TEST' | 'UAT', required: boolean): z.ZodRawShape
     [`${prefix}_BACKEND_USER_OTP`]: nonEmpty.optional(),
     [`${prefix}_EMI_USER_MOBILE`]: nonEmpty.optional(),
     [`${prefix}_EMI_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_SHOP_USER_OTP`]: nonEmpty.optional(),
   };
 }
 
@@ -87,7 +88,8 @@ type EnvCredKeys<Prefix extends string> =
   | `${Prefix}_BACKEND_USER_MOBILE`
   | `${Prefix}_BACKEND_USER_OTP`
   | `${Prefix}_EMI_USER_MOBILE`
-  | `${Prefix}_EMI_USER_OTP`;
+  | `${Prefix}_EMI_USER_OTP`
+  | `${Prefix}_SHOP_USER_OTP`;
 
 export type AppEnv = Record<EnvUrlKeys<'TEST'>, string>
   & Record<EnvUrlKeys<'UAT'>, string>

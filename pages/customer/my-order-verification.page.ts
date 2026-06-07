@@ -1,6 +1,22 @@
 import { expect, Locator, Page, type Response } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import type { ShopBillingAddressDetails } from './shop-checkout.page';
+import * as pdfUtils from '../../utils/pdf-utils';
+import * as shopPdfUtils from '../../utils/shop-pdf-utils';
+import type { ShopBillingAddressDetails, ShopCheckoutPage, ShopPlacedOrders } from './shop-checkout.page';
+import { getShopDataset } from '../../utils/data/customer-excel-data';
+import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
+import {
+  resolveShopEmiOrderId,
+  resolveShopEmiProductName,
+  type ShopEmiPurchaseChainState,
+} from '../../utils/test/shop-emi-purchase-chain';
+import type { EmiOrderDetailValidationPage } from './emi-order-detail-validation.page';
+import { ShopEmiPage } from './shop-emi.page';
+import {
+  expectedShopProductWeightGrams,
+  shopWeightGramsFromText,
+  type ShopProductDetails,
+} from './shop.page';
 
 /** Product line on my-orders delivery / product detail card (see flex row with h3 + Transaction Id). */
 export type MyOrderProductCardDetails = {
@@ -39,6 +55,29 @@ export type MyOrderShopDetailStatusAndDate = {
   status: string;
   orderedOn: string;
 };
+
+/** One step on the shop order detail p-timeline (e.g. Booked → Active → Payment Received). */
+export type MyOrderShopStatusTimelineStep = {
+  status: string;
+  dateTime: string;
+};
+
+/** TC_SHOP_011 — foreclosed EMI order detail timeline. */
+export const SHOP_ORDER_DETAIL_TIMELINE_FORECLOSE = [
+  'Booked',
+  'Active',
+  'Payment Received',
+] as const;
+
+/** TC_SHOP_009 — cancelled EMI order detail timeline. */
+export const SHOP_ORDER_DETAIL_TIMELINE_CANCEL = [
+  'Booked',
+  'Active',
+  'Order Cancelled',
+] as const;
+
+const SHOP_ORDER_DETAIL_STATUS =
+  /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i;
 
 export type MyOrderShopDetailDateTime = {
   dateTimeText: string;
@@ -79,6 +118,7 @@ export class MyOrderVerificationPage extends BasePage {
   private selectedOrderRow: Locator | null = null;
   private invoicePdfPage: Page | null = null;
   private invoicePdfHref: string | null = null;
+  private shopCancelInvoicePdfText: string | null = null;
 
   constructor(page: Page) {
     super(page);
@@ -89,8 +129,8 @@ export class MyOrderVerificationPage extends BasePage {
     this.noRecordLabel = page.locator('text=No Record Found');
   }
 
-  private logShopInvoice(step: number, message: string): void {
-    console.log(`[Shop Invoice] Step ${step}: ${message}`);
+  private logShopInvoice(_step: number, _message: string): void {
+    // Intentionally silent — specs log GET / Actual|Expected for invoice validation.
   }
 
   private addressDetailsHeading(): Locator {
@@ -295,8 +335,7 @@ export class MyOrderVerificationPage extends BasePage {
           }
           return false;
         },
-        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] },
-      )
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] })
       .toBeTruthy();
   }
 
@@ -340,8 +379,7 @@ export class MyOrderVerificationPage extends BasePage {
             const ariaChecked = await shopTab.getAttribute('aria-checked').catch(() => null);
             return checked || ariaChecked === 'true';
           },
-          { timeout: 15_000, intervals: [200, 500, 1000] },
-        )
+          { timeout: 15_000, intervals: [200, 500, 1000] })
         .toBeTruthy();
     }
 
@@ -362,8 +400,7 @@ export class MyOrderVerificationPage extends BasePage {
    */
   async waitForShopOrderIdOnList(
     orderId: string,
-    options?: { productName?: string; timeoutMs?: number },
-  ): Promise<void> {
+    options?: { productName?: string; timeoutMs?: number }): Promise<void> {
     const timeoutMs = options?.timeoutMs ?? 90_000;
     const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
     let lastRefreshMs = 0;
@@ -376,8 +413,7 @@ export class MyOrderVerificationPage extends BasePage {
             r.ok() &&
             (r.request().method() === 'GET' || r.request().method() === 'POST') &&
             /shop|my-orders|myorders|order-list|customer-order/i.test(r.url()),
-          { timeout: 20_000 },
-        )
+          { timeout: 20_000 })
         .catch(() => null);
       await shopTab.click({ force: true }).catch(() => {});
       await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
@@ -435,8 +471,7 @@ export class MyOrderVerificationPage extends BasePage {
 
           return false;
         },
-        { timeout: timeoutMs, intervals: [500, 1000, 1500, 2000, 3000] },
-      )
+        { timeout: timeoutMs, intervals: [500, 1000, 1500, 2000, 3000] })
       .toBeTruthy();
   }
 
@@ -526,20 +561,47 @@ export class MyOrderVerificationPage extends BasePage {
             .catch(() => false);
           return !buyListVisible;
         },
-        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000] },
-      )
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000] })
       .toBeTruthy();
   }
   private static readonly invoicePdfUrlPattern =
-    /emi-backend-api\.gfau\.augmont\.com\/.*(?:finalInvoice|proformaContract).*\.pdf/i;
+    /emi-backend-api\.gfau\.augmont\.com\/.*(?:cancelInvoice|finalInvoice|proformaContract).*\.pdf/i;
 
   private static isInvoicePdfUrl(url: string): boolean {
     return (
       MyOrderVerificationPage.invoicePdfUrlPattern.test(url) ||
-      /(?:finalInvoice|proformaContract).*\.pdf/i.test(url) ||
+      /(?:cancelInvoice|finalInvoice|proformaContract).*\.pdf/i.test(url) ||
       /\.pdf(\?|$)/i.test(url) ||
       /amazonaws\.com\/.*\.pdf/i.test(url)
     );
+  }
+
+  private static pickBestInvoicePdfUrl(urls: string[], preferCancelInvoice = false): string | null {
+    let best: string | null = null;
+    let bestScore = -1;
+
+    for (const url of urls) {
+      if (!MyOrderVerificationPage.isInvoicePdfUrl(url)) {
+        continue;
+      }
+      let score = 1;
+      if (/cancelInvoice/i.test(url)) {
+        score = 30;
+      } else if (/finalInvoice/i.test(url)) {
+        score = 20;
+      } else if (/proformaContract/i.test(url)) {
+        score = 10;
+      }
+      if (preferCancelInvoice && !/cancelInvoice/i.test(url)) {
+        score = 0;
+      }
+      if (score >= bestScore) {
+        bestScore = score;
+        best = url;
+      }
+    }
+
+    return best;
   }
 
   private async waitForInvoiceViewerPage(timeoutMs = 30_000): Promise<Page | null> {
@@ -563,8 +625,7 @@ export class MyOrderVerificationPage extends BasePage {
           }
           return false;
         },
-        { timeout: timeoutMs, intervals: [100, 250, 500] },
-      )
+        { timeout: timeoutMs, intervals: [100, 250, 500] })
       .toBeTruthy()
       .catch(() => {});
     return found;
@@ -679,8 +740,7 @@ export class MyOrderVerificationPage extends BasePage {
           }
           return false;
         },
-        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] },
-      )
+        { timeout: timeoutMs, intervals: [300, 500, 1000, 2000, 3000] })
       .toBeTruthy();
   }
 
@@ -720,28 +780,12 @@ export class MyOrderVerificationPage extends BasePage {
   /** Read shop-tab list row by order id (preferred when multiple products were ordered). */
   async getShopOrderListDetailsByOrderId(
     orderId: string,
-    options?: { skipTabLoadWait?: boolean; productName?: string },
-  ): Promise<MyOrderShopCardDetails> {
+    options?: { skipTabLoadWait?: boolean; productName?: string }): Promise<MyOrderShopCardDetails> {
     if (!options?.skipTabLoadWait) {
       await this.waitForShopOrderIdOnList(orderId, { productName: options?.productName });
     }
     const card = await this.resolveShopOrderCardByOrderId(orderId, options?.productName);
-
-    let orderedOn = '';
-    try {
-      orderedOn = await this.readShopOrderDate(card);
-    } catch {
-      orderedOn = '';
-    }
-
-    return {
-      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
-      orderId: await this.readShopLabel(card, 'Order Id'),
-      status: await this.text(card.locator('span.rounded-full').first()),
-      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
-      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
-      orderedOn,
-    };
+    return this.readShopOrderCardDetails(card);
   }
 
   /** TC004 — read shop-tab card from list only (no View Detail). */
@@ -767,22 +811,7 @@ export class MyOrderVerificationPage extends BasePage {
     const card = this.shopOrderCards().nth(await this.resolveShopOrderCardIndex(options.productName));
     await card.scrollIntoViewIfNeeded();
     await card.waitFor({ state: 'visible', timeout: 45_000 });
-
-    let orderedOn = '';
-    try {
-      orderedOn = await this.readShopOrderDate(card);
-    } catch {
-      orderedOn = '';
-    }
-
-    return {
-      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
-      orderId: await this.readShopLabel(card, 'Order Id'),
-      status: await this.text(card.locator('span.rounded-full').first()),
-      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
-      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
-      orderedOn,
-    };
+    return this.readShopOrderCardDetails(card);
   }
 
   async clickSellTab(): Promise<void> {
@@ -816,8 +845,7 @@ export class MyOrderVerificationPage extends BasePage {
 
     if (/\/login/i.test(this.page.url())) {
       throw new Error(
-        'My Orders opened the login page (session missing or expired). Re-run: npx playwright test --project=auth-setup',
-      );
+        'My Orders opened the login page (session missing or expired). Re-run: npx playwright test --project=auth-setup');
     }
 
     await this.page.waitForURL(/my-orders/i, { timeout: 20_000 });
@@ -825,8 +853,7 @@ export class MyOrderVerificationPage extends BasePage {
 
   async getShopOrderDetails(
     productName: string,
-    _options?: { skipTabLoadWait?: boolean },
-  ): Promise<MyOrderShopCardDetails> {
+    _options?: { skipTabLoadWait?: boolean }): Promise<MyOrderShopCardDetails> {
     const card = await this.resolveShopOrderCard(productName);
     return this.readShopOrderCardDetails(card);
   }
@@ -850,38 +877,38 @@ export class MyOrderVerificationPage extends BasePage {
     return card;
   }
 
-  private async readShopOrderCardDetails(card: Locator): Promise<MyOrderShopCardDetails> {
-    return {
-      productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
-      orderId: await this.readShopLabel(card, 'Order Id'),
-      status: await this.text(card.locator('span.rounded-full').first()),
-      quantity: Number((await this.readShopLabel(card, 'Quantity')).replace(/\D/g, '') || '0'),
-      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
-      orderedOn: await this.readShopOrderDate(card),
-    };
+  private async readShopOrderCardQuantity(card: Locator): Promise<number> {
+    const quantityLabel = card.getByText(/^Quantity\s*:?/i).first();
+    if (!(await quantityLabel.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      return 1;
+    }
+    const raw = await this.readShopLabel(card, 'Quantity');
+    const parsed = Number(raw.replace(/\D/g, '') || '0');
+    return parsed > 0 ? parsed : 1;
   }
 
-  /** TC003 EMI shop tab row — no Quantity label; quantity defaults to 1. */
-  async getShopEmiOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
-    const card = await this.resolveShopOrderCard(productName);
-
-    const quantityLabel = card.getByText(/^Quantity\s*:?/i).first();
-    const hasQuantity = await quantityLabel.isVisible({ timeout: 2_000 }).catch(() => false);
-    let quantity = 1;
-    if (hasQuantity) {
-      const raw = await this.readShopLabel(card, 'Quantity');
-      const parsed = Number(raw.replace(/\D/g, '') || '0');
-      quantity = parsed > 0 ? parsed : 1;
+  private async readShopOrderCardDetails(card: Locator): Promise<MyOrderShopCardDetails> {
+    let orderedOn = '';
+    try {
+      orderedOn = await this.readShopOrderDate(card);
+    } catch {
+      orderedOn = '';
     }
 
     return {
       productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
       orderId: await this.readShopLabel(card, 'Order Id'),
       status: await this.text(card.locator('span.rounded-full').first()),
-      quantity,
+      quantity: await this.readShopOrderCardQuantity(card),
       priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
-      orderedOn: await this.readShopOrderDate(card),
+      orderedOn,
     };
+  }
+
+  /** TC003 / EMI shop tab row — Quantity label optional (defaults to 1). */
+  async getShopEmiOrderDetails(productName: string): Promise<MyOrderShopCardDetails> {
+    const card = await this.resolveShopOrderCard(productName);
+    return this.readShopOrderCardDetails(card);
   }
 
   async getShopOrderDate(productName: string): Promise<string> {
@@ -897,30 +924,34 @@ export class MyOrderVerificationPage extends BasePage {
   /** TC002 / TC003 — open View Detail for one of several shop order rows. */
   async openShopOrderDetailMulti(
     productName: string,
-    options?: { orderId?: string },
-  ): Promise<void> {
+    options?: { orderId?: string }): Promise<void> {
     await this.openShopOrderDetailForProduct(productName, 'multi', options?.orderId);
   }
 
   private async openShopOrderDetailForProduct(
     productName: string,
     flow: 'single' | 'multi',
-    orderId?: string,
-  ): Promise<void> {
+    orderId?: string): Promise<void> {
     const onOrderDetail = await this.shopOrderDetailPanel()
       .isVisible({ timeout: 500 })
       .catch(() => false);
     const u = this.page.url();
-    const needMyOrdersList =
-      !/\/my-orders/i.test(u) || /\/shop-new\/order\//i.test(u) || onOrderDetail || (flow === 'multi' && !!orderId);
+    const onMyOrders = /\/my-orders/i.test(u) && !/\/shop-new\/order\//i.test(u);
+    const needNavigate = !onMyOrders || onOrderDetail;
 
-    if (needMyOrdersList) {
+    if (needNavigate) {
       await this.goToMyOrders();
       if (flow === 'single') {
         await this.clickShopTabSingleOrder();
       } else {
         await this.clickShopTabMultiProduct();
       }
+    } else if (flow === 'multi') {
+      await this.clickShopTabMultiProduct();
+    }
+
+    if (orderId) {
+      await this.searchShopOrderByOrderId(orderId, { productName });
     }
 
     const card = orderId
@@ -935,6 +966,97 @@ export class MyOrderVerificationPage extends BasePage {
     await this.scrollToShopInvoiceSection();
   }
 
+  /**
+   * Locate a SHOP-tab row by order id (optional search box, then scroll/poll list).
+   */
+  async searchShopOrderByOrderId(
+    orderId: string,
+    options?: { productName?: string; timeoutMs?: number }): Promise<void> {
+    const normalized = orderId.replace(/\D/g, '');
+    const searchInput = this.page
+      .getByPlaceholder(/search/i)
+      .or(this.page.getByRole('searchbox'))
+      .or(this.page.locator('input[type="search"]'))
+      .first();
+
+    if (await searchInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await searchInput.fill(normalized);
+      await searchInput.press('Enter').catch(() => {});
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+    }
+
+    await this.waitForShopOrderIdOnList(normalized, {
+      productName: options?.productName,
+      timeoutMs: options?.timeoutMs,
+    });
+  }
+
+  /** AT-1658 — SHOP row: find by order id and click Pay Now (opens Pay EMI details card). */
+  async clickPayNowOnShopEmiOrderByOrderId(
+    orderId: string,
+    options?: { productName?: string }): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    await this.searchShopOrderByOrderId(orderId, { productName: options?.productName });
+
+    const card = await this.resolveShopOrderCardByOrderId(orderId, options?.productName);
+    await card.scrollIntoViewIfNeeded();
+    await card.getByRole('button', { name: /^pay now$/i }).first().click();
+    await this.page.waitForLoadState('domcontentloaded');
+  }
+
+  /** AT-1658 post-foreclose — SHOP tab: search order id, read list row (caller asserts status). */
+  async getShopOrderOnListByOrderId(
+    orderId: string,
+    options?: { productName?: string }): Promise<MyOrderShopCardDetails> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    await this.searchShopOrderByOrderId(orderId, { productName: options?.productName });
+    return this.getShopOrderListDetailsByOrderId(orderId, {
+      skipTabLoadWait: true,
+      productName: options?.productName,
+    });
+  }
+
+  /** AT-1658 post-foreclose — SHOP row: click View Detail (list already showing the order). */
+  async openShopOrderViewDetailByOrderId(
+    orderId: string,
+    options?: { productName?: string }): Promise<void> {
+    const card = await this.resolveShopOrderCardByOrderId(orderId, options?.productName);
+    await card.scrollIntoViewIfNeeded();
+    await card.getByRole('button', { name: /^view detail$/i }).first().click();
+    const panel = this.shopOrderDetailPanel();
+    await panel.waitFor({ state: 'visible', timeout: 15_000 });
+    if (options?.productName) {
+      await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(options.productName, {
+        timeout: 20_000,
+      });
+    }
+  }
+
+  /** TC003 / TC_SHOP_010 (AT-1658) — My Orders SHOP tab: find order id, click Pay Now on the EMI row. */
+  async openShopEmiOrderDetailByOrderId(
+    orderId: string,
+    options?: { productName?: string }): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    await this.searchShopOrderByOrderId(orderId, { productName: options?.productName });
+
+    const card = await this.resolveShopOrderCardByOrderId(orderId, options?.productName);
+    await card.scrollIntoViewIfNeeded();
+    await card.getByRole('button', { name: /^pay now$/i }).first().click();
+
+    const panel = this.shopEmiOrderDetailPanel();
+    await panel.waitFor({ state: 'visible', timeout: 15_000 });
+    if (options?.productName) {
+      await expect(panel.getByRole('heading', { level: 3 }).first()).toContainText(options.productName, {
+        timeout: 20_000,
+      });
+    }
+    await expect(panel.getByRole('button', { name: /^pay now$/i })).toBeVisible();
+    await expect(panel.getByRole('button', { name: /cancel booking/i })).toBeVisible();
+  }
+
   /** TC003 EMI Booked row — click Pay Now on the shop-tab card to open the EMI order summary. */
   async openShopEmiOrderDetail(productName: string): Promise<void> {
     const u = this.page.url();
@@ -944,7 +1066,7 @@ export class MyOrderVerificationPage extends BasePage {
     }
 
     const card = await this.resolveShopOrderCard(productName);
-    await card.getByRole('button', { name: /^pay now$/i }).click();
+    await card.getByRole('button', { name: /^pay now$/i }).first().click();
 
     const panel = this.shopEmiOrderDetailPanel();
     await panel.waitFor({ state: 'visible', timeout: 15_000 });
@@ -972,8 +1094,7 @@ export class MyOrderVerificationPage extends BasePage {
       netWeight: await this.text(panel.getByText(/Net weight:/i).first()),
       quantity,
       priceAmount: this.parseAmount(
-        await this.text(panel.locator('p.font-bold').filter({ hasText: /₹/ }).first()),
-      ),
+        await this.text(panel.locator('p.font-bold').filter({ hasText: /₹/ }).first())),
       dueOn: await this.text(panel.getByText(/^DUE ON/i).first()),
     };
   }
@@ -982,8 +1103,7 @@ export class MyOrderVerificationPage extends BasePage {
   async prepareShopOrderDetailForInvoice(
     productName: string,
     flow: 'single' | 'multi' = 'single',
-    options?: { orderId?: string },
-  ): Promise<void> {
+    options?: { orderId?: string }): Promise<void> {
     if (await this.isShopOrderDetailReadyForInvoiceWithProduct(productName)) {
       await this.scrollToShopInvoiceSection();
       return;
@@ -1022,7 +1142,7 @@ export class MyOrderVerificationPage extends BasePage {
     if (await viewDetailBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
       await viewDetailBtn.click();
     } else {
-      await card.getByRole('button', { name: /^pay now$/i }).click();
+      await card.getByRole('button', { name: /^pay now$/i }).first().click();
       await this.shopEmiOrderDetailPanel().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
     }
 
@@ -1032,8 +1152,7 @@ export class MyOrderVerificationPage extends BasePage {
     const heading = await this.resolveShopOrderDetailProductHeading();
     if (!heading.includes(productName)) {
       throw new Error(
-        `EMI order detail for invoice does not show "${productName}" (got "${heading || '(empty)'}").`,
-      );
+        `EMI order detail for invoice does not show "${productName}" (got "${heading || '(empty)'}").`);
     }
   }
 
@@ -1055,8 +1174,7 @@ export class MyOrderVerificationPage extends BasePage {
       /** TC001/TC004 = single; TC002/TC003 = multi (default from requireMatchingProduct). */
       flow?: 'single' | 'multi';
       orderId?: string;
-    },
-  ): Promise<void> {
+    }): Promise<void> {
     const flow = options?.flow ?? (options?.requireMatchingProduct ? 'multi' : 'single');
     const requireProduct = options?.requireMatchingProduct === true;
     if (requireProduct) {
@@ -1076,8 +1194,7 @@ export class MyOrderVerificationPage extends BasePage {
   /** TC003 EMI — same as ensureShopOrderDetailForInvoice but opens EMI invoice-ready detail. */
   async ensureShopEmiOrderDetailForInvoice(
     productName: string,
-    options?: { requireMatchingProduct?: boolean },
-  ): Promise<void> {
+    options?: { requireMatchingProduct?: boolean }): Promise<void> {
     const requireProduct = options?.requireMatchingProduct === true;
     if (requireProduct) {
       if (await this.isShopEmiOrderDetailReadyForInvoiceWithProduct(productName)) {
@@ -1166,6 +1283,10 @@ export class MyOrderVerificationPage extends BasePage {
         await p.close().catch(() => {});
       }
     }
+    await this.dismissProfileMenu();
+    await this.page.keyboard.press('Escape').catch(() => {});
+    await this.goToMyOrders();
+    await this.clickShopTabMultiProduct();
   }
 
   async getShopOrderDetailView(): Promise<MyOrderShopDetailViewDetails> {
@@ -1183,17 +1304,49 @@ export class MyOrderVerificationPage extends BasePage {
     };
   }
 
-  async getShopOrderDetailStatusAndDate(): Promise<MyOrderShopDetailStatusAndDate> {
+  /** ORDER ID / ORDERED ON meta line on shop order detail (Buy Now and EMI). */
+  async getShopOrderDetailOrderMeta(): Promise<Pick<MyOrderShopDetailStatusAndDate, 'orderId' | 'orderedOn'>> {
     const metaLine = await this.text(this.page.getByText(/ORDER ID:\s*\d+/i).first());
     const orderId = metaLine.match(/ORDER\s*ID:\s*(\d+)/i)?.[1] ?? '';
     const orderedPart = metaLine.match(/ORDERED ON\s+(.+)/i)?.[1]?.trim() ?? '';
-    const status = await this.text(this.page.getByText(/Payment Received/i).first());
-
     return {
       orderId,
-      status,
       orderedOn: orderedPart ? `ORDERED ON ${orderedPart}` : metaLine,
     };
+  }
+
+  async getShopOrderDetailStatusAndDate(): Promise<MyOrderShopDetailStatusAndDate> {
+    const meta = await this.getShopOrderDetailOrderMeta();
+    const statusBadge = this.page
+      .locator('span,div,p')
+      .filter({ hasText: SHOP_ORDER_DETAIL_STATUS })
+      .first();
+    let status = '';
+    if (await statusBadge.isVisible({ timeout: 8_000 }).catch(() => false)) {
+      const raw = await this.text(statusBadge);
+      status = raw.match(SHOP_ORDER_DETAIL_STATUS)?.[1] ?? raw;
+    }
+
+    return { ...meta, status };
+  }
+
+  /** Shop order detail — vertical p-timeline status steps (Booked, Active, Payment Received, …). */
+  async getShopOrderStatusTimeline(): Promise<MyOrderShopStatusTimelineStep[]> {
+    const timeline = this.page.locator('.p-timeline.p-component').first();
+    await timeline.waitFor({ state: 'visible', timeout: 15_000 });
+
+    const events = timeline.locator('.p-timeline-event');
+    const count = await events.count();
+    const steps: MyOrderShopStatusTimelineStep[] = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const paragraphs = events.nth(i).locator('.p-timeline-event-content p');
+      const status = ((await paragraphs.nth(0).textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      const dateTime = ((await paragraphs.nth(1).textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      steps.push({ status, dateTime });
+    }
+
+    return steps;
   }
 
   async getShopOrderDetailDateTime(): Promise<MyOrderShopDetailDateTime> {
@@ -1216,6 +1369,8 @@ export class MyOrderVerificationPage extends BasePage {
     orderId?: string;
     /** TC003 EMI — re-open invoice-ready detail via Pay Now, not View Detail. */
     useEmiOrderDetail?: boolean;
+    /** TC_SHOP_009 — prefer cancelInvoice PDF over proforma/final invoice. */
+    preferCancelInvoice?: boolean;
   }): Promise<void> {
     const maxAttempts = options?.maxAttempts ?? 4;
     const captureTimeoutMs = options?.captureTimeoutMs ?? 12_000;
@@ -1233,8 +1388,7 @@ export class MyOrderVerificationPage extends BasePage {
           } else {
             await this.prepareShopOrderDetailForInvoice(
               options.productName,
-              options.useEmiOrderDetail ? 'multi' : 'single',
-            );
+              options.useEmiOrderDetail ? 'multi' : 'single');
           }
         } else {
           await this.page.reload({ waitUntil: 'domcontentloaded' });
@@ -1245,7 +1399,9 @@ export class MyOrderVerificationPage extends BasePage {
       }
 
       try {
-        await this.captureShopInvoicePdf(captureTimeoutMs);
+        await this.captureShopInvoicePdf(captureTimeoutMs, {
+          preferCancelInvoice: options?.preferCancelInvoice,
+        });
         return;
       } catch (error) {
         if (attempt >= maxAttempts) {
@@ -1255,7 +1411,9 @@ export class MyOrderVerificationPage extends BasePage {
     }
   }
 
-  private async captureShopInvoicePdf(captureTimeoutMs: number): Promise<void> {
+  private async captureShopInvoicePdf(
+    captureTimeoutMs: number,
+    options?: { preferCancelInvoice?: boolean }): Promise<void> {
     this.logShopInvoice(1, 'Close profile menu if open');
     await this.dismissProfileMenu();
 
@@ -1264,26 +1422,23 @@ export class MyOrderVerificationPage extends BasePage {
     await this.scrollToShopInvoiceSection();
 
     this.logShopInvoice(3, `Register PDF listener then click Invoice (wait up to ${captureTimeoutMs}ms)`);
-    let networkUrl: string | null = null;
+    const collectedUrls = new Set<string>();
     const onResponse = async (response: Response) => {
-      if (networkUrl) {
-        return;
-      }
       const url = response.url();
       if (MyOrderVerificationPage.isInvoicePdfUrl(url)) {
+        collectedUrls.add(url);
         this.logShopInvoice(4, `Captured PDF URL from network | ${url.slice(0, 120)}`);
-        networkUrl = url;
         return;
       }
-      if (!/invoice|finalInvoice|\.pdf|emi-backend-api\.gfau\.augmont\.com/i.test(url)) {
+      if (!/invoice|finalInvoice|cancelInvoice|\.pdf|emi-backend-api\.gfau\.augmont\.com/i.test(url)) {
         return;
       }
       try {
         const body = await response.json();
         const fromJson = MyOrderVerificationPage.findPdfUrlInJson(body, url);
         if (fromJson) {
+          collectedUrls.add(fromJson);
           this.logShopInvoice(4, `Captured PDF URL from JSON | ${fromJson.slice(0, 120)}`);
-          networkUrl = fromJson;
         }
       } catch {
         // not JSON
@@ -1305,35 +1460,42 @@ export class MyOrderVerificationPage extends BasePage {
     await expect
       .poll(
         async () => {
-          if (networkUrl) {
-            return true;
-          }
           for (const tab of this.page.context().pages()) {
             if (!tab.isClosed() && MyOrderVerificationPage.isInvoicePdfUrl(tab.url())) {
-              networkUrl = tab.url();
+              collectedUrls.add(tab.url());
               pdfTab = tab;
-              this.logShopInvoice(4, `Captured PDF URL from tab | ${networkUrl.slice(0, 120)}`);
-              return true;
+              this.logShopInvoice(4, `Captured PDF URL from tab | ${tab.url().slice(0, 120)}`);
             }
           }
           viewerPage = await this.waitForInvoiceViewerPage(250);
           if (viewerPage && MyOrderVerificationPage.isInvoicePdfUrl(viewerPage.url())) {
-            networkUrl = viewerPage.url();
+            collectedUrls.add(viewerPage.url());
             pdfTab = viewerPage;
-            return true;
           }
-          return false;
+          const cancelLinks = this.page.locator('a[href*="cancelInvoice"]');
+          const linkCount = await cancelLinks.count().catch(() => 0);
+          for (let i = 0; i < linkCount; i += 1) {
+            const href = await cancelLinks.nth(i).getAttribute('href');
+            if (href) {
+              collectedUrls.add(href);
+            }
+          }
+          if (options?.preferCancelInvoice) {
+            return [...collectedUrls].some((url) => /cancelInvoice/i.test(url));
+          }
+          return collectedUrls.size > 0;
         },
-        { timeout: captureTimeoutMs, intervals: [100, 250, 500] },
-      )
+        { timeout: captureTimeoutMs, intervals: [100, 250, 500] })
       .toBeTruthy();
 
     this.page.context().off('response', onResponse);
 
-    if (!networkUrl) {
+    const resolvedUrl = MyOrderVerificationPage.pickBestInvoicePdfUrl(
+      [...collectedUrls],
+      options?.preferCancelInvoice);
+    if (!resolvedUrl) {
       throw new Error('Invoice PDF URL not found after clicking Invoice.');
     }
-    const resolvedUrl = networkUrl as string;
 
     this.logShopInvoice(5, 'Resolve PDF URL from capture');
     this.invoicePdfHref = resolvedUrl;
@@ -1590,8 +1752,7 @@ export class MyOrderVerificationPage extends BasePage {
           await this.scrollShopOrdersListDown();
           return false;
         },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
-      )
+        { timeout: timeoutMs, intervals: [500, 1000, 2000] })
       .toBeTruthy();
 
     if (foundIndex < 0) {
@@ -1603,8 +1764,7 @@ export class MyOrderVerificationPage extends BasePage {
   /** Find shop-tab row index by order id (optional product heading disambiguates shared ids). */
   private async resolveShopOrderCardIndexByOrderId(
     orderId: string,
-    options?: { productName?: string; timeoutMs?: number },
-  ): Promise<number> {
+    options?: { productName?: string; timeoutMs?: number }): Promise<number> {
     const target = orderId.replace(/\D/g, '');
     const timeoutMs = options?.timeoutMs ?? 90_000;
     let foundIndex = -1;
@@ -1637,8 +1797,7 @@ export class MyOrderVerificationPage extends BasePage {
           await this.scrollShopOrdersListDown();
           return false;
         },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000] },
-      )
+        { timeout: timeoutMs, intervals: [500, 1000, 2000] })
       .toBeTruthy();
 
     if (foundIndex < 0) {
@@ -1742,6 +1901,1029 @@ export class MyOrderVerificationPage extends BasePage {
     return match ? parseFloat(match[1]) : null;
   }
 
+  async validateOneTimeBuyOrder(params: {
+    orderRowText: string;
+    narrationMatch: RegExp;
+    expectedQuantity: number;
+    expectedAmount: number;
+    amountTolerance?: number;
+    quantityPrecision?: number;
+  }): Promise<{ quantity: number; amount: number }> {
+    await this.page.goto('/my-orders');
+    await expect(this.page).toHaveURL(/my-orders/);
+    await this.waitForOrderRowByText(params.orderRowText);
+
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, '0');
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const yyyy = today.getFullYear();
+    const currentDate = `${dd}/${mm}/${yyyy}`;
+
+    const date = await this.getDate();
+    console.log(`[BUY ORDER] date actual=${date} expected=${currentDate}`);
+    expect(date).toBe(currentDate);
+
+    const transactionId = await this.getTransactionId();
+    console.log(`[BUY ORDER] transactionId=${transactionId}`);
+    expect(transactionId.length).toBeGreaterThan(0);
+
+    const narration = await this.getNarration();
+    console.log(`[BUY ORDER] narration=${narration}`);
+    expect(narration).toMatch(params.narrationMatch);
+
+    const quantity = (await this.getNarrationQuantity()) ?? 0;
+    const quantityPrecision = params.quantityPrecision ?? 3;
+    console.log(`[BUY ORDER] quantity actual=${quantity} expected=${params.expectedQuantity}`);
+    expect(quantity).toBeCloseTo(params.expectedQuantity, quantityPrecision);
+
+    const amount = await this.getAmount();
+    const tolerance = params.amountTolerance ?? 1;
+    console.log(`[BUY ORDER] amount actual=${amount} expected=${params.expectedAmount}`);
+    expect(Math.abs(amount - params.expectedAmount)).toBeLessThanOrEqual(tolerance);
+
+    return { quantity, amount };
+  }
+
+  /** TC_SHOP_001 — open My Orders SHOP tab and read order row. */
+  async openShopBuyNowOrder(
+    productName = getShopDataset().productName): Promise<MyOrderShopCardDetails> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    const shopOrder = await this.getShopOrderDetails(productName);
+    shopLogGet('My Orders SHOP row', shopOrder);
+    return shopOrder;
+  }
+
+  /** TC_SHOP_002 — open SHOP tab and wait for each checkout order id. */
+  async openShopMultiProductOrdersTab(orderIds: string[]): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTabMultiProduct();
+    for (const orderId of orderIds) {
+      await this.waitForShopOrderIdOnList(orderId, { timeoutMs: 90_000 });
+    }
+  }
+
+  /** TC_SHOP_002 — read SHOP tab row for one product (single or multi checkout). */
+  async getShopOrderListDetailsForMultiProduct(params: {
+    productName: string;
+    placedOrders: ShopPlacedOrders;
+    skipTabLoadWait?: boolean;
+  }): Promise<MyOrderShopCardDetails> {
+    if (params.placedOrders.isSingleSharedOrder) {
+      return this.getShopOrderListDetailsByOrderId(params.placedOrders.orderIds[0], {
+        skipTabLoadWait: params.skipTabLoadWait,
+        productName: params.productName,
+      });
+    }
+    return this.getShopOrderListDetails({
+      productName: params.productName,
+      skipTabLoadWait: params.skipTabLoadWait,
+    });
+  }
+
+  /** TC_SHOP_001 — validate SHOP tab order row against PDP + placed order. */
+  async validateShopBuyNowOrderOnList(params: {
+    productDetails: ShopProductDetails;
+    placedOrderId: string;
+    shopOrder: MyOrderShopCardDetails;
+    productName?: string;
+  }): Promise<void> {
+    const productName = params.productName ?? getShopDataset().productName;
+    const p = params.productDetails;
+    const { shopOrder } = params;
+    const prefix = `${productName} `;
+    shopLogActualExpected(`${prefix}product name`, shopOrder.productName, productName);
+    shopLogActualExpected(`${prefix}quantity`, shopOrder.quantity, Number(p.quantity) || 1);
+    shopLogActualExpected(`${prefix}price`, shopOrder.priceAmount, p.grandTotal);
+    shopLogActualExpected(`${prefix}order id`, shopOrder.orderId, params.placedOrderId);
+    shopLogActualExpected(`${prefix}status`, shopOrder.status, 'Payment Received');
+    shopLogActualExpected(`${prefix}ordered on (today)`, this.isOrderedOnToday(shopOrder.orderedOn), true);
+    expect(shopOrder.productName).toContain(productName);
+    expect(shopOrder.quantity).toBe(Number(p.quantity) || 1);
+    expect(shopOrder.priceAmount).toBe(p.grandTotal);
+    expect(shopOrder.orderId).toBe(params.placedOrderId);
+    expect(shopOrder.status).toMatch(/payment received/i);
+    expect(shopOrder.orderedOn).toMatch(/^ORDERED ON/i);
+    expect(this.isOrderedOnToday(shopOrder.orderedOn)).toBe(true);
+  }
+
+  /** TC_SHOP_002 — open SHOP tab and validate each product row on My Orders. */
+  async validateShopMultiProductOrdersOnList(params: {
+    productNames: string[];
+    productDetailsByName: Record<string, ShopProductDetails>;
+    placedOrders: ShopPlacedOrders;
+    checkoutPage: ShopCheckoutPage;
+  }): Promise<{
+    orderIdByProduct: Record<string, string>;
+    shopOrdersByName: Record<string, MyOrderShopCardDetails>;
+  }> {
+    await this.openShopMultiProductOrdersTab(params.placedOrders.orderIds);
+
+    const orderIdByProduct: Record<string, string> = {};
+    const shopOrdersByName: Record<string, MyOrderShopCardDetails> = {};
+
+    for (const name of params.productNames) {
+      const shopOrder = await this.getShopOrderListDetailsForMultiProduct({
+        productName: name,
+        placedOrders: params.placedOrders,
+        skipTabLoadWait: true,
+      });
+      orderIdByProduct[name] = shopOrder.orderId;
+      shopOrdersByName[name] = shopOrder;
+
+      shopLogGet(`My Orders SHOP row (${name})`, shopOrder);
+
+      const expectedOrderId = params.placedOrders.isSingleSharedOrder
+        ? params.placedOrders.orderIds[0]
+        : shopOrder.orderId;
+
+      params.checkoutPage.assertOrderIdForProduct(shopOrder.orderId, params.placedOrders);
+      await this.validateShopBuyNowOrderOnList({
+        productDetails: params.productDetailsByName[name],
+        placedOrderId: expectedOrderId,
+        shopOrder,
+        productName: name,
+      });
+    }
+
+    if (!params.placedOrders.isSingleSharedOrder) {
+      const orderIdsOnTab = params.productNames.map((n) => orderIdByProduct[n]);
+      shopLogActualExpected('Distinct order ids on SHOP tab', new Set(orderIdsOnTab).size, params.productNames.length);
+      expect(new Set(orderIdsOnTab).size).toBe(params.productNames.length);
+    } else {
+      for (const name of params.productNames) {
+        shopLogActualExpected(`${name} shared order id`, orderIdByProduct[name], params.placedOrders.orderIds[0]);
+      }
+    }
+
+    return { orderIdByProduct, shopOrdersByName };
+  }
+
+  /** TC_SHOP_002 — validate order detail view for each product line. */
+  async validateShopMultiProductOrderDetails(params: {
+    productNames: string[];
+    productDetailsByName: Record<string, ShopProductDetails>;
+    cartNetWeightByName: Record<string, string>;
+    savedBillingAddress: ShopBillingAddressDetails;
+    shopOrdersByName: Record<string, MyOrderShopCardDetails>;
+    orderIdByProduct: Record<string, string>;
+  }): Promise<void> {
+    for (const name of params.productNames) {
+      await this.validateShopBuyNowOrderDetail({
+        productDetails: params.productDetailsByName[name],
+        cartNetWeight: params.cartNetWeightByName[name] ?? '',
+        savedBillingAddress: params.savedBillingAddress,
+        shopOrder: params.shopOrdersByName[name],
+        productName: name,
+        orderId: params.orderIdByProduct[name],
+      });
+    }
+  }
+
+  /** TC_SHOP_002 — download and validate invoice PDF(s) for multi-product checkout. */
+  async validateShopMultiProductInvoices(params: {
+    productNames: string[];
+    productDetailsByName: Record<string, ShopProductDetails>;
+    productLinePrices: Record<string, number>;
+    orderIdByProduct: Record<string, string>;
+    placedOrders: ShopPlacedOrders;
+    combinedGrandTotal: number;
+    invoicePassword: string;
+    checkoutPage: ShopCheckoutPage;
+  }): Promise<void> {
+    const invoiceTargets = params.placedOrders.isSingleSharedOrder
+      ? [params.productNames[0]]
+      : [...params.productNames];
+
+    for (let inv = 0; inv < invoiceTargets.length; inv++) {
+      const invoiceProductName = invoiceTargets[inv];
+      if (inv > 0) {
+        await this.resetShopInvoiceSession();
+      }
+
+      const linePrice =
+        params.productLinePrices[invoiceProductName] ??
+        params.productDetailsByName[invoiceProductName].grandTotal;
+      const invoiceOrderId = params.checkoutPage.getInvoiceOrderId(
+        params.placedOrders,
+        params.orderIdByProduct[invoiceProductName]);
+      const expectedInvoiceNetPayable = params.checkoutPage.getExpectedInvoiceNetPayable(
+        params.placedOrders,
+        params.combinedGrandTotal,
+        linePrice);
+      const pdfProductNames = params.placedOrders.isSingleSharedOrder
+        ? params.checkoutPage.getInvoiceProductNames(params.placedOrders, params.productNames)
+        : [invoiceProductName];
+
+      const pdfUrl = await this.validateShopMultiProductInvoice({
+        invoiceProductName,
+        productDetails: params.productDetailsByName[invoiceProductName],
+        productLinePrice: linePrice,
+        invoiceOrderId,
+        expectedInvoiceNetPayable,
+        pdfProductNames,
+        invoicePassword: params.invoicePassword,
+        orderId: params.orderIdByProduct[invoiceProductName],
+      });
+
+      shopLogActualExpected(
+        `${invoiceProductName} net payable`,
+        expectedInvoiceNetPayable,
+        expectedInvoiceNetPayable);
+      void pdfUrl;
+    }
+  }
+
+  /** TC_SHOP_003 — open SHOP tab and validate mixed EMI + Buy Now rows. */
+  async validateMixedOrdersOnList(params: {
+    productNames: string[];
+    emiProductName: string;
+    productLinePrices: Record<string, number>;
+    placedOrders: ShopPlacedOrders;
+    checkoutPage: ShopCheckoutPage;
+  }): Promise<{
+    orderIdByProduct: Record<string, string>;
+    shopOrdersByName: Record<string, MyOrderShopCardDetails>;
+  }> {
+    await this.openShopMultiProductOrdersTab(params.placedOrders.orderIds);
+    const orderIdByProduct: Record<string, string> = {};
+    const shopOrdersByName: Record<string, MyOrderShopCardDetails> = {};
+
+    for (const name of params.productNames) {
+      const shopOrder =
+        name === params.emiProductName
+          ? await this.getShopEmiOrderDetails(name)
+          : await this.getShopOrderListDetailsForMultiProduct({
+              productName: name,
+              placedOrders: params.placedOrders,
+              skipTabLoadWait: true,
+            });
+      orderIdByProduct[name] = shopOrder.orderId;
+      shopOrdersByName[name] = shopOrder;
+      shopLogGet(`My Orders SHOP row (${name})`, shopOrder);
+      shopLogActualExpected(`${name} price`, shopOrder.priceAmount, params.productLinePrices[name]);
+      params.checkoutPage.assertOrderIdForProduct(shopOrder.orderId, params.placedOrders);
+      if (name === params.emiProductName) {
+        expect(shopOrder.status).toMatch(/booked/i);
+      } else {
+        expect(shopOrder.status).toMatch(/payment received/i);
+      }
+    }
+    return { orderIdByProduct, shopOrdersByName };
+  }
+
+  /** TC_SHOP_003 — validate order detail for mixed EMI + Buy Now checkout. */
+  async validateMixedOrderDetails(params: {
+    productNames: string[];
+    emiProductName: string;
+    productDetailsByName: Record<string, ShopProductDetails>;
+    productLinePrices: Record<string, number>;
+    cartNetWeightByName: Record<string, string>;
+    savedBillingAddress: ShopBillingAddressDetails;
+    shopOrdersByName: Record<string, MyOrderShopCardDetails>;
+    orderIdByProduct: Record<string, string>;
+  }): Promise<void> {
+    for (const name of params.productNames) {
+      if (name === params.emiProductName) {
+        await this.openShopEmiOrderDetail(name);
+        const emiDetail = await this.getShopEmiOrderDetailView();
+        shopLogActualExpected(
+          `${name} EMI detail price`,
+          emiDetail.priceAmount,
+          params.productLinePrices[name]);
+        expect(emiDetail.priceAmount).toBe(params.productLinePrices[name]);
+        expect(emiDetail.dueOn).toMatch(/^DUE ON/i);
+      } else {
+        await this.validateShopBuyNowOrderDetail({
+          productDetails: params.productDetailsByName[name],
+          cartNetWeight: params.cartNetWeightByName[name] ?? '',
+          savedBillingAddress: params.savedBillingAddress,
+          shopOrder: params.shopOrdersByName[name],
+          productName: name,
+          orderId: params.orderIdByProduct[name],
+        });
+      }
+    }
+  }
+
+  /** TC_SHOP_003 — validate EMI proforma and/or buy-now invoice PDFs. */
+  async validateMixedInvoices(params: {
+    productNames: string[];
+    emiProductName: string;
+    productDetailsByName: Record<string, ShopProductDetails>;
+    productLinePrices: Record<string, number>;
+    orderIdByProduct: Record<string, string>;
+    placedOrders: ShopPlacedOrders;
+    combinedGrandTotal: number;
+    emiInitialPayment: number;
+    checkoutPage: ShopCheckoutPage;
+    invoicePassword: string;
+  }): Promise<void> {
+    const invoiceTargets = params.placedOrders.isSingleSharedOrder
+      ? [params.productNames[0]]
+      : [...params.productNames];
+
+    for (let inv = 0; inv < invoiceTargets.length; inv++) {
+      const invoiceProductName = invoiceTargets[inv];
+      if (inv > 0) {
+        await this.resetShopInvoiceSession();
+      }
+      const linePrice = params.productLinePrices[invoiceProductName];
+      const invoiceOrderId = params.checkoutPage.getInvoiceOrderId(
+        params.placedOrders,
+        params.orderIdByProduct[invoiceProductName]);
+      const expectedInvoiceNetPayable = params.checkoutPage.getExpectedInvoiceNetPayable(
+        params.placedOrders,
+        params.combinedGrandTotal,
+        linePrice);
+      const pdfProductNames = params.placedOrders.isSingleSharedOrder
+        ? params.checkoutPage.getInvoiceProductNames(params.placedOrders, params.productNames)
+        : [invoiceProductName];
+
+      if (invoiceProductName === params.emiProductName) {
+        await this.validateShopEmiProformaInvoice({
+          productName: invoiceProductName,
+          productDetails: params.productDetailsByName[invoiceProductName],
+          placedOrderId: invoiceOrderId,
+          emiLinePrice: linePrice,
+          emiInitialPayment: params.emiInitialPayment,
+          invoicePassword: params.invoicePassword,
+        });
+      } else {
+        await this.validateShopMultiProductInvoice({
+          invoiceProductName,
+          productDetails: params.productDetailsByName[invoiceProductName],
+          productLinePrice: linePrice,
+          invoiceOrderId,
+          expectedInvoiceNetPayable,
+          pdfProductNames,
+          invoicePassword: params.invoicePassword,
+          orderId: params.orderIdByProduct[invoiceProductName],
+        });
+      }
+    }
+  }
+
+  /** TC_SHOP_004 — open SHOP tab and validate buy-now order row (full savings). */
+  async openAndValidateShopBuyNowOrderOnList(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    placedOrderId: string;
+  }): Promise<MyOrderShopCardDetails> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    const shopOrder = await this.getShopOrderDetails(params.productName);
+    shopLogGet('My Orders SHOP row', shopOrder);
+    shopLogActualExpected('Order list price', shopOrder.priceAmount, params.productDetails.grandTotal);
+    shopLogActualExpected('Order list order id', shopOrder.orderId, params.placedOrderId);
+    expect(shopOrder.productName).toContain(params.productName);
+    expect(shopOrder.priceAmount).toBe(params.productDetails.grandTotal);
+    expect(shopOrder.orderId).toBe(params.placedOrderId);
+    return shopOrder;
+  }
+
+  /** TC_SHOP_004 — validate buy-now order detail summary (full savings). */
+  async validateShopBuyNowOrderDetailSummary(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    placedOrderId: string;
+  }): Promise<void> {
+    await this.openShopOrderDetailSingle(params.productName);
+    const detail = await this.getShopOrderDetailView();
+    const orderMeta = await this.getShopOrderDetailStatusAndDate();
+    shopLogGet('Order detail', detail);
+    shopLogActualExpected('Detail product name', detail.productName, params.productName);
+    shopLogActualExpected('Detail price', detail.priceAmount, params.productDetails.grandTotal);
+    shopLogActualExpected('Detail order id', orderMeta.orderId, params.placedOrderId);
+    expect(detail.productName).toContain(params.productName);
+    expect(detail.priceAmount).toBe(params.productDetails.grandTotal);
+    expect(orderMeta.orderId).toBe(params.placedOrderId);
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — EMI order detail with all installments pending. */
+  async validateShopEmiOrderDetailPendingInstallments(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    cartNetWeight: string;
+    emiLinePrice: number;
+    emiPlanTenure: string;
+    emiPerMonth: number;
+    emiOrderDetailValidationPage: EmiOrderDetailValidationPage;
+  }): Promise<void> {
+    const expectedInstallmentAmounts = ShopEmiPage.expectedInstallmentAmountsForTenure(
+      params.emiPerMonth,
+      params.emiPlanTenure);
+    await this.openShopEmiOrderDetail(params.productName);
+    const emiDetail = await this.getShopEmiOrderDetailView();
+    const expectedNetWeightGm = expectedShopProductWeightGrams(
+      params.productName,
+      params.productDetails,
+      params.cartNetWeight);
+    shopLogGet('EMI order detail', emiDetail);
+    shopLogActualExpected('Detail price', emiDetail.priceAmount, params.emiLinePrice);
+    shopLogActualExpected('Net weight (g)', shopWeightGramsFromText(emiDetail.netWeight), expectedNetWeightGm);
+    expect(emiDetail.priceAmount).toBe(params.emiLinePrice);
+    expect(shopWeightGramsFromText(emiDetail.netWeight)).toBe(expectedNetWeightGm);
+    expect(emiDetail.dueOn).toMatch(/^DUE ON/i);
+    await params.emiOrderDetailValidationPage.validateAllInstallmentsPending(
+      expectedInstallmentAmounts.length,
+      expectedInstallmentAmounts);
+  }
+
+  /** TC_SHOP_001 — View Detail: product, properties, addresses and payment. */
+  async validateShopBuyNowOrderDetail(params: {
+    productDetails: ShopProductDetails;
+    cartNetWeight: string;
+    savedBillingAddress: ShopBillingAddressDetails;
+    shopOrder: MyOrderShopCardDetails;
+    productName?: string;
+    placedPaymentMethod?: string;
+    orderId?: string;
+  }): Promise<void> {
+    const productName = params.productName ?? getShopDataset().productName;
+    const placedPaymentMethod = params.placedPaymentMethod ?? 'Netbanking';
+    if (params.orderId) {
+      await this.openShopOrderDetailMulti(productName, { orderId: params.orderId });
+    } else {
+      await this.openShopOrderDetailSingle(productName);
+    }
+    const detail = await this.getShopOrderDetailView();
+    const p = params.productDetails;
+    const expectedNetWeightGm = expectedShopProductWeightGrams(
+      productName,
+      p,
+      params.cartNetWeight);
+    expect(detail.productName).toContain(productName);
+    expect(shopWeightGramsFromText(detail.netWeight)).toBe(expectedNetWeightGm);
+    expect(detail.quantity).toBe(Number(p.quantity) || 1);
+    expect(detail.priceAmount).toBe(p.grandTotal);
+
+    const props = await this.getShopOrderProductProperties();
+    if (p.sku) {
+      expect(props.sku).toBe(p.sku);
+    } else {
+      expect(props.sku).toBeTruthy();
+    }
+    expect(props.metalType).toBe(p.metalType);
+    expect(props.purity).toBe(p.purity);
+    expect(shopWeightGramsFromText(props.productWeight)).toBe(expectedNetWeightGm);
+
+    const saved = params.savedBillingAddress;
+    const receivedAt = await this.getShopOrderAddress('received');
+    const billedAt = await this.getShopOrderAddress('billed');
+    expect(receivedAt.fullName).toBe(saved.fullName);
+    expect(receivedAt.pincode).toBe(saved.pincode);
+    expect(billedAt.fullName).toBe(saved.fullName);
+    expect(billedAt.pincode).toBe(saved.pincode);
+
+    const paymentMethod = await this.getShopOrderPaymentMethod();
+    expect(paymentMethod).toMatch(new RegExp(placedPaymentMethod, 'i'));
+
+    const prefix = `${productName} `;
+    shopLogGet(`${prefix}order detail view`, detail);
+    shopLogGet(`${prefix}product properties`, props);
+    shopLogGet(`${prefix}received address`, receivedAt);
+    shopLogGet(`${prefix}billed address`, billedAt);
+    shopLogGet(`${prefix}payment method`, paymentMethod);
+    shopLogActualExpected(`${prefix}detail product name`, detail.productName, productName);
+    shopLogActualExpected(`${prefix}detail price`, detail.priceAmount, p.grandTotal);
+    shopLogActualExpected(`${prefix}detail SKU`, props.sku, p.sku || 'non-empty');
+    shopLogActualExpected(`${prefix}detail metal type`, props.metalType, p.metalType);
+    shopLogActualExpected(`${prefix}detail purity`, props.purity, p.purity);
+    shopLogActualExpected(`${prefix}received pincode`, receivedAt.pincode, saved.pincode);
+    shopLogActualExpected(`${prefix}billed pincode`, billedAt.pincode, saved.pincode);
+    shopLogActualExpected(`${prefix}payment method`, paymentMethod, placedPaymentMethod);
+
+    const orderStatusAndDate = await this.getShopOrderDetailStatusAndDate();
+    const orderDateTime = await this.getShopOrderDetailDateTime();
+    expect(orderStatusAndDate.orderId).toBe(params.shopOrder.orderId);
+    expect(orderStatusAndDate.status).toBe(params.shopOrder.status);
+    expect(this.isOrderedOnToday(orderStatusAndDate.orderedOn)).toBe(true);
+    expect(orderDateTime.orderTime).toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/i);
+    expect(this.isOrderDateToday(orderDateTime.orderDate)).toBe(true);
+  }
+
+  /** TC_SHOP_001 — open invoice, download PDF and validate GST fields. */
+  async validateShopBuyNowInvoice(params: {
+    productDetails: ShopProductDetails;
+    placedOrderId: string;
+    productName?: string;
+    invoicePassword?: string;
+  }): Promise<void> {
+    const shopData = getShopDataset();
+    const productName = params.productName ?? shopData.productName;
+    const invoicePassword =
+      params.invoicePassword ?? shopData.mobile.replace(/\D/g, '').slice(-4);
+    await this.ensureShopOrderDetailForInvoice(productName);
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 12_000,
+      productName,
+    });
+    await this.submitShopInvoicePassword(invoicePassword);
+
+    const pdfUrl = await this.getShopInvoicePdfUrl();
+    shopLogGet('Invoice PDF URL', pdfUrl);
+    let response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    if (!response.ok()) {
+      await expect
+        .poll(
+          async () => {
+            const retry = await this.page.request.get(pdfUrl, { timeout: 15_000 });
+            if (retry.ok()) {
+              response = retry;
+              return true;
+            }
+            return false;
+          },
+          { timeout: 20_000, intervals: [500, 1000, 2000] })
+        .toBeTruthy();
+    }
+    expect(response.ok()).toBeTruthy();
+
+    const pdfText = pdfUtils.normalizePdfText(
+      await shopPdfUtils.readShopInvoicePdf(await response.body(), invoicePassword));
+    const invoiceNo = shopPdfUtils.extractShopInvoiceNumber(pdfText);
+    const invoiceDate = shopPdfUtils.extractShopInvoiceDate(pdfText);
+    const gstin = pdfUtils.extractGstin(pdfText);
+    const cin = pdfUtils.extractCin(pdfText);
+    const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+    const pdfHasOrderId = shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.placedOrderId);
+    const pdfHasProduct =
+      shopPdfUtils.shopPdfContainsProductName(pdfText, productName) ||
+      shopPdfUtils.shopPdfContainsProductName(pdfText, params.productDetails.productName);
+    const invoiceDateMissingInPdf = shopPdfUtils.isShopInvoiceDateMissingInPdf(pdfText);
+    const gstDetails = shopPdfUtils.extractShopInvoiceGstDetails(pdfText);
+    const gstValidation = shopPdfUtils.validateShopInvoiceGst({
+      taxableAmount: gstDetails.taxableAmount,
+      netPayable,
+      igstAmount: gstDetails.igstAmount,
+      cgstAmount: gstDetails.cgstAmount,
+      sgstAmount: gstDetails.sgstAmount,
+      igstRatePercent: gstDetails.igstRatePercent ?? 3,
+    });
+
+    shopLogGet('Invoice number', invoiceNo);
+    shopLogGet('Invoice date', invoiceDate || (invoiceDateMissingInPdf ? '(missing in PDF)' : ''));
+    shopLogGet('GSTIN', gstin);
+    shopLogGet('CIN', cin);
+    shopLogGet('Net payable (PDF)', netPayable);
+    shopLogGet('GST details', gstDetails);
+    shopLogActualExpected('Net payable', netPayable, params.productDetails.grandTotal);
+    shopLogActualExpected('PDF order reference', pdfHasOrderId, true);
+    shopLogActualExpected('PDF product name', pdfHasProduct, true);
+    if (gstDetails.igstAmount != null && gstDetails.igstAmount > 0) {
+      shopLogActualExpected('GST validation', gstValidation.ok, true);
+      if (!gstValidation.ok) {
+        shopLogGet('GST validation messages', gstValidation.messages);
+      }
+    }
+
+    expect(invoiceNo).toBeTruthy();
+    expect(invoiceDate || invoiceDateMissingInPdf).toBeTruthy();
+    expect(gstin).toBeTruthy();
+    expect(cin).toBeTruthy();
+    expect(pdfHasOrderId).toBe(true);
+    expect(pdfHasProduct).toBe(true);
+    expect(Math.abs(netPayable - params.productDetails.grandTotal)).toBeLessThanOrEqual(1);
+    if (gstDetails.igstAmount != null && gstDetails.igstAmount > 0) {
+      expect(gstValidation.ok, gstValidation.messages.join('; ')).toBe(true);
+    }
+  }
+
+  /** TC_SHOP_002 — download invoice PDF and validate fields for one product line. */
+  async validateShopMultiProductInvoice(params: {
+    invoiceProductName: string;
+    productDetails: ShopProductDetails;
+    productLinePrice: number;
+    invoiceOrderId: string;
+    expectedInvoiceNetPayable: number;
+    pdfProductNames: string[];
+    invoicePassword: string;
+    orderId?: string;
+  }): Promise<string> {
+    await this.ensureShopOrderDetailForInvoice(params.invoiceProductName, {
+      requireMatchingProduct: true,
+      orderId: params.orderId,
+    });
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 12_000,
+      productName: params.invoiceProductName,
+    });
+    await this.submitShopInvoicePassword(params.invoicePassword);
+
+    const pdfUrl = await this.getShopInvoicePdfUrl();
+    let response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    if (!response.ok()) {
+      await this.page.waitForTimeout(2_000);
+      response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    }
+    expect(response.ok()).toBeTruthy();
+
+    const pdfText = pdfUtils.normalizePdfText(
+      await shopPdfUtils.readShopInvoicePdf(await response.body(), params.invoicePassword));
+    const invoiceNo = shopPdfUtils.extractShopInvoiceNumber(pdfText);
+    const invoiceDate = shopPdfUtils.extractShopInvoiceDate(pdfText);
+    const gstin = pdfUtils.extractGstin(pdfText);
+    const cin = pdfUtils.extractCin(pdfText);
+    const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+    const pdfHasOrderId = shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.invoiceOrderId);
+    const invoiceDateMissingInPdf = shopPdfUtils.isShopInvoiceDateMissingInPdf(pdfText);
+    const gstDetails = shopPdfUtils.extractShopInvoiceGstDetails(pdfText);
+    const gstValidation = shopPdfUtils.validateShopInvoiceGst({
+      taxableAmount: gstDetails.taxableAmount,
+      netPayable,
+      igstAmount: gstDetails.igstAmount,
+      cgstAmount: gstDetails.cgstAmount,
+      sgstAmount: gstDetails.sgstAmount,
+      igstRatePercent: gstDetails.igstRatePercent ?? 3,
+    });
+
+    for (const name of params.pdfProductNames) {
+      expect(shopPdfUtils.shopPdfContainsProductName(pdfText, name)).toBe(true);
+    }
+
+    expect(invoiceNo).toBeTruthy();
+    expect(invoiceDate || invoiceDateMissingInPdf).toBeTruthy();
+    expect(gstin).toBeTruthy();
+    expect(cin).toBeTruthy();
+    expect(pdfHasOrderId).toBe(true);
+    expect(Math.abs(netPayable - params.expectedInvoiceNetPayable)).toBeLessThanOrEqual(2);
+    if (gstDetails.igstAmount != null && gstDetails.igstAmount > 0) {
+      expect(gstValidation.ok, gstValidation.messages.join('; ')).toBe(true);
+    }
+
+    shopLogGet(
+      `Invoice PDF URL (${params.invoiceProductName})`,
+      pdfUrl);
+
+    return pdfUrl;
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — persist placed EMI order for the foreclose spec in the same worker. */
+  saveShopEmiPurchaseChainOrder(
+    chain: ShopEmiPurchaseChainState,
+    orderId: string,
+    productName: string): void {
+    chain.orderId = orderId;
+    chain.productName = productName;
+  }
+
+  /**
+   * TC_SHOP_008 / TC_SHOP_011 — resolve order id + product from env or prior purchase spec, then assert.
+   */
+  requireShopEmiPurchaseChain(
+    chain: ShopEmiPurchaseChainState,
+    params: {
+      missingMessage: string;
+      orderIdEnvKey?: string;
+      productNameEnvKey?: string;
+      /** When true, asserts TC_SHOP_008 ran (first EMI paid) before this spec. */
+      requireFirstEmiPaid?: boolean;
+    }): { orderId: string; productName: string } {
+    const orderId = resolveShopEmiOrderId(chain, {
+      orderIdEnvKey: params.orderIdEnvKey,
+    });
+    const productName = resolveShopEmiProductName(chain, {
+      productNameEnvKey: params.productNameEnvKey,
+    });
+    shopLogGet('EMI order id', orderId);
+    shopLogGet('Product name', productName);
+    shopLogActualExpected('Order id is numeric', this.isNumericId(orderId), true);
+    expect(this.isNumericId(orderId), params.missingMessage).toBe(true);
+    if (params.requireFirstEmiPaid) {
+      expect(chain.payNowDetails, 'Run TC_SHOP_008 first').not.toBeNull();
+    }
+    return { orderId, productName };
+  }
+
+  /** TC_SHOP_009 — SHOP row Cancelled after Cancel Booking. */
+  async validateShopOrderCancelledAfterCancelBooking(params: {
+    orderId: string;
+    productName: string;
+  }): Promise<MyOrderShopCardDetails> {
+    const shopOrder = await this.getShopOrderOnListByOrderId(params.orderId, {
+      productName: params.productName,
+    });
+    shopLogActualExpected(
+      'Status Cancelled',
+      /cancel/i.test(shopOrder.status),
+      true);
+    expect(shopOrder.status).toMatch(/cancel/i);
+    return shopOrder;
+  }
+
+  /** TC_SHOP_008 — SHOP row still Booked/Active after partial EMI pay. */
+  async validateShopOrderBookedAfterPartialPay(params: {
+    orderId: string;
+    productName: string;
+  }): Promise<MyOrderShopCardDetails> {
+    const shopOrder = await this.getShopOrderOnListByOrderId(params.orderId, { productName: params.productName });
+    shopLogGet('My Orders SHOP row after partial pay', shopOrder);
+    shopLogActualExpected('Status (Booked or Active)', /booked|active/i.test(shopOrder.status), true);
+    expect(shopOrder.status).toMatch(/booked|active/i);
+    expect(shopOrder.status).not.toMatch(/payment received/i);
+    return shopOrder;
+  }
+
+  /** TC_SHOP_011 — SHOP row Payment Received after full foreclose. */
+  async validateShopOrderPaymentReceived(params: {
+    orderId: string;
+    productName: string;
+  }): Promise<MyOrderShopCardDetails> {
+    const shopOrder = await this.getShopOrderOnListByOrderId(params.orderId, { productName: params.productName });
+    shopLogActualExpected(
+      'Status Payment Received',
+      /payment received/i.test(shopOrder.status),
+      true);
+    expect(shopOrder.status).toMatch(/payment received/i);
+    return shopOrder;
+  }
+
+  // --- Shop order detail: status timeline & refund (TC_SHOP_009 / TC_SHOP_011) ---
+
+  async getShopOrderDetailStatusTimeline(): Promise<string[]> {
+    const statuses = (await this.getShopOrderStatusTimeline()).map((step) => step.status);
+    shopLogGet('Status timeline', statuses);
+    return statuses;
+  }
+
+  async validateShopOrderDetailStatusTimeline(
+    expected: readonly string[]): Promise<void> {
+    const actual = await this.getShopOrderDetailStatusTimeline();
+    shopLogActualExpected('Status timeline', actual, [...expected]);
+    expect(actual).toEqual([...expected]);
+  }
+
+  async validateForeclosedShopOrderDetailStatusTimeline(): Promise<void> {
+    await this.validateShopOrderDetailStatusTimeline(SHOP_ORDER_DETAIL_TIMELINE_FORECLOSE);
+  }
+
+  async validateCancelledShopOrderDetailStatusTimeline(): Promise<void> {
+    await this.validateShopOrderDetailStatusTimeline(SHOP_ORDER_DETAIL_TIMELINE_CANCEL);
+  }
+
+  async getShopOrderDetailRefundSource(): Promise<string> {
+    const label = this.page.getByText('Refund Source', { exact: true });
+    await label.waitFor({ state: 'visible', timeout: 15_000 });
+    const source = (
+      await label.locator('xpath=following::p[contains(@class,"font-medium")][1]').innerText()
+    )
+      .replace(/\s+/g, ' ')
+      .trim();
+    shopLogGet('Refund source', source);
+    return source;
+  }
+
+  async validateShopOrderDetailRefundSource(
+    expected: string | RegExp): Promise<void> {
+    const actual = await this.getShopOrderDetailRefundSource();
+    shopLogActualExpected('Refund source', actual, expected);
+    if (expected instanceof RegExp) {
+      expect(actual).toMatch(expected);
+    } else {
+      expect(actual).toBe(expected);
+    }
+  }
+
+  async getShopOrderDetailRefundAmount(): Promise<number> {
+    const amountEl = this.page.locator('p.font-medium.mt-1').filter({ hasText: /^₹/ }).first();
+    await amountEl.waitFor({ state: 'visible', timeout: 15_000 });
+    const amount = this.parseAmount(await amountEl.innerText());
+    shopLogGet('Refund amount', amount);
+    return amount;
+  }
+
+  async validateShopOrderDetailRefundAmount(expected: number): Promise<void> {
+    const actual = await this.getShopOrderDetailRefundAmount();
+    shopLogActualExpected('Refund amount', actual, expected);
+    expect(actual).toBeCloseTo(expected, 2);
+  }
+
+  private async loadShopCancelInvoicePdf(
+    invoicePassword?: string): Promise<string> {
+    if (this.shopCancelInvoicePdfText) {
+      return this.shopCancelInvoicePdfText;
+    }
+
+    const shopData = getShopDataset();
+    const password = invoicePassword ?? shopData.mobile.replace(/\D/g, '').slice(-4);
+
+    this.shopCancelInvoicePdfText = null;
+    this.resetShopInvoiceCapture();
+    for (const tab of this.page.context().pages()) {
+      if (tab !== this.page && !tab.isClosed() && MyOrderVerificationPage.isInvoicePdfUrl(tab.url())) {
+        await tab.close().catch(() => {});
+      }
+    }
+
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 12_000,
+      preferCancelInvoice: true,
+    });
+    await this.submitShopInvoicePassword(password);
+
+    const pdfUrl = await this.resolveShopCancelInvoicePdfUrl();
+    shopLogGet('Cancel invoice PDF URL', pdfUrl);
+    let response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    if (!response.ok()) {
+      await this.page.waitForTimeout(2_000);
+      response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    }
+    expect(response.ok()).toBeTruthy();
+
+    this.shopCancelInvoicePdfText = pdfUtils.normalizePdfText(
+      await shopPdfUtils.readShopInvoicePdf(await response.body(), password));
+    return this.shopCancelInvoicePdfText;
+  }
+
+  private async resolveShopCancelInvoicePdfUrl(): Promise<string> {
+    const candidates: string[] = [];
+    try {
+      candidates.push(await this.getShopInvoicePdfUrl());
+    } catch {
+      // no stored href yet
+    }
+
+    for (const tab of this.page.context().pages()) {
+      if (!tab.isClosed() && /cancelInvoice/i.test(tab.url())) {
+        candidates.push(tab.url());
+      }
+    }
+
+    const linkHrefs = await this.page
+      .locator('a[href*="cancelInvoice"]')
+      .evaluateAll((elements) =>
+        elements
+          .map((element) => element.getAttribute('href') ?? '')
+          .filter((href) => href.length > 0))
+      .catch(() => [] as string[]);
+    candidates.push(...linkHrefs);
+
+    const resolved =
+      MyOrderVerificationPage.pickBestInvoicePdfUrl(candidates, true) ??
+      MyOrderVerificationPage.pickBestInvoicePdfUrl(candidates);
+    if (!resolved) {
+      throw new Error('Cancel invoice PDF URL not found.');
+    }
+    this.invoicePdfHref = resolved;
+    return resolved;
+  }
+
+  /** TC_SHOP_009 — refund amount from cancel invoice PDF. */
+  async getShopCancelInvoiceRefundAmount(
+    expectedHint?: number): Promise<number> {
+    const pdfText = await this.loadShopCancelInvoicePdf(undefined);
+    const amount = shopPdfUtils.extractShopCancelRefundAmount(pdfText, expectedHint);
+    shopLogGet('Invoice refund amount', amount);
+    return amount;
+  }
+
+  async validateShopCancelInvoiceRefundAmount(
+    expectedRefundAmount: number): Promise<void> {
+    const actual = await this.getShopCancelInvoiceRefundAmount(expectedRefundAmount);
+    shopLogActualExpected('Invoice refund amount', actual, expectedRefundAmount);
+    expect(actual).toBeCloseTo(expectedRefundAmount, 2);
+  }
+
+  /** TC_SHOP_008 / TC_SHOP_011 — open invoice and return PDF URL. */
+  async validateForecloseInvoice(params: {
+    productName: string;
+  }): Promise<string> {
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 12_000,
+      productName: params.productName,
+      useEmiOrderDetail: true,
+    });
+    const pdfUrl = await this.getShopInvoicePdfUrl();
+    shopLogGet('Invoice PDF URL', pdfUrl);
+    return pdfUrl;
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — SHOP tab Booked EMI order row validation. */
+  async validateShopBookedEmiOrderOnList(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    emiLinePrice: number;
+    placedOrderId: string;
+  }): Promise<MyOrderShopCardDetails> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    const shopOrder = await this.getShopEmiOrderDetails(params.productName);
+    const orderDate = await this.getShopOrderDate(params.productName);
+    shopLogGet('My Orders SHOP row (EMI)', shopOrder);
+    expect(shopOrder.productName).toContain(params.productName);
+    expect(shopOrder.quantity).toBe(Number(params.productDetails.quantity) || 1);
+    expect(shopOrder.priceAmount).toBe(params.emiLinePrice);
+    expect(shopOrder.orderId).toBe(params.placedOrderId);
+    expect(shopOrder.status).toMatch(/booked/i);
+    expect(this.isOrderedOnToday(orderDate)).toBe(true);
+    return shopOrder;
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — EMI proforma invoice after down payment. */
+  async validateShopEmiProformaInvoice(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    placedOrderId: string;
+    emiLinePrice: number;
+    emiInitialPayment: number;
+    invoicePassword?: string;
+  }): Promise<string> {
+    const shopData = getShopDataset();
+    const invoicePassword =
+      params.invoicePassword ?? shopData.mobile.replace(/\D/g, '').slice(-4);
+    await this.ensureShopEmiOrderDetailForInvoice(params.productName, {
+      requireMatchingProduct: true,
+    });
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 12_000,
+      productName: params.productName,
+      useEmiOrderDetail: true,
+    });
+    await this.submitShopInvoicePassword(invoicePassword);
+    const pdfUrl = await this.getShopInvoicePdfUrl();
+    let response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    if (!response.ok()) {
+      await this.page.waitForTimeout(2_000);
+      response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    }
+    expect(response.ok()).toBeTruthy();
+    const pdfText = pdfUtils.normalizePdfText(
+      await shopPdfUtils.readShopInvoicePdf(await response.body(), invoicePassword));
+    const isEmiProforma = shopPdfUtils.isShopEmiProformaInvoicePdf(pdfUrl);
+    const expectedPdfNet = isEmiProforma ? params.emiLinePrice : params.emiInitialPayment;
+    const netPayable = isEmiProforma
+      ? shopPdfUtils.extractShopEmiProformaNetPayable(pdfText, params.emiLinePrice)
+      : shopPdfUtils.extractShopNetPayable(pdfText);
+    expect(shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.placedOrderId)).toBe(true);
+    expect(
+      shopPdfUtils.shopPdfContainsProductName(pdfText, params.productName) ||
+        shopPdfUtils.shopPdfContainsProductName(pdfText, params.productDetails.productName)).toBe(true);
+    if (!Number.isNaN(netPayable)) {
+      expect(Math.abs(netPayable - expectedPdfNet)).toBeLessThanOrEqual(1);
+    }
+    shopLogGet('Invoice PDF URL', pdfUrl);
+    return pdfUrl;
+  }
+
+  async validateBuyMetalInvoice(params: {
+    metal: 'gold' | 'silver';
+    orderRowText: string;
+    uiQuantity: number;
+    buyingRate: number;
+    taxableAmount: number;
+    tax: number;
+    payable: number;
+    paidAmount: number;
+  }): Promise<void> {
+    if (params.metal !== 'gold') {
+      throw new Error(`Invoice PDF validation is only supported for gold (got ${params.metal}).`);
+    }
+    await this.waitForOrderRowByText(params.orderRowText);
+    const pdfUrl = await this.clickDownloadInvoiceAndGetUrl();
+
+    let response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    if (!response.ok()) {
+      await this.page.waitForTimeout(2_000);
+      response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+    }
+    expect(response.ok()).toBeTruthy();
+
+    const pdfText = pdfUtils.normalizePdfText(await pdfUtils.readPdfFromBuffer(await response.body()));
+    const invoiceNo = pdfUtils.extractInvoiceNumber(pdfText);
+    const invoiceDate = pdfUtils.extractInvoiceDate(pdfText);
+    const gstin = pdfUtils.extractGstin(pdfText);
+    const cin = pdfUtils.extractCin(pdfText);
+
+    expect(invoiceNo).toBeTruthy();
+    expect(invoiceDate).toBeTruthy();
+    expect(gstin).toBeTruthy();
+    expect(cin).toBeTruthy();
+
+    const pdfGrams = pdfUtils.extractGoldGrams(pdfText);
+    const pdfRate = pdfUtils.extractGoldRate(pdfText);
+    const invoiceAmount = pdfUtils.extractGoldAmount(pdfText);
+    const netPayable = pdfUtils.extractNetPayableAmount(pdfText);
+    const totalGst = pdfUtils.extractTotalGstAmount(pdfText);
+    const expectedNetPayable = params.paidAmount || params.payable;
+
+    console.log(`[BUY INVOICE] grams actual=${pdfGrams} expected=${params.uiQuantity}`);
+    expect(pdfGrams).toBeCloseTo(params.uiQuantity, 3);
+    console.log(`[BUY INVOICE] rate actual=${pdfRate} expected=${params.buyingRate}`);
+    expect(pdfRate).toBe(params.buyingRate);
+    console.log(`[BUY INVOICE] taxable actual=${invoiceAmount} expected=${params.taxableAmount}`);
+    expect(Math.abs(invoiceAmount - params.taxableAmount)).toBeLessThanOrEqual(1);
+    console.log(`[BUY INVOICE] net payable actual=${netPayable} expected=${expectedNetPayable}`);
+    expect(Math.abs(netPayable - expectedNetPayable)).toBeLessThanOrEqual(1);
+    console.log(`[BUY INVOICE] GST actual=${totalGst} expected=${params.tax}`);
+    expect(Math.abs(Number(totalGst.toFixed(2)) - Number(params.tax.toFixed(2)))).toBeLessThanOrEqual(1);
+  }
+
   async waitForOrderRow(): Promise<void> {
     this.selectedOrderRow = null;
     await this.page
@@ -1767,15 +2949,13 @@ export class MyOrderVerificationPage extends BasePage {
    */
   async waitForSellWithdrawalOrderRow(
     expectedAmount: number,
-    options?: { narrationHint?: string; amountTolerance?: number; timeoutMs?: number },
-  ): Promise<void> {
+    options?: { narrationHint?: string; amountTolerance?: number; timeoutMs?: number }): Promise<void> {
     const hint = options?.narrationHint ?? 'Sold';
     await this.waitForOrderRowByTextAndAmount(
       hint,
       expectedAmount,
       options?.amountTolerance ?? 1,
-      options?.timeoutMs ?? 60_000,
-    );
+      options?.timeoutMs ?? 60_000);
   }
 
   /** Delivery tab — poll until withdrawal product card is visible (UAT may lag after payment). */
@@ -1804,8 +2984,7 @@ export class MyOrderVerificationPage extends BasePage {
           }
           return false;
         },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] },
-      )
+        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] })
       .toBeTruthy();
 
     await card.waitFor({ state: 'visible', timeout: 15_000 });
@@ -1828,8 +3007,7 @@ export class MyOrderVerificationPage extends BasePage {
     text: string,
     expectedAmount: number,
     amountTolerance = 1,
-    timeoutMs = 60_000,
-  ): Promise<void> {
+    timeoutMs = 60_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     const pattern = new RegExp(text, 'i');
 
@@ -1859,8 +3037,7 @@ export class MyOrderVerificationPage extends BasePage {
     }
 
     throw new Error(
-      `My Orders: no "${text}" row with amount ~${expectedAmount} (±${amountTolerance}) within ${timeoutMs}ms`,
-    );
+      `My Orders: no "${text}" row with amount ~${expectedAmount} (±${amountTolerance}) within ${timeoutMs}ms`);
   }
 
   getLatestOrderRow(): Locator {
@@ -1901,8 +3078,7 @@ export class MyOrderVerificationPage extends BasePage {
     const rowBadgeText = ((await rowBadge.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
     if (rowBadgeText) {
       const normalized = rowBadgeText.match(
-        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
-      )?.[1];
+        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i)?.[1];
       if (normalized) {
         return normalized.trim();
       }
@@ -1911,8 +3087,7 @@ export class MyOrderVerificationPage extends BasePage {
     const rowText = ((await row.innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
     const statusFromText =
       rowText.match(
-        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
-      )?.[1] ?? '';
+        /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i)?.[1] ?? '';
     if (statusFromText.trim()) {
       return statusFromText.trim();
     }
@@ -1926,8 +3101,7 @@ export class MyOrderVerificationPage extends BasePage {
       .first();
     const globalBadgeText = ((await globalBadge.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
     const globalNormalized = globalBadgeText.match(
-      /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i,
-    )?.[1];
+      /\b(Pending|Processing|Payment Received|Payment Pending|Completed|Failed|Confirmed|Booked|Order Placed|In Transit|Shipped)\b/i)?.[1];
     return (globalNormalized ?? globalBadgeText).trim();
   }
 
@@ -1958,8 +3132,7 @@ export class MyOrderVerificationPage extends BasePage {
           const status = (await this.getStatusFromLatestOrderRow()).trim();
           return status.length > 0;
         },
-        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] },
-      )
+        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] })
       .toBeTruthy();
   }
 
@@ -1977,15 +3150,13 @@ export class MyOrderVerificationPage extends BasePage {
           timeout: timeoutMs,
           intervals: [500, 1000, 2000, 3000],
           message: 'My orders list: delivery status did not load after clicking Delivery',
-        },
-      )
+        })
       .toBeTruthy();
 
     console.log('[My orders list] Actual status:', status);
     if (!MyOrderVerificationPage.isPreCompletionDeliveryStatus(status)) {
       throw new Error(
-        `My orders list status mismatch. Expected a pre-completion delivery status, actual "${status}"`,
-      );
+        `My orders list status mismatch. Expected a pre-completion delivery status, actual "${status}"`);
     }
   }
 
@@ -2089,13 +3260,27 @@ export class MyOrderVerificationPage extends BasePage {
     return { productName, transactionId, status, quantity, priceAmount, productImageSrc };
   }
 
+  /** TC004+ withdrawal — open Delivery tab and validate latest pending product order. */
+  async validateWithdrawalDeliveryOrderPending(expected: {
+    productName: string;
+    productWeight: string;
+    quantity: number;
+    expectedAmount?: number;
+  }): Promise<void> {
+    await this.goToMyOrders();
+    await this.waitForOrderRow();
+    await this.clickOnDelivery();
+    await this.validateLatestOrderRowStatusPending();
+    await this.waitForProductOrderCard();
+    await this.validateProductOrderCardAgainstExpected(expected);
+  }
+
   /**
    * Asserts my-order product card matches expected product/quantity/amount (e.g. same values as cart validation used before payment).
    */
   async validateProductOrderCardAgainstExpected(
     expected: { productName: string; productWeight: string; quantity: number; expectedAmount?: number },
-    options?: { amountTolerance?: number },
-  ): Promise<void> {
+    options?: { amountTolerance?: number }): Promise<void> {
     const tol = options?.amountTolerance ?? 1;
     console.log('[My orders validation] Expected:', {
       productName: expected.productName,
@@ -2118,14 +3303,12 @@ export class MyOrderVerificationPage extends BasePage {
 
     if (expected.productName && !normalize(order.productName).includes(normalize(expected.productName))) {
       throw new Error(
-        `My order product name mismatch. Expected title to contain "${expected.productName}", actual "${order.productName}"`,
-      );
+        `My order product name mismatch. Expected title to contain "${expected.productName}", actual "${order.productName}"`);
     }
 
     if (expected.quantity > 0 && Math.abs(order.quantity - expected.quantity) > 0.0001) {
       throw new Error(
-        `My order quantity mismatch. Expected "${expected.quantity}", actual "${order.quantity}"`,
-      );
+        `My order quantity mismatch. Expected "${expected.quantity}", actual "${order.quantity}"`);
     }
 
     const expectedWeightGm = Number(expected.productWeight.match(/[\d.]+/)?.[0] ?? '0');
@@ -2133,23 +3316,20 @@ export class MyOrderVerificationPage extends BasePage {
     const titleWeightGm = weightInTitle ? Number(weightInTitle[1]) : 0;
     if (expectedWeightGm > 0 && titleWeightGm > 0 && Math.abs(expectedWeightGm - titleWeightGm) > 0.001) {
       throw new Error(
-        `My order product weight mismatch vs cart. Cart weight implied "${expected.productWeight}" (${expectedWeightGm} g), title shows ${titleWeightGm} g`,
-      );
+        `My order product weight mismatch vs cart. Cart weight implied "${expected.productWeight}" (${expectedWeightGm} g), title shows ${titleWeightGm} g`);
     }
 
     if (expected.expectedAmount !== undefined) {
       if (Math.abs(order.priceAmount - expected.expectedAmount) > tol) {
         throw new Error(
-          `My order amount mismatch. Expected ₹${expected.expectedAmount}, actual ₹${order.priceAmount}`,
-        );
+          `My order amount mismatch. Expected ₹${expected.expectedAmount}, actual ₹${order.priceAmount}`);
       }
     }
 
     const resolvedStatus = (order.status || (await this.getStatusFromLatestOrderRow())).trim();
     if (!MyOrderVerificationPage.isPreCompletionDeliveryStatus(resolvedStatus)) {
       throw new Error(
-        `My order status mismatch. Expected a pre-completion delivery status, actual "${resolvedStatus || 'N/A'}"`,
-      );
+        `My order status mismatch. Expected a pre-completion delivery status, actual "${resolvedStatus || 'N/A'}"`);
     }
   }
 
@@ -2259,8 +3439,7 @@ export class MyOrderVerificationPage extends BasePage {
     const getValueByLabel = async (label: string): Promise<string> => {
       const value = await detailsGrid
         .locator(
-          `xpath=.//div[contains(normalize-space(), "${label}") and contains(normalize-space(), ":")]/ancestor::div[contains(@class,"col-span-1")][1]/following-sibling::div[1]//div[contains(@class,"text-nickel")]`,
-        )
+          `xpath=.//div[contains(normalize-space(), "${label}") and contains(normalize-space(), ":")]/ancestor::div[contains(@class,"col-span-1")][1]/following-sibling::div[1]//div[contains(@class,"text-nickel")]`)
         .first()
         .textContent();
       return (value ?? '').replace(/\s+/g, ' ').trim();

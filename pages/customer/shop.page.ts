@@ -1,5 +1,23 @@
 import { expect, Locator, Page } from '@playwright/test';
+import { getShopDataset } from '../../utils/data/customer-excel-data';
+import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
+import type { ShopCartPage } from './shop-cart.page';
 import { BasePage } from '../shared/base.page';
+
+export const shopWeightGramsFromText = (value: string): number =>
+  Number(value.match(/[\d.]+/)?.[0] ?? 0);
+
+/** PDP weight can read as "gram" only; fall back to cart or product name. */
+export const expectedShopProductWeightGrams = (
+  productName: string,
+  pdp: ShopProductDetails,
+  cartNetWeight: string): number => {
+  const fromPdp = shopWeightGramsFromText(pdp.productWeight);
+  if (fromPdp > 0) return fromPdp;
+  const fromCart = shopWeightGramsFromText(cartNetWeight);
+  if (fromCart > 0) return fromCart;
+  return Number(productName.match(/(\d+(?:\.\d+)?)\s*gm/i)?.[1] ?? 0);
+};
 
 export type ShopProductDetails = {
   productName: string;
@@ -62,8 +80,7 @@ export class ShopPage extends BasePage {
     this.resultsText = page.getByText(/\d+\s+results/i).first();
     this.goldCoinHeading = page.getByRole('heading', { name: 'Gold Coin', level: 2, exact: true });
     this.goldCoinProductGrid = this.goldCoinHeading.locator(
-      'xpath=parent::*/parent::*/following-sibling::*[1]',
-    );
+      'xpath=parent::*/parent::*/following-sibling::*[1]');
     this.productImages = this.goldCoinProductGrid.locator('img[alt]').or(page.locator('figure img[alt]'));
     this.productNameHeading = page.locator('h2.line-clamp-2').first();
     this.productPrice = page.locator('div.font-semibold').filter({ hasText: /^₹/ }).first();
@@ -93,15 +110,71 @@ export class ShopPage extends BasePage {
     return this.buyNowButton;
   }
 
+  private async scrollToShopListingSection(): Promise<void> {
+    await this.page.keyboard.press('Home');
+    const productsHeading = this.page.getByRole('heading', { name: 'Products', level: 2 });
+    await productsHeading.scrollIntoViewIfNeeded();
+    await this.page.getByText('Gold Coin', { exact: true }).scrollIntoViewIfNeeded().catch(() => {});
+  }
+
+  private async waitForShopFiltersReady(timeoutMs = 45_000): Promise<void> {
+    const goldCoin = this.page.getByText('Gold Coin', { exact: true });
+    const productsHeading = this.page.getByRole('heading', { name: 'Products', level: 2 });
+    await productsHeading.waitFor({ state: 'visible', timeout: 15_000 });
+
+    let exploredBanner = false;
+    await expect
+      .poll(
+        async () => {
+          await this.scrollToShopListingSection();
+          if (await goldCoin.isVisible().catch(() => false)) {
+            return true;
+          }
+          if (!exploredBanner) {
+            const exploreBtn = this.page.getByRole('button', { name: /explore products/i });
+            if (await exploreBtn.isVisible({ timeout: 500 }).catch(() => false)) {
+              await exploreBtn.click().catch(() => {});
+              exploredBanner = true;
+            }
+          }
+          return goldCoin.isVisible().catch(() => false);
+        },
+        { timeout: timeoutMs, intervals: [500, 1000, 2000, 3000] })
+      .toBe(true);
+  }
+
   async open(): Promise<void> {
     await this.goto('/shop-new/product');
     await this.page.waitForURL(/shop-new\/product/i, { timeout: 15_000 });
-    await this.page.getByText('Gold Coin', { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+    await this.page
+      .locator('.p-blockui, .p-blockui-document')
+      .waitFor({ state: 'hidden', timeout: 30_000 })
+      .catch(() => {});
+    await this.waitForShopFiltersReady();
+  }
+
+  /** TC_SHOP_001 — open listing and assert shop product URL. */
+  async openShopListing(): Promise<void> {
+    await this.open();
+    await expect(this.page).toHaveURL(/shop-new\/product/i);
   }
 
   async openListingWithFilters(): Promise<void> {
     await this.open();
     await this.applyListingFilters();
+  }
+
+  /** TC001 / TC002 / TC004 — clear cart, Gold Coin listing + price filters. */
+  async prepareGoldCoinListing(shopCartPage: ShopCartPage): Promise<void> {
+    await shopCartPage.clearCartAndExpectEmpty();
+    await this.openShopListing();
+    await this.applyGoldCoinPriceFilters();
+  }
+
+  /** TC003 / TC007 — clear cart, listing with catalog filters. */
+  async prepareFilteredListing(shopCartPage: ShopCartPage): Promise<void> {
+    await shopCartPage.clearCartAndExpectEmpty();
+    await this.openListingWithFilters();
   }
 
   async openProduct(productName: string): Promise<void> {
@@ -111,10 +184,30 @@ export class ShopPage extends BasePage {
 
   async expectProductsListed(productNames: string[]): Promise<void> {
     const { count, names } = await this.scrollDownAndGetProducts();
+    shopLogGet('Catalog listing', { count, names });
+    for (const name of productNames) {
+      shopLogActualExpected(`Product in catalog (${name})`, names.includes(name), true);
+    }
     expect(count).toBeGreaterThan(0);
     for (const name of productNames) {
       expect(names).toContain(name);
     }
+  }
+
+  /** TC_SHOP_002 — verify each product name appears in filtered catalog listing. */
+  async verifyProductsInCatalog(
+    productNames: string[]): Promise<{ count: number; names: string[] }> {
+    shopLogGet('Excel product names', productNames);
+    const catalog = await this.scrollDownAndGetProducts();
+    shopLogGet('Catalog listing', catalog);
+    for (const name of productNames) {
+      shopLogActualExpected(`Product in catalog (${name})`, catalog.names.includes(name), true);
+    }
+    expect(catalog.count).toBeGreaterThan(0);
+    for (const name of productNames) {
+      expect(catalog.names).toContain(name);
+    }
+    return catalog;
   }
 
   async expectPdpBuyButtons(requireEmi = false): Promise<void> {
@@ -165,16 +258,179 @@ export class ShopPage extends BasePage {
     await this.page.keyboard.press('End');
   }
 
+  private async waitForShopListingReady(timeoutMs = 30_000): Promise<void> {
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: timeoutMs }).catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    await this.resultsText.waitFor({ state: 'visible', timeout: timeoutMs });
+  }
+
   async clickGoldCoinCheckbox(): Promise<void> {
-    await this.scrollPageUp();
+    await this.page.getByText('Gold Coin', { exact: true }).scrollIntoViewIfNeeded();
     await this.goldCoinCheckbox.click();
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+    await this.resultsText.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
   }
 
   async clickPriceRangeRadio(): Promise<void> {
-    await this.scrollPageUp();
+    await this.page.getByText('₹100 - ₹20000', { exact: true }).scrollIntoViewIfNeeded();
     await this.priceRange100To20000Radio.click();
-    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
-    await this.resultsText.waitFor({ state: 'visible', timeout: 10_000 });
+    await this.waitForShopListingReady(30_000);
+  }
+
+  /** TC_SHOP_001 — Gold Coin + ₹100–₹20000 filters. */
+  async applyGoldCoinPriceFilters(): Promise<void> {
+    await this.clickGoldCoinCheckbox();
+    await this.clickPriceRangeRadio();
+  }
+
+  /** TC_SHOP_001 — verify Excel product appears in filtered listing. */
+  async verifyProductInCatalog(
+    productName = getShopDataset().productName): Promise<{ count: number; names: string[] }> {
+    const { count, names } = await this.scrollDownAndGetProducts();
+    shopLogGet('Catalog listing', { count, names });
+    shopLogActualExpected('Product in catalog', names.includes(productName), true);
+    expect(count).toBeGreaterThan(0);
+    expect(names).toContain(productName);
+    return { count, names };
+  }
+
+  /** TC_SHOP_001 — open PDP and capture full product details. */
+  async selectProductAndCaptureDetails(
+    productName = getShopDataset().productName): Promise<ShopProductDetails> {
+    await this.selectProduct(productName);
+    const productDetails = await this.getProductDetails();
+    shopLogGet('Product details (PDP)', productDetails);
+    expect(productDetails.productName).toContain(productName);
+    expect(productDetails.grandTotal).toBeGreaterThan(0);
+    return productDetails;
+  }
+
+  /** TC_SHOP_001 — assert Buy with EMI + Buy Now (when applicable), then add product to cart. */
+  async clickBuyNowFromPdp(requireEmi = true): Promise<void> {
+    if (requireEmi) {
+      await expect(this.buyWithEmiButton).toBeVisible();
+    }
+    await expect(this.buyNowButton).toBeVisible();
+    await this.clickBuyNow();
+  }
+
+  /**
+   * TC_SHOP_012 / AT-1647 — pick a Buy Now product priced above User Savings so Netbanking remainder is required.
+   * Tries catalog names heaviest-first; optional Excel preferred name is attempted first.
+   */
+  async addBuyNowProductForPartialSavings(
+    shopCartPage: ShopCartPage,
+    options?: { preferredProductName?: string }): Promise<{ productName: string; productDetails: ShopProductDetails }> {
+    await this.openShopListing();
+    await this.applyGoldCoinPriceFilters();
+    const { names } = await this.scrollDownAndGetProducts();
+    const tryOrder = this.orderCatalogNamesForPartialSavings(names, options?.preferredProductName);
+    shopLogGet('Partial savings product try order', tryOrder);
+
+    for (const productName of tryOrder) {
+      const productDetails = await this.selectProductAndCaptureDetails(productName);
+      await this.clickBuyNowFromPdp(false);
+      const availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+      const cartPrice = await shopCartPage.getCartPriceDetails();
+      const partialOk =
+        availableSavings > 0 &&
+        productDetails.grandTotal > availableSavings &&
+        cartPrice.grandTotal === productDetails.grandTotal;
+      shopLogActualExpected(
+        `${productName} partial savings (price > savings)`,
+        partialOk,
+        true);
+      if (partialOk) {
+        shopLogGet('Selected product for partial savings', {
+          productName,
+          grandTotal: productDetails.grandTotal,
+          availableSavings,
+        });
+        return { productName, productDetails };
+      }
+      await shopCartPage.clearCartAndExpectEmpty();
+      await this.openShopListing();
+      await this.applyGoldCoinPriceFilters();
+    }
+
+    throw new Error(
+      '[AT-1647] No shop product found where User Savings partially cover the order. ' +
+        'Use a lower-savings customer or set ShopTc011ProductName to a higher-priced coin in Excel.');
+  }
+
+  private orderCatalogNamesForPartialSavings(catalogNames: string[], preferred?: string): string[] {
+    const weightFromName = (name: string): number =>
+      Number(name.match(/(\d+(?:\.\d+)?)\s*(?:g|gm|grams?)/i)?.[1] ?? 0);
+    const sorted = [...catalogNames].sort((a, b) => weightFromName(b) - weightFromName(a));
+    if (preferred && sorted.includes(preferred)) {
+      return [preferred, ...sorted.filter((name) => name !== preferred)];
+    }
+    return sorted;
+  }
+
+  /** TC_SHOP_003 — open EMI PDP, capture details and assert Buy with EMI. */
+  async captureEmiProductForMixedCart(
+    emiProductName: string): Promise<ShopProductDetails> {
+    await this.openProduct(emiProductName);
+    const details = await this.getProductDetails();
+    shopLogGet(`Product details (EMI) — ${emiProductName}`, details);
+    expect(details.emiText).toMatch(/EMI/i);
+    await this.scrollToBuyWithEmi();
+    await this.expectPdpBuyButtons(true);
+    return details;
+  }
+
+  /** TC_SHOP_003 — open Buy Now PDP and capture details. */
+  async captureBuyNowProductForMixedCart(
+    buyNowProductName: string): Promise<ShopProductDetails> {
+    await this.openProduct(buyNowProductName);
+    const details = await this.getProductDetails();
+    shopLogGet(`Product details (Buy Now) — ${buyNowProductName}`, details);
+    await this.expectPdpBuyButtons();
+    return details;
+  }
+
+  /** TC_SHOP_002 — filtered listing → PDP → capture details. */
+  async captureProductDetailsFromListing(
+    productName: string): Promise<ShopProductDetails> {
+    await this.open();
+    await this.applyGoldCoinPriceFilters();
+    return this.selectProductAndCaptureDetails(productName);
+  }
+
+  /** TC_SHOP_002 — capture PDP details for each product in Excel list. */
+  async captureProductDetailsForNames(
+    productNames: string[]): Promise<Record<string, ShopProductDetails>> {
+    const productDetailsByName: Record<string, ShopProductDetails> = {};
+    for (const name of productNames) {
+      const details = await this.captureProductDetailsFromListing(name);
+      productDetailsByName[name] = details;
+      shopLogActualExpected(`${name} grand total > 0`, details.grandTotal > 0, true);
+    }
+    expect(productNames.length).toBeGreaterThanOrEqual(2);
+    shopLogGet(
+      'PDP snapshot summary',
+      Object.fromEntries(
+        productNames.map((n) => [
+          n,
+          { sku: productDetailsByName[n].sku, grandTotal: productDetailsByName[n].grandTotal },
+        ])));
+    return productDetailsByName;
+  }
+
+  /** TC_SHOP_002 — filtered listing → PDP → Buy Now. */
+  async addProductViaBuyNowFromListing(
+    productName: string,
+    options?: { expectEmiButton?: boolean }): Promise<void> {
+    await this.open();
+    await this.applyGoldCoinPriceFilters();
+    await this.selectProduct(productName);
+    await expect(this.buyNowButton).toBeVisible();
+    await expect(this.buyNowButton).toBeEnabled();
+    if (options?.expectEmiButton) {
+      await expect(this.buyWithEmiButton).toBeVisible();
+    }
+    await this.clickBuyNow();
   }
 
   /** Scroll listing and collect unique product `alt` names (lazy-loaded grid). */
@@ -184,8 +440,7 @@ export class ShopPage extends BasePage {
 
     for (let round = 0; round < 50 && stagnantRounds < 6; round += 1) {
       const batch = await this.productImages.evaluateAll((imgs) =>
-        imgs.map((img) => img.getAttribute('alt')?.trim() ?? '').filter((alt) => alt.length > 0),
-      );
+        imgs.map((img) => img.getAttribute('alt')?.trim() ?? '').filter((alt) => alt.length > 0));
       const before = names.size;
       for (const name of batch) {
         names.add(name);
