@@ -38,6 +38,15 @@ export abstract class BasePage {
     return Number(value.replace(/[₹,\s]/g, '')) || 0;
   }
 
+  /** True when `value` is a non-empty string of digits (e.g. shop order id). */
+  protected isNumericId(value: string): boolean {
+    if (value.length === 0) return false;
+    for (const ch of value) {
+      if (ch < '0' || ch > '9') return false;
+    }
+    return true;
+  }
+
   protected async fillOtp(otp: string): Promise<void> {
     const inputs = this.otpInputLocator();
     await inputs.first().waitFor({ state: 'visible', timeout: 15_000 });

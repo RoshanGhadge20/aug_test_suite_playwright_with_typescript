@@ -97,7 +97,7 @@ export class BuyMetalPage extends BasePage {
   private async skipKycRedirectIfShown(fallbackBuyPath: string): Promise<void> {
     if (!/\/kyc/i.test(this.page.url())) return;
 
-    await this.page.waitForTimeout(3_000);
+    await this.page.waitForLoadState('domcontentloaded');
     const redirectTo = new URL(this.page.url()).searchParams.get('redirectTo');
     await this.page.goto(redirectTo || fallbackBuyPath);
     await this.page.waitForLoadState('domcontentloaded');
@@ -130,6 +130,20 @@ export class BuyMetalPage extends BasePage {
     await this.oneTimeClick.click();
   }
 
+  /** Wait until One-Time buy CTA is ready (replaces fixed post-radio sleep). */
+  private async waitForOneTimeBuyButtonReady(metal: 'gold' | 'silver'): Promise<void> {
+    const blockUI = this.page.locator('.p-blockui-document');
+    await blockUI.waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => {});
+    const buyBtn = metal === 'gold' ? this.buyGoldBtn : this.buySilverBtn;
+    await buyBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await expect(buyBtn).toBeEnabled({ timeout: 15_000 });
+  }
+
+  private buyPagePath(metal: 'gold' | 'silver'): string {
+    return metal === 'gold' ? '/digital-gold/buy' : '/digital-silver/buy';
+  }
+
   /** Wait until overlays are gone and Create SIP is ready to click. */
   private async waitForCreateSipButtonReady(): Promise<void> {
     const blockUI = this.page.locator('.p-blockui-document');
@@ -155,6 +169,31 @@ export class BuyMetalPage extends BasePage {
     await this.page.waitForLoadState('domcontentloaded').catch(() => {});
     const blockUI = this.page.locator('.p-blockui-document');
     await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+  }
+
+  /** Create SIP through plan form — works for gold/silver and weekly/monthly. */
+  async createSip(options: {
+    metal: 'gold' | 'silver';
+    frequency: 'weekly' | 'monthly';
+    amount: string;
+    investmentDay?: string;
+    startAfterDays: number;
+    planPrefix?: string;
+    startDateOverride?: Date;
+  }): Promise<{ planName: string; startDate: string }> {
+    await this.startSipAndOpenPlanForm({
+      metal: options.metal,
+      amount: options.amount,
+      frequency: options.frequency,
+      investmentDay: options.investmentDay,
+    });
+    const planName = await this.enterUniquePlanName(options.planPrefix);
+    const startDate = await this.enterStartDatePlusDays(
+      options.startAfterDays,
+      options.startDateOverride,
+    );
+    await this.clickOnCreateSIP();
+    return { planName, startDate };
   }
 
   private async isOnSipPlanForm(): Promise<boolean> {
@@ -417,5 +456,72 @@ export class BuyMetalPage extends BasePage {
     await expect(this.buySilverBtn).toBeVisible();
     await expect(this.buySilverBtn).toBeEnabled();
     await this.buySilverBtn.click();
+  }
+
+  async waitForBuySummaryOrKyc(): Promise<'summary' | 'kyc' | 'unknown'> {
+    const summaryPattern = /digital-(?:gold|silver)\/buy\/summary/i;
+    const kycPattern = /\/kyc(?:\/|$|\?)/i;
+
+    return Promise.race([
+      this.page.waitForURL(summaryPattern, { timeout: 15_000 }).then(() => 'summary' as const),
+      this.page.waitForURL(kycPattern, { timeout: 15_000 }).then(() => 'kyc' as const),
+      this.page.waitForTimeout(15_000).then(() => 'unknown' as const),
+    ]);
+  }
+
+  async prepareOneTimeOrder(metal: 'gold' | 'silver', amount: string): Promise<void> {
+    const buyPagePath = this.buyPagePath(metal);
+    await this.page.goto(metal === 'gold' ? '/digital-gold' : '/digital-silver');
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.skipKycRedirectIfShown(buyPagePath);
+    if (/\/kyc/i.test(this.page.url())) {
+      throw new Error(`Buy page blocked by KYC: ${this.page.url()}`);
+    }
+    await this.waitForBuyFormReady();
+    await this.enterAmount(amount);
+    await this.clickOnOneTime();
+    await this.waitForOneTimeBuyButtonReady(metal);
+  }
+
+  async confirmOneTimeBuy(metal: 'gold' | 'silver'): Promise<'summary' | 'kyc' | 'unknown'> {
+    if (metal === 'gold') {
+      await this.clickOnBuyGold();
+    } else {
+      await this.clickOnBuySilver();
+    }
+    return this.waitForBuySummaryOrKyc();
+  }
+
+  async placeOneTimeOrder(metal: 'gold' | 'silver', amount: string): Promise<void> {
+    await this.prepareOneTimeOrder(metal, amount);
+    let outcome = await this.confirmOneTimeBuy(metal);
+    if (outcome === 'kyc') {
+      await this.skipKycRedirectIfShown(this.buyPagePath(metal));
+      if (/\/kyc/i.test(this.page.url())) {
+        throw new Error(`Buy flow redirected to KYC: ${this.page.url()}`);
+      }
+      await this.waitForBuyFormReady();
+      await this.enterAmount(amount);
+      await this.clickOnOneTime();
+      await this.waitForOneTimeBuyButtonReady(metal);
+      outcome = await this.confirmOneTimeBuy(metal);
+    }
+    if (outcome === 'kyc') {
+      throw new Error(`Buy flow redirected to KYC: ${this.page.url()}`);
+    }
+  }
+
+  async repurchaseOneTimeOrder(metal: 'gold' | 'silver', amount: string): Promise<void> {
+    await this.clickOnOneTimeRadioBtn();
+    await this.enterAmount(amount);
+    if (metal === 'gold') {
+      await this.clickOnBuyGold();
+    } else {
+      await this.clickOnBuySilver();
+    }
+    const outcome = await this.waitForBuySummaryOrKyc();
+    if (outcome === 'kyc') {
+      throw new Error(`Re-purchase flow redirected to KYC: ${this.page.url()}`);
+    }
   }
 }

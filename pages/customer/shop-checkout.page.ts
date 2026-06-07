@@ -1,4 +1,8 @@
 import { expect, Locator, Page } from '@playwright/test';
+import { getShopDataset } from '../../utils/data/customer-excel-data';
+import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
+import type { ShopProductDetails } from './shop.page';
+import type { ShopEmiDetails } from './shop-emi.page';
 import { BasePage } from '../shared/base.page';
 /** TC001 / TC002 checkout Price Details — no Savings row. */
 export type ShopCheckoutPriceDetails = {
@@ -51,6 +55,30 @@ export type ShopOrderItemDetails = {
   productName: string;
   quantity: number;
   itemPrice: number;
+};
+
+/** Order summary panel snapshot after OTP (single Buy Now product). */
+export type ShopOrderSummarySnapshot = {
+  orderItem: ShopOrderItemDetails;
+  checkoutPrice: ShopCheckoutPriceDetails;
+  deliveryAddress: ShopBillingAddressDetails;
+  billingAddress: ShopBillingAddressDetails;
+};
+
+/** Order summary panel snapshot after OTP (multi-product cart). */
+export type ShopMultiProductOrderSummarySnapshot = {
+  orderItemsByName: Record<string, ShopOrderItemDetails>;
+  checkoutPrice: ShopCheckoutPriceDetails;
+  deliveryAddress: ShopBillingAddressDetails;
+  billingAddress: ShopBillingAddressDetails;
+};
+
+/** Order summary panel snapshot after OTP (EMI purchase). */
+export type ShopEmiOrderSummarySnapshot = {
+  orderItem: ShopOrderItemDetails;
+  emiSummary: ShopEmiSummaryPriceDetails;
+  deliveryAddress: ShopBillingAddressDetails;
+  billingAddress: ShopBillingAddressDetails;
 };
 
 export type ShopOrderPlacedDetails = {
@@ -152,6 +180,26 @@ export class ShopCheckoutPage extends BasePage {
     };
   }
 
+  /**
+   * After cart Use Savings + Proceed to Pay — poll until checkout Price Details shows Savings row.
+   */
+  async waitForCheckoutPriceWithSavings(timeoutMs = 25_000): Promise<ShopCheckoutPriceDetailsWithSavings> {
+    let price: ShopCheckoutPriceDetailsWithSavings | undefined;
+    await expect
+      .poll(
+        async () => {
+          try {
+            price = await this.getPriceDetailsWithSavings();
+            return price.savings;
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: timeoutMs, intervals: [400, 800, 1500] })
+      .toBeGreaterThan(0);
+    return price!;
+  }
+
   /** TC003 only — same price-row pattern as cart; not for TC001/TC002 ({@link getPriceDetails}). */
   async getEmiMixedCheckoutPriceDetails(): Promise<ShopEmiMixedCheckoutPriceDetails> {
     await this.emiPriceDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
@@ -176,8 +224,7 @@ export class ShopCheckoutPage extends BasePage {
     await this.emiSummaryDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
 
     const downPaymentText = await this.text(
-      this.emiSummaryDetailsPanel.locator('.bg-amber-50 p').first(),
-    );
+      this.emiSummaryDetailsPanel.locator('.bg-amber-50 p').first());
     const downPaymentMatch = downPaymentText.match(/₹[\d,.]+/);
 
     return {
@@ -264,8 +311,7 @@ export class ShopCheckoutPage extends BasePage {
       dialog
         .locator('app-dialog .text-16.font-gilroy')
         .filter({ hasText: /booked|placed/i })
-        .first(),
-    );
+        .first());
     const orderIdRaw = await this.text(dialog.locator('.bg-teal-aliceblue').first());
     const orderId = this.parseOrderIds(orderIdRaw).join(',');
 
@@ -318,8 +364,7 @@ export class ShopCheckoutPage extends BasePage {
   getExpectedInvoiceNetPayable(
     orders: ShopPlacedOrders,
     combinedGrandTotal: number,
-    firstProductPrice: number,
-  ): number {
+    firstProductPrice: number): number {
     return orders.isSingleSharedOrder ? combinedGrandTotal : firstProductPrice;
   }
 
@@ -340,6 +385,426 @@ export class ShopCheckoutPage extends BasePage {
     }
     await this.page.keyboard.press('Home');
     await this.deliverToThisAddressButton.click();
+  }
+
+  /** TC_SHOP_001 — checkout prices, billing address, confirm billing + delivery. */
+  async validateBillingAndConfirmDelivery(
+    productDetails: ShopProductDetails): Promise<ShopBillingAddressDetails> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getPriceDetails();
+    const savedBillingAddress = await this.getBillingAddress();
+    shopLogGet('Checkout price', checkoutPrice);
+    shopLogGet('Billing address', savedBillingAddress);
+    shopLogActualExpected('Checkout grand total', checkoutPrice.grandTotal, productDetails.grandTotal);
+    shopLogActualExpected('Paid from funds', checkoutPrice.paidFromFunds, 0);
+    expect(checkoutPrice.grandTotal).toBe(productDetails.grandTotal);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+    expect(savedBillingAddress.address).toBeTruthy();
+    expect(savedBillingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return savedBillingAddress;
+  }
+
+  /** TC_SHOP_002 — checkout combined total, billing address, confirm billing + delivery. */
+  async validateBillingAndConfirmDeliveryForCombinedTotal(
+    combinedGrandTotal: number): Promise<ShopBillingAddressDetails> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getPriceDetails();
+    const savedBillingAddress = await this.getBillingAddress();
+    shopLogGet('Checkout price', checkoutPrice);
+    shopLogGet('Billing address', savedBillingAddress);
+    shopLogActualExpected('Checkout grand total', checkoutPrice.grandTotal, combinedGrandTotal);
+    shopLogActualExpected('Paid from funds', checkoutPrice.paidFromFunds, 0);
+    expect(checkoutPrice.grandTotal).toBe(combinedGrandTotal);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+    expect(savedBillingAddress.address).toBeTruthy();
+    expect(savedBillingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return savedBillingAddress;
+  }
+
+  /** TC_SHOP_001 — verify OTP sent to mobile and submit checkout OTP. */
+  async validateCheckoutOtp(
+    mobile = getShopDataset().mobile,
+    otp = getShopDataset().otp): Promise<void> {
+    const sentToText = await this.getOtpSentToText();
+    const actualMobile = sentToText.replace(/\D/g, '').slice(-10);
+    const expectedMobile = mobile.replace(/\D/g, '').slice(-10);
+    shopLogGet('OTP sent to', sentToText);
+    shopLogActualExpected('OTP mobile', actualMobile, expectedMobile);
+    expect(actualMobile).toBe(expectedMobile);
+    await this.submitOtp(otp);
+  }
+
+  /** TC_SHOP_001 — order summary cart, prices and addresses after OTP. */
+  async validateOrderSummaryAfterOtp(params: {
+    productDetails: ShopProductDetails;
+    savedBillingAddress: ShopBillingAddressDetails;
+    productName?: string;
+  }): Promise<ShopOrderSummarySnapshot> {
+    const productName = params.productName ?? getShopDataset().productName;
+    const { productDetails, savedBillingAddress } = params;
+
+    await this.waitForOrderSummary();
+    const orderItem = await this.getOrderItemDetails(productName);
+    const checkoutPrice = await this.getPriceDetails();
+    const deliveryAddress = await this.getDeliveryAddress();
+    const billingAddress = await this.getBilledToAddress();
+
+    const summary: ShopOrderSummarySnapshot = {
+      orderItem,
+      checkoutPrice,
+      deliveryAddress,
+      billingAddress,
+    };
+    shopLogGet('Order summary snapshot', summary);
+
+    shopLogActualExpected('Summary product name', orderItem.productName, productName);
+    expect(orderItem.productName).toContain(productName);
+
+    shopLogActualExpected('Summary item price', orderItem.itemPrice, productDetails.grandTotal);
+    expect(orderItem.itemPrice).toBe(productDetails.grandTotal);
+
+    shopLogActualExpected('Summary metal price', checkoutPrice.metalPrice, productDetails.goldPrice);
+    shopLogActualExpected(
+      'Summary making & delivery',
+      checkoutPrice.makingAndDeliveryCharges,
+      productDetails.makingAndDeliveryCharges);
+    shopLogActualExpected('Summary tax', checkoutPrice.tax, productDetails.tax);
+    shopLogActualExpected('Summary grand total', checkoutPrice.grandTotal, productDetails.grandTotal);
+    shopLogActualExpected('Summary paid from funds', checkoutPrice.paidFromFunds, 0);
+    expect(checkoutPrice.metalPrice).toBe(productDetails.goldPrice);
+    expect(checkoutPrice.makingAndDeliveryCharges).toBe(productDetails.makingAndDeliveryCharges);
+    expect(checkoutPrice.tax).toBe(productDetails.tax);
+    expect(checkoutPrice.grandTotal).toBe(productDetails.grandTotal);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+
+    shopLogGet('Delivery address', deliveryAddress);
+    shopLogGet('Billing address', billingAddress);
+    shopLogActualExpected('Delivery full name', deliveryAddress.fullName, savedBillingAddress.fullName);
+    shopLogActualExpected('Delivery mobile', deliveryAddress.mobile, savedBillingAddress.mobile);
+    shopLogActualExpected('Delivery address line', deliveryAddress.address, savedBillingAddress.address);
+    shopLogActualExpected('Delivery pincode', deliveryAddress.pincode, savedBillingAddress.pincode);
+    shopLogActualExpected('Billing full name', billingAddress.fullName, savedBillingAddress.fullName);
+    shopLogActualExpected('Billing mobile', billingAddress.mobile, savedBillingAddress.mobile);
+    shopLogActualExpected('Billing address line', billingAddress.address, savedBillingAddress.address);
+    shopLogActualExpected('Billing pincode', billingAddress.pincode, savedBillingAddress.pincode);
+    this.assertOrderSummaryAddressesMatchBilling(deliveryAddress, billingAddress, savedBillingAddress);
+
+    return summary;
+  }
+
+  /** TC_SHOP_002 — order summary for each line item and combined total after OTP. */
+  async validateMultiProductOrderSummaryAfterOtp(params: {
+    productNames: string[];
+    productDetailsByName: Record<string, ShopProductDetails>;
+    savedBillingAddress: ShopBillingAddressDetails;
+    combinedGrandTotal: number;
+  }): Promise<ShopMultiProductOrderSummarySnapshot> {
+
+    await this.waitForOrderSummary();
+
+    const orderItemsByName: Record<string, ShopOrderItemDetails> = {};
+    for (const name of params.productNames) {
+      const orderItem = await this.getOrderItemDetails(name);
+      shopLogGet(`Order summary item (${name})`, orderItem);
+      shopLogActualExpected(`${name} summary product name`, orderItem.productName, name);
+      expect(orderItem.productName).toContain(name);
+      shopLogActualExpected(`${name} summary item price`, orderItem.itemPrice, params.productDetailsByName[name].grandTotal);
+      expect(orderItem.itemPrice).toBe(params.productDetailsByName[name].grandTotal);
+      orderItemsByName[name] = orderItem;
+    }
+
+    const checkoutPrice = await this.getPriceDetails();
+    shopLogGet('Order summary price', checkoutPrice);
+    shopLogActualExpected('Summary grand total', checkoutPrice.grandTotal, params.combinedGrandTotal);
+    expect(checkoutPrice.grandTotal).toBe(params.combinedGrandTotal);
+
+    const deliveryAddress = await this.getDeliveryAddress();
+    const billingAddress = await this.getBilledToAddress();
+    shopLogGet('Delivery address', deliveryAddress);
+    shopLogGet('Billing address', billingAddress);
+    shopLogActualExpected('Delivery full name', deliveryAddress.fullName, params.savedBillingAddress.fullName);
+    shopLogActualExpected('Delivery mobile', deliveryAddress.mobile, params.savedBillingAddress.mobile);
+    shopLogActualExpected('Delivery address line', deliveryAddress.address, params.savedBillingAddress.address);
+    shopLogActualExpected('Delivery pincode', deliveryAddress.pincode, params.savedBillingAddress.pincode);
+    shopLogActualExpected('Billing full name', billingAddress.fullName, params.savedBillingAddress.fullName);
+    shopLogActualExpected('Billing mobile', billingAddress.mobile, params.savedBillingAddress.mobile);
+    shopLogActualExpected('Billing address line', billingAddress.address, params.savedBillingAddress.address);
+    shopLogActualExpected('Billing pincode', billingAddress.pincode, params.savedBillingAddress.pincode);
+    this.assertOrderSummaryAddressesMatchBilling(deliveryAddress, billingAddress, params.savedBillingAddress);
+
+    return {
+      orderItemsByName,
+      checkoutPrice,
+      deliveryAddress,
+      billingAddress,
+    };
+  }
+
+  /** TC_SHOP_001 — select Netbanking and open Razorpay (order dialog appears after payment). */
+  async placeOrderViaNetbanking(): Promise<void> {
+    await this.selectNetbanking();
+    await this.clickPay();
+  }
+
+  /** TC_SHOP_001 — assert order-placed dialog and dismiss; returns order id. */
+  async confirmBuyNowOrderPlaced(): Promise<string> {
+    const orderPlaced = await this.getOrderPlacedDetails();
+    shopLogGet('Order placed dialog', orderPlaced);
+    expect(orderPlaced.orderId).toMatch(/^\d+$/);
+    expect(orderPlaced.successMessage).toMatch(/booked/i);
+    await this.dismissOrderPlacedDialog();
+    shopLogActualExpected('Placed order id', orderPlaced.orderId, orderPlaced.orderId);
+    return orderPlaced.orderId;
+  }
+
+  /** TC_SHOP_002 — assert multi-product order-placed dialog and dismiss. */
+  async confirmMultiProductOrdersPlaced(
+    productCount: number): Promise<ShopPlacedOrders> {
+    const placedOrders = await this.getPlacedOrders(productCount);
+    shopLogGet('Order placed dialog', {
+      orderId: placedOrders.displayText,
+      successMessage: placedOrders.successMessage,
+    });
+    shopLogActualExpected('Payment method', 'Netbanking', 'Netbanking');
+    this.assertPlacedOrders(placedOrders, productCount);
+    expect(placedOrders.successMessage).toMatch(/booked/i);
+    await this.dismissOrderPlacedDialog();
+    return placedOrders;
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — EMI checkout billing and confirm delivery. */
+  async validateEmiCheckoutBilling(params: {
+    emiPlanDetails: ShopEmiDetails;
+    emiInitialPayment: number;
+    expectedEmiPerMonth: number;
+  }): Promise<ShopBillingAddressDetails> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getEmiMixedCheckoutPriceDetails();
+    shopLogGet('Checkout price (EMI)', checkoutPrice);
+    shopLogActualExpected('Checkout initial payment', checkoutPrice.initialPayment, params.emiInitialPayment);
+    expect(checkoutPrice.initialPayment).toBe(params.emiInitialPayment);
+    expect(checkoutPrice.emiScheme).toBe(params.emiPlanDetails.emiScheme);
+    expect(checkoutPrice.emiPerMonth).toBe(params.expectedEmiPerMonth);
+    expect(checkoutPrice.grandTotal).toBe(params.emiInitialPayment);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+    const savedBillingAddress = await this.getBillingAddress();
+    shopLogGet('Billing address', savedBillingAddress);
+    expect(savedBillingAddress.address).toBeTruthy();
+    expect(savedBillingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return savedBillingAddress;
+  }
+
+  /** TC_SHOP_007 / TC_SHOP_010 — EMI order summary after OTP. */
+  async validateEmiOrderSummaryAfterOtp(params: {
+    productName: string;
+    emiLinePrice: number;
+    emiInitialPayment: number;
+    emiPlanDetails: ShopEmiDetails;
+    expectedEmiPerMonth: number;
+    savedBillingAddress: ShopBillingAddressDetails;
+  }): Promise<ShopEmiOrderSummarySnapshot> {
+
+    await this.waitForOrderSummary();
+    const orderItem = await this.getOrderItemDetails(params.productName);
+    const emiSummary = await this.getEmiSummaryPriceDetails();
+    const deliveryAddress = await this.getDeliveryAddress();
+    const billingAddress = await this.getBilledToAddress();
+
+    shopLogGet('Order summary item', orderItem);
+    shopLogGet('EMI summary', emiSummary);
+    shopLogActualExpected('Summary product name', orderItem.productName, params.productName);
+    expect(orderItem.productName).toContain(params.productName);
+    shopLogActualExpected('Summary line price', orderItem.itemPrice, params.emiLinePrice);
+    expect(orderItem.itemPrice).toBe(params.emiLinePrice);
+    shopLogActualExpected('Down payment', emiSummary.downPayment, params.emiInitialPayment);
+    expect(emiSummary.downPayment).toBe(params.emiInitialPayment);
+    shopLogActualExpected('EMI scheme', emiSummary.emiScheme, params.emiPlanDetails.emiScheme);
+    expect(emiSummary.emiScheme).toBe(params.emiPlanDetails.emiScheme);
+    shopLogActualExpected('EMI per month', emiSummary.emiPerMonth, params.expectedEmiPerMonth);
+    expect(emiSummary.emiPerMonth).toBe(params.expectedEmiPerMonth);
+    shopLogActualExpected('Summary grand total', emiSummary.grandTotal, params.emiInitialPayment);
+    shopLogActualExpected('Summary paid from funds', emiSummary.paidFromFunds, 0);
+    expect(emiSummary.grandTotal).toBe(params.emiInitialPayment);
+    expect(emiSummary.paidFromFunds).toBe(0);
+
+    shopLogGet('Delivery address', deliveryAddress);
+    shopLogGet('Billing address', billingAddress);
+    shopLogActualExpected('Delivery full name', deliveryAddress.fullName, params.savedBillingAddress.fullName);
+    shopLogActualExpected('Delivery mobile', deliveryAddress.mobile, params.savedBillingAddress.mobile);
+    shopLogActualExpected('Delivery address line', deliveryAddress.address, params.savedBillingAddress.address);
+    shopLogActualExpected('Delivery pincode', deliveryAddress.pincode, params.savedBillingAddress.pincode);
+    shopLogActualExpected('Billing full name', billingAddress.fullName, params.savedBillingAddress.fullName);
+    shopLogActualExpected('Billing mobile', billingAddress.mobile, params.savedBillingAddress.mobile);
+    shopLogActualExpected('Billing address line', billingAddress.address, params.savedBillingAddress.address);
+    shopLogActualExpected('Billing pincode', billingAddress.pincode, params.savedBillingAddress.pincode);
+    this.assertOrderSummaryAddressesMatchBilling(deliveryAddress, billingAddress, params.savedBillingAddress);
+
+    return {
+      orderItem,
+      emiSummary,
+      deliveryAddress,
+      billingAddress,
+    };
+  }
+
+  /** TC_SHOP_003 — mixed EMI + Buy Now checkout billing. */
+  async validateMixedEmiCheckoutBilling(params: {
+    emiPlanDetails: ShopEmiDetails;
+    emiInitialPayment: number;
+    expectedEmiPerMonth: number;
+    combinedGrandTotal: number;
+    buyNowLineTotal: number;
+  }): Promise<ShopBillingAddressDetails> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getEmiMixedCheckoutPriceDetails();
+    shopLogGet('Checkout price (mixed)', checkoutPrice);
+    shopLogActualExpected('Checkout grand total', checkoutPrice.grandTotal, params.combinedGrandTotal);
+    expect(checkoutPrice.initialPayment).toBe(params.emiInitialPayment);
+    expect(checkoutPrice.emiScheme).toBe(params.emiPlanDetails.emiScheme);
+    expect(checkoutPrice.emiPerMonth).toBe(params.expectedEmiPerMonth);
+    expect(checkoutPrice.grandTotal).toBe(params.combinedGrandTotal);
+    expect(checkoutPrice.savings).toBe(0);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+    const savedBillingAddress = await this.getBillingAddress();
+    expect(savedBillingAddress.address).toBeTruthy();
+    expect(savedBillingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return savedBillingAddress;
+  }
+
+  /** TC_SHOP_003 — mixed cart order summary after OTP. */
+  async validateMixedOrderSummaryAfterOtp(params: {
+    productNames: string[];
+    productLinePrices: Record<string, number>;
+    emiInitialPayment: number;
+    combinedGrandTotal: number;
+  }): Promise<void> {
+    await this.waitForOrderSummary();
+    for (const name of params.productNames) {
+      const orderItem = await this.getOrderItemDetails(name);
+      shopLogActualExpected(`${name} summary line price`, orderItem.itemPrice, params.productLinePrices[name]);
+      expect(orderItem.itemPrice).toBe(params.productLinePrices[name]);
+    }
+    const emiSummary = await this.getEmiSummaryPriceDetails();
+    shopLogGet('EMI summary', emiSummary);
+    shopLogActualExpected('Down payment', emiSummary.downPayment, params.emiInitialPayment);
+    shopLogActualExpected('Summary grand total', emiSummary.grandTotal, params.combinedGrandTotal);
+    expect(emiSummary.downPayment).toBe(params.emiInitialPayment);
+    expect(emiSummary.grandTotal).toBe(params.combinedGrandTotal);
+  }
+
+  /** TC_SHOP_004 — checkout with full savings applied; confirm billing + delivery. */
+  async validateBillingWithFullSavingsAndConfirm(
+    cartSavingsAmount: number): Promise<ShopBillingAddressDetails> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getPriceDetailsWithSavings();
+    const savedBillingAddress = await this.getBillingAddress();
+    shopLogGet('Checkout price (with savings)', checkoutPrice);
+    shopLogActualExpected('Checkout savings', checkoutPrice.savings, cartSavingsAmount);
+    shopLogActualExpected('Paid from funds', checkoutPrice.paidFromFunds, 0);
+    expect(checkoutPrice.savings).toBe(cartSavingsAmount);
+    expect(checkoutPrice.paidFromFunds).toBe(0);
+    await this.confirmBillingAndDelivery();
+    return savedBillingAddress;
+  }
+
+  /** TC_SHOP_004 — order summary with full savings; Pay ₹0. */
+  async validateFullSavingsOrderSummaryAndPay(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    cartSavingsAmount: number;
+  }): Promise<void> {
+    await this.waitForOrderSummary();
+    const orderItem = await this.getOrderItemDetails(params.productName);
+    const checkoutPrice = await this.getPriceDetailsWithSavings();
+    const summaryPayableSum = this.expectCheckoutGrandTotalWithSavings(checkoutPrice, params.cartSavingsAmount);
+    shopLogGet('Order summary item', orderItem);
+    shopLogGet('Order summary price', checkoutPrice);
+    shopLogActualExpected('Remaining payable (zero for full savings)', summaryPayableSum, 0);
+    expect(orderItem.itemPrice).toBe(params.productDetails.grandTotal);
+    expect(checkoutPrice.grandTotal).toBe(0);
+    await this.clickPay();
+  }
+
+  /** TC_SHOP_012 — partial savings checkout after Use Saving on cart. */
+  async validatePartialSavingsCheckout(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+  }): Promise<{ cartSavingsAmount: number; summaryPayableSum: number }> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.waitForCheckoutPriceWithSavings();
+    const cartSavingsAmount = checkoutPrice.savings;
+    const summaryPayableSum = this.calculateCheckoutGrandTotalWithSavings(checkoutPrice);
+    shopLogGet('Checkout price (partial savings)', checkoutPrice);
+    shopLogActualExpected('Savings applied', cartSavingsAmount, '> 0');
+    shopLogActualExpected('Remaining payable', summaryPayableSum, '> 0');
+    this.assertPartialSavingsAndNetbankingRequired(
+      cartSavingsAmount,
+      summaryPayableSum,
+      params.productDetails.grandTotal,
+      'Partial savings checkout');
+    return { cartSavingsAmount, summaryPayableSum };
+  }
+
+  /** TC_SHOP_012 — order summary with partial savings before netbanking. */
+  async validatePartialSavingsOrderSummary(params: {
+    productDetails: ShopProductDetails;
+    cartSavingsAmount: number;
+  }): Promise<number> {
+    await this.waitForOrderSummary();
+    const checkoutPrice = await this.getPriceDetailsWithSavings();
+    const summaryPayableSum = this.expectCheckoutGrandTotalWithSavings(checkoutPrice, params.cartSavingsAmount);
+    shopLogActualExpected(
+      'Summary remaining payable',
+      summaryPayableSum,
+      summaryPayableSum);
+    this.assertPartialSavingsAndNetbankingRequired(
+      params.cartSavingsAmount,
+      summaryPayableSum,
+      params.productDetails.grandTotal,
+      `${'Partial savings checkout'} summary`);
+    return summaryPayableSum;
+  }
+
+  private calculateCheckoutGrandTotalWithSavings(price: ShopCheckoutPriceDetailsWithSavings): number {
+    return Number(
+      (
+        price.metalPrice +
+        price.makingAndDeliveryCharges +
+        price.tax -
+        price.savings -
+        price.paidFromFunds
+      ).toFixed(2));
+  }
+
+  private expectCheckoutGrandTotalWithSavings(
+    price: ShopCheckoutPriceDetailsWithSavings,
+    cartSavingsAmount: number): number {
+    const calculated = this.calculateCheckoutGrandTotalWithSavings(price);
+    expect(price.savings).toBe(cartSavingsAmount);
+    expect(price.paidFromFunds).toBe(0);
+    expect(calculated).toBeCloseTo(price.grandTotal, 2);
+    return calculated;
+  }
+
+  private assertOrderSummaryAddressesMatchBilling(
+    deliveryAddress: ShopBillingAddressDetails,
+    billingAddress: ShopBillingAddressDetails,
+    saved: ShopBillingAddressDetails): void {
+    expect(deliveryAddress.fullName).toBe(saved.fullName);
+    expect(deliveryAddress.address).toBe(saved.address);
+    expect(deliveryAddress.pincode).toBe(saved.pincode);
+    expect(billingAddress.fullName).toBe(saved.fullName);
+    expect(billingAddress.address).toBe(saved.address);
+    expect(billingAddress.pincode).toBe(saved.pincode);
+    if (saved.mobile) {
+      expect(deliveryAddress.mobile).toBe(saved.mobile);
+      expect(billingAddress.mobile).toBe(saved.mobile);
+    }
+    expect(deliveryAddress.pincode).toBe(billingAddress.pincode);
   }
 
   private async readSummaryAddress(accordion: Locator): Promise<ShopBillingAddressDetails> {
@@ -463,8 +928,7 @@ export class ShopCheckoutPage extends BasePage {
     const metalPrice = this.page.getByText('Metal Price', { exact: true }).first();
     await metalPrice.waitFor({ state: 'visible', timeout: 15_000 });
     return metalPrice.locator(
-      'xpath=ancestor::*[.//*[normalize-space()="Grand Total"]][1]',
-    );
+      'xpath=ancestor::*[.//*[normalize-space()="Grand Total"]][1]');
   }
 
   private async priceRow(label: string, section: Locator): Promise<number> {
@@ -496,8 +960,7 @@ export class ShopCheckoutPage extends BasePage {
   private async emiPriceRow(label: string): Promise<number> {
     const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
     return Math.abs(
-      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
-    );
+      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))));
   }
 
   private async emiPriceRowText(label: string): Promise<string> {
@@ -510,8 +973,7 @@ export class ShopCheckoutPage extends BasePage {
       const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
       if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
         return Math.abs(
-          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
-        );
+          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))));
       }
     }
     throw new Error(`Price row not found in checkout: ${labels.join(' | ')}`);
@@ -520,8 +982,7 @@ export class ShopCheckoutPage extends BasePage {
   private async emiSummaryPriceRow(label: string): Promise<number> {
     const labelCell = this.emiSummaryDetailsPanel.getByText(label, { exact: true });
     return Math.abs(
-      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
-    );
+      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))));
   }
 
   private async emiSummaryPriceRowText(label: string): Promise<string> {
@@ -534,8 +995,7 @@ export class ShopCheckoutPage extends BasePage {
       const labelCell = this.emiSummaryDetailsPanel.getByText(label, { exact: true });
       if (await labelCell.isVisible({ timeout: 2_000 }).catch(() => false)) {
         return Math.abs(
-          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))),
-        );
+          this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))));
       }
     }
     throw new Error(`Price row not found in EMI summary: ${labels.join(' | ')}`);
@@ -543,5 +1003,26 @@ export class ShopCheckoutPage extends BasePage {
 
   private async text(locator: Locator): Promise<string> {
     return ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  /** TC_SHOP_012 / AT-1647 — fail fast when savings cover the full order (no Netbanking remainder). */
+  private assertPartialSavingsAndNetbankingRequired(
+    savings: number,
+    payable: number,
+    productGrandTotal: number,
+    stepLabel: string): void {
+    if (payable <= 0) {
+      throw new Error(
+        `[AT-1647] ${stepLabel}: Payable amount after savings is ₹${payable} (zero). ` +
+          'Partial User Savings + Netbanking is required — savings must not cover the full order amount.');
+    }
+    if (savings >= productGrandTotal) {
+      throw new Error(
+        `[AT-1647] ${stepLabel}: Applied savings (₹${savings}) is greater than or equal to product price (₹${productGrandTotal}). ` +
+          'Use a customer or product where savings only cover part of the order so Netbanking pays the remainder.');
+    }
+    expect(savings, 'AT-1647 requires User Savings on account').toBeGreaterThan(0);
+    expect(savings).toBeLessThan(productGrandTotal);
+    expect(payable, 'AT-1647 requires Netbanking remainder after savings').toBeGreaterThan(0);
   }
 }

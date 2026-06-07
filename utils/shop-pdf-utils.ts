@@ -101,12 +101,71 @@ export function extractShopEmiProformaNetPayable(pdfText: string, expectedHint?:
   return Number.isNaN(fallback) ? Number.NaN : fallback;
 }
 
+function normalizeProductLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s*\(\s*999\s*purity\s*\)\s*/gi, ' ')
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/(\d+(?:\.\d+)?)\s*gm\b/gi, '$1gm')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Product name can wrap across lines in parsed PDF text. */
 export function shopPdfContainsProductName(pdfText: string, productName: string): boolean {
-  const haystack = compactText(pdfText).toLowerCase();
-  const full = productName.trim().toLowerCase();
-  const core = full.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
-  return haystack.includes(full) || (core.length > 8 && haystack.includes(core));
+  const haystack = normalizeProductLabel(compactText(pdfText));
+  const full = normalizeProductLabel(productName);
+  const core = full.replace(/\s+/g, ' ').trim();
+
+  if (full.length > 0 && haystack.includes(full)) {
+    return true;
+  }
+  if (core.length > 8 && haystack.includes(core)) {
+    return true;
+  }
+
+  const tokens = core.split(' ').filter((token) => token.length > 2);
+  if (tokens.length >= 2) {
+    const matched = tokens.filter((token) => haystack.includes(token));
+    if (matched.length >= Math.ceil(tokens.length * 0.75)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/** TC_SHOP_009 cancel invoice — refund / refundable amount in PDF. */
+export function extractShopCancelRefundAmount(pdfText: string, expectedHint?: number): number {
+  const compact = compactText(pdfText);
+  const labelPatterns = [
+    /(?:Total\s*)?Refundable\s*Amount\s*[:\-]?\s*₹?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i,
+    /Refund\s*Amount\s*[:\-]?\s*₹?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i,
+    /Amount\s*Refunded\s*[:\-]?\s*₹?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i,
+  ];
+
+  for (const pattern of labelPatterns) {
+    const match = compact.match(pattern);
+    if (match?.[1]) {
+      const value = parseAmount(match[1]);
+      if (!Number.isNaN(value) && value > 0) {
+        return value;
+      }
+    }
+  }
+
+  if (expectedHint != null && !Number.isNaN(expectedHint)) {
+    const amounts = [...compact.matchAll(/(\d+(?:,\d{3})*(?:\.\d+)?)/g)]
+      .map((m) => parseAmount(m[1]))
+      .filter((n) => !Number.isNaN(n) && n > 0);
+    const hit = amounts.find((amount) => Math.abs(amount - expectedHint) <= 1);
+    if (hit != null) {
+      return hit;
+    }
+  }
+
+  return Number.NaN;
 }
 
 /** Shop UI order id may differ from PDF; PDF has Razorpay Transaction ID. */

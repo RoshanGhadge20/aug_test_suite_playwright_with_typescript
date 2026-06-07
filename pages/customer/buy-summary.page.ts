@@ -1,5 +1,23 @@
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+
+export type OneTimeSummaryResult = {
+  quantity: number;
+  buyingRate: number;
+  amount: number;
+  tax: number;
+  total: number;
+  paidFromWallet: number;
+  payable: number;
+};
+
+function calculateOneTimeAmounts(total: number, buyingRate: number, paidFromWallet: number) {
+  const taxable = Number((total / 1.03).toFixed(2));
+  const gst = Number((total - taxable).toFixed(2));
+  const payable = Number((total - paidFromWallet).toFixed(2));
+  const quantity = Number((taxable / buyingRate).toFixed(4));
+  return { amount: taxable, tax: gst, total, payable, calcQuantity: quantity };
+}
 
 export class BuySummaryPage extends BasePage {
   private readonly validForText: Locator;
@@ -198,5 +216,150 @@ export class BuySummaryPage extends BasePage {
         .waitFor({ state: 'visible', timeout: 30_000 }),
       this.page.locator('input#beneficiaryName').waitFor({ state: 'visible', timeout: 30_000 }),
     ]);
+  }
+
+  async validateSipSummary(params: {
+    amount: string;
+    frequency: string;
+    planName: string;
+    metalLabel: string;
+    metal: string;
+    frequencyType: 'weekly' | 'monthly';
+    selectedSipStartDate?: string;
+  }): Promise<void> {
+    const investingAmount = Number(await this.getInvestingAmountSIP());
+    console.log(
+      `[SIP SUMMARY] investingAmount actual=${investingAmount} expected=${Number(params.amount)}`,
+    );
+    expect(investingAmount).toBe(Number(params.amount));
+
+    const isEditVisible = await this.isEditVisible();
+    console.log(`[SIP SUMMARY] editVisible actual=${isEditVisible} expected=true`);
+    expect(isEditVisible).toBe(true);
+
+    const frequencyText = await this.getFrequencyText();
+    console.log(`[SIP SUMMARY] frequency actual=${frequencyText} expected=${params.frequency}`);
+    expect(frequencyText).toBe(params.frequency);
+
+    const investmentPurposeText = await this.getInvestmentPurposeText();
+    console.log(`[SIP SUMMARY] investmentPurpose actual=${investmentPurposeText} expected=${params.planName}`);
+    expect(investmentPurposeText).toBe(params.planName);
+
+    const metalType = (await this.getMetalTypeText(params.metalLabel)).toLowerCase();
+    console.log(`[SIP SUMMARY] metalType actual=${metalType} expected=${params.metal.toLowerCase()}`);
+    expect(metalType).toBe(params.metal.toLowerCase());
+
+    if (params.selectedSipStartDate) {
+      const sipStartDate = await this.getSipStartDate();
+      const [day, month, year] = params.selectedSipStartDate.split('/');
+      const expectedDate = `${year}-${month}-${day}`;
+      console.log(`[SIP SUMMARY] sipStartDate actual=${sipStartDate} expected=${expectedDate}`);
+      expect(sipStartDate).toBe(expectedDate);
+    }
+
+    if (params.frequencyType === 'weekly') {
+      const amountPerWeek = Number(await this.getAmountPerWeek());
+      console.log(
+        `[SIP SUMMARY] amountPerWeek actual=${amountPerWeek} expected=${Number(params.amount)}`,
+      );
+      expect(amountPerWeek).toBe(Number(params.amount));
+    } else {
+      const amountPerMonth = Number(await this.getAmountPerMonth());
+      console.log(
+        `[SIP SUMMARY] amountPerMonth actual=${amountPerMonth} expected=${Number(params.amount)}`,
+      );
+      expect(amountPerMonth).toBe(Number(params.amount));
+    }
+  }
+
+  async validateSipSummaryAndProceed(params: {
+    amount: string;
+    frequency: string;
+    planName: string;
+    metalLabel: string;
+    metal: string;
+    frequencyType: 'weekly' | 'monthly';
+    selectedSipStartDate?: string;
+  }): Promise<void> {
+    await this.validateSipSummary(params);
+    await this.clickProceedToPay();
+  }
+
+  async validateOneTimeSummary(expectedAmount: string): Promise<OneTimeSummaryResult> {
+    await this.waitForValidForText();
+    const quantity = await this.getQuantity();
+    const buyingRate = await this.getBuyingGoldRate();
+    const investingAmount = await this.getInvestingAmount();
+    console.log(`[BUY SUMMARY] buyingRate=${buyingRate}`);
+    console.log(
+      `[BUY SUMMARY] investingAmount actual=${investingAmount} expected=${Number(expectedAmount)}`,
+    );
+    expect(investingAmount).toBe(Number(expectedAmount));
+    expect(await this.isEditVisible()).toBe(true);
+
+    const amount = await this.getAmount();
+    const tax = await this.getTax();
+    const total = await this.getTotalAmount();
+    const paidFromWallet = await this.getPaidFromWallet();
+    const payable = await this.getAmountPayable();
+    const calculated = calculateOneTimeAmounts(total, buyingRate, paidFromWallet);
+
+    console.log(`[BUY SUMMARY] quantity actual=${quantity} expected=${calculated.calcQuantity}`);
+    console.log(`[BUY SUMMARY] taxable amount actual=${amount} expected=${calculated.amount}`);
+    console.log(`[BUY SUMMARY] tax actual=${tax} expected=${calculated.tax}`);
+    console.log(`[BUY SUMMARY] payable actual=${payable} expected=${calculated.payable}`);
+
+    expect(quantity).toBeCloseTo(calculated.calcQuantity, 3);
+    expect(amount).toBeCloseTo(calculated.amount, 2);
+    expect(tax).toBeCloseTo(calculated.tax, 2);
+    expect(payable).toBeCloseTo(calculated.payable, 2);
+    await expect(this.page).toHaveURL(/digital-(?:gold|silver)\/buy\/summary/i);
+
+    return { quantity, buyingRate, amount, tax, total, paidFromWallet, payable };
+  }
+
+  async cancelAndStayOnSummary(): Promise<void> {
+    await this.clickCancel();
+    await expect(this.page.getByText('Yes, Cancel', { exact: true })).toBeVisible();
+    await expect(this.page.getByText('No, Complete Process', { exact: true })).toBeVisible();
+    await this.clickNoCompleteProcess();
+    await expect(this.page).toHaveURL(/summary/);
+  }
+
+  async cancelAndReturnToBuyPage(buyPathPattern: RegExp): Promise<void> {
+    await this.clickCancel();
+    await this.clickYesCancel();
+    await expect(this.page).toHaveURL(buyPathPattern);
+  }
+
+  async cancelSipFlow(): Promise<void> {
+    await this.cancelAndStayOnSummary();
+    await this.cancelAndReturnToBuyPage(/digital-gold/);
+  }
+
+  async cancelBuyFlow(metal: 'gold' | 'silver'): Promise<void> {
+    const buyPathPattern = metal === 'gold' ? /digital-gold/ : /digital-silver/;
+    await this.cancelAndStayOnSummary();
+    await this.cancelAndReturnToBuyPage(buyPathPattern);
+  }
+
+  async expectOnBuySummaryPage(metal: 'gold' | 'silver'): Promise<void> {
+    await this.waitForValidForText();
+    const summaryUrlPattern =
+      metal === 'gold' ? /digital-gold\/buy\/summary/i : /digital-silver\/buy\/summary/i;
+    await expect(this.page).toHaveURL(summaryUrlPattern);
+  }
+
+  async validateOneTimeSummaryAndPayNow(expectedAmount: string): Promise<OneTimeSummaryResult> {
+    const summary = await this.validateOneTimeSummary(expectedAmount);
+    await this.clickPayNowButton();
+    return summary;
+  }
+
+  async confirmRecreateAndProceed(expectedFrequency: string): Promise<string> {
+    const planName = await this.getInvestmentPurposeText();
+    expect(await this.getFrequencyText()).toBe(expectedFrequency);
+    await this.clickProceedToPay();
+    return planName;
   }
 }

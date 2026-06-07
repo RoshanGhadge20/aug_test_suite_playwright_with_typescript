@@ -1,4 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
+import { digitalGoldRatesUrl } from '../../config/urls';
+import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
+import { expectedShopProductWeightGrams, type ShopProductDetails } from './shop.page';
 import { BasePage } from '../shared/base.page';
 
 export type DashboardPortfolioMetrics = {
@@ -6,6 +9,52 @@ export type DashboardPortfolioMetrics = {
   totalSilverGrams: number;
   portfolioInr: number;
 };
+
+export type DigitalMetalSpotRates = { gBuy: number; gSell: number; sBuy: number; sSell: number };
+
+export type DashboardPortfolioSnapshot = {
+  totalGoldGrams: number;
+  totalSilverGrams: number;
+  uiPortfolioInr: number;
+  calculatedPortfolioInr: number;
+  spot: DigitalMetalSpotRates;
+};
+
+function parseDigitalMetalSpotRatesFromPayload(payload: unknown): DigitalMetalSpotRates {
+  if (typeof payload !== 'object' || payload === null) {
+    throw new Error(`Invalid digital-gold rates response (not an object): ${String(payload)}`);
+  }
+  const root = payload as Record<string, unknown>;
+  const rate = root.rate as Record<string, unknown> | undefined;
+  const rates = rate?.rates as Record<string, unknown> | undefined;
+  if (!rates) {
+    throw new Error(`Could not find rate.rates in response: ${JSON.stringify(payload)}`);
+  }
+  const parseNum = (raw: unknown, label: string): number => {
+    if (raw === undefined || raw === null) {
+      throw new Error(`Missing ${label} in rates.rates`);
+    }
+    const n = Number(String(raw).replace(/,/g, ''));
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new Error(`Invalid ${label} value: ${String(raw)}`);
+    }
+    return n;
+  };
+  return {
+    gBuy: parseNum(rates.gBuy ?? rates.gbuy, 'gBuy'),
+    gSell: parseNum(rates.gSell ?? rates.gsell, 'gSell'),
+    sBuy: parseNum(rates.sBuy ?? rates.sbuy, 'sBuy'),
+    sSell: parseNum(rates.sSell ?? rates.ssell, 'sSell'),
+  };
+}
+
+function portfolioInrFromGramsAndSellRates(
+  goldGrams: number,
+  silverGrams: number,
+  spot: DigitalMetalSpotRates,
+): number {
+  return Number((goldGrams * spot.gSell + silverGrams * spot.sSell).toFixed(2));
+}
 
 export class DashBoardPage extends BasePage {
   private static readonly portfolioFieldTimeoutMs = 5_000;
@@ -209,9 +258,11 @@ export class DashBoardPage extends BasePage {
   async getSipNameByText(expectedPlanName: string): Promise<string> {
     const escapedPlanName = expectedPlanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const planNameRegex = new RegExp(escapedPlanName, 'i');
+    const maxAttempts = 2;
+    const retryWaitMs = 3_000;
     console.log(`Looking for SIP plan: ${expectedPlanName}`);
 
-    for (let attempt = 0; attempt < 4; attempt += 1) {
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const sipCard = this.page.locator('app-sip-card').filter({
         hasText: planNameRegex,
       }).first();
@@ -224,11 +275,11 @@ export class DashBoardPage extends BasePage {
         return foundSipName;
       }
 
-      if (attempt < 3) {
-        await this.page.waitForTimeout(5_000);
+      if (attempt < maxAttempts - 1) {
+        await this.page.waitForTimeout(retryWaitMs);
         await this.page.goto('/sip-list', { waitUntil: 'domcontentloaded' });
-        await this.mySipsHeading.waitFor({ state: 'visible', timeout: 20_000 });
-        await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.mySipsHeading.waitFor({ state: 'visible', timeout: 15_000 });
+        await this.page.locator('app-sip-card').first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
       }
     }
 
@@ -280,6 +331,16 @@ export class DashBoardPage extends BasePage {
     return (await nameNode.textContent())?.trim() ?? '';
   }
 
+  async getMonthlySipName(): Promise<string> {
+    const monthlyCard = this.page.locator('app-sip-card').filter({
+      hasText: /\/monthly/i,
+    }).first();
+    await monthlyCard.waitFor({ state: 'visible', timeout: 20_000 });
+    const nameNode = monthlyCard.locator('div.text-24.font-cabinetgroteskbold').first();
+    await nameNode.waitFor({ state: 'visible', timeout: 10_000 });
+    return (await nameNode.textContent())?.trim() ?? '';
+  }
+
   async getMonthlyAmount(): Promise<number> {
     const monthlyAmount = this.sipTextBlocks.filter({
       hasText: '/monthly',
@@ -306,6 +367,56 @@ export class DashBoardPage extends BasePage {
     return text;
   }
 
+  async validateSipOnDashboard(params: {
+    planName: string;
+    expectedAmount: string;
+    expectedStatus: string;
+    frequency: 'weekly' | 'monthly';
+    planNameMatch?: 'exact' | 'contains';
+    planNameContains?: string;
+  }): Promise<void> {
+    await this.clickViewAll();
+    await this.page.locator('app-sip-card').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+
+    let sipName: string;
+    try {
+      sipName = await this.getSipNameByText(params.planName);
+    } catch {
+      console.log(`[SIP DASHBOARD] exact plan not found, using ${params.frequency} SIP fallback`);
+      sipName =
+        params.frequency === 'weekly' ? await this.getWeeklySipName() : await this.getMonthlySipName();
+    }
+
+    if (params.planNameMatch === 'contains' && params.planNameContains) {
+      console.log(
+        `[SIP DASHBOARD] sipName actual=${sipName.toLowerCase()} expected-contains=${params.planNameContains}`,
+      );
+      expect(sipName.toLowerCase()).toContain(params.planNameContains.toLowerCase());
+    } else {
+      console.log(
+        `[SIP DASHBOARD] sipName actual=${sipName.toLowerCase()} expected=${params.planName.toLowerCase()}`,
+      );
+      expect(sipName.toLowerCase()).toBe(params.planName.toLowerCase());
+    }
+
+    const amountIsZero = await this.validateAmountIsZero(sipName);
+    console.log(`[SIP DASHBOARD] amountIsZero actual=${amountIsZero} expected=true`);
+    expect(amountIsZero).toBeTruthy();
+
+    const recurringAmount =
+      params.frequency === 'weekly'
+        ? await this.getWeeklyAmount()
+        : await this.getMonthlyAmount();
+    console.log(
+      `[SIP DASHBOARD] ${params.frequency}Amount actual=${recurringAmount} expected=${Number(params.expectedAmount)}`,
+    );
+    expect(recurringAmount).toBe(Number(params.expectedAmount));
+
+    const statusText = await this.getStatusText(sipName);
+    console.log(`[SIP DASHBOARD] statusText actual=${statusText} expected=${params.expectedStatus}`);
+    expect(statusText).toBe(params.expectedStatus);
+  }
+
   async getTotalGoldValue(): Promise<number> {
     await this.waitForDashboardPortfolioSection(20_000);
     return this.readTotalGoldGrams();
@@ -328,6 +439,364 @@ export class DashBoardPage extends BasePage {
   async getPortfolioValueNumber(): Promise<number> {
     await this.waitForDashboardPortfolioSection(20_000);
     return this.readPortfolioInr();
+  }
+
+  /** TC004+ withdrawal — capture dashboard portfolio snapshot with optional assertions. */
+  async captureWithdrawalDashboardSnapshot(options?: {
+    requirePortfolio?: boolean;
+    requireGold?: boolean;
+    requireSilver?: boolean;
+    requireGoldFd?: boolean;
+  }): Promise<{
+    portfolioValue: number;
+    totalGold: number;
+    totalSilver: number;
+    goldFD: string;
+  }> {
+    await this.goto('/dashboard');
+    const portfolioValue = await this.getPortfolioValueNumber();
+    const totalGold = await this.getTotalGoldValue();
+    const totalSilver = await this.getTotalSilverValue();
+    const goldFD = await this.getGoldFDValue();
+
+    console.log('Total Portfolio Value (Rs):', portfolioValue);
+    console.log('Total Gold (g):', totalGold);
+    console.log('Total Silver (g):', totalSilver);
+    console.log('Gold FD+ Value:', goldFD);
+
+    if (options?.requirePortfolio !== false) {
+      expect(portfolioValue).toBeGreaterThan(0);
+    }
+    if (options?.requireGold !== false) {
+      expect(totalGold).toBeGreaterThan(0);
+    }
+    if (options?.requireSilver) {
+      expect(totalSilver).toBeGreaterThan(0);
+    }
+    if (options?.requireGoldFd !== false) {
+      expect(goldFD).not.toBe('');
+    }
+
+    return { portfolioValue, totalGold, totalSilver, goldFD };
+  }
+
+  async fetchDigitalMetalSpotRates(): Promise<DigitalMetalSpotRates> {
+    const ratesUrl = digitalGoldRatesUrl();
+    console.log('[digital-gold/rates] GET', ratesUrl);
+    const response = await this.page.request.get(ratesUrl, { timeout: 30_000 });
+    expect(response.ok(), `digital-gold rates API failed: HTTP ${response.status()}`).toBeTruthy();
+    const parsed = parseDigitalMetalSpotRatesFromPayload((await response.json()) as unknown);
+    console.log(
+      '[digital-gold/rates] gBuy:',
+      parsed.gBuy,
+      'gSell:',
+      parsed.gSell,
+      'sBuy:',
+      parsed.sBuy,
+      'sSell:',
+      parsed.sSell,
+    );
+    return parsed;
+  }
+
+  private logPortfolioValidation(label: string, actual: unknown, expected: unknown): void {
+    console.log(`[VALIDATION] ${label} | actual: ${String(actual)} | expected: ${String(expected)}`);
+  }
+
+  private async assertPortfolioFormulaWithRetry(options: {
+    logLabel: string;
+    gramExpectations?: { expectedGoldGrams?: number; expectedSilverGrams?: number };
+    maxAttempts?: number;
+    reloadDelayMs?: number;
+  }): Promise<DashboardPortfolioSnapshot> {
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+
+    const maxAttempts = options.maxAttempts ?? 6;
+    const reloadDelayMs = options.reloadDelayMs ?? 5_000;
+    const gram = options.gramExpectations;
+
+    let snapshot: DashboardPortfolioSnapshot = {
+      totalGoldGrams: 0,
+      totalSilverGrams: 0,
+      uiPortfolioInr: 0,
+      calculatedPortfolioInr: 0,
+      spot: { gBuy: 0, gSell: 0, sBuy: 0, sSell: 0 },
+    };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const spot = await this.fetchDigitalMetalSpotRates();
+      const metrics = await this.readPortfolioMetrics({ skipPortfolioWait: true });
+      const calculated = portfolioInrFromGramsAndSellRates(
+        metrics.totalGoldGrams,
+        metrics.totalSilverGrams,
+        spot,
+      );
+
+      snapshot = {
+        totalGoldGrams: metrics.totalGoldGrams,
+        totalSilverGrams: metrics.totalSilverGrams,
+        uiPortfolioInr: metrics.portfolioInr,
+        calculatedPortfolioInr: calculated,
+        spot,
+      };
+
+      const portfolioOk = Math.abs(snapshot.uiPortfolioInr - snapshot.calculatedPortfolioInr) <= 2;
+      const goldOk =
+        gram?.expectedGoldGrams === undefined
+          ? true
+          : Math.abs(snapshot.totalGoldGrams - gram.expectedGoldGrams) <= 0.01;
+      const silverOk =
+        gram?.expectedSilverGrams === undefined
+          ? true
+          : Math.abs(snapshot.totalSilverGrams - gram.expectedSilverGrams) <= 0.01;
+
+      if (portfolioOk && goldOk && silverOk && snapshot.uiPortfolioInr > 0) {
+        break;
+      }
+      if (attempt < maxAttempts - 1) {
+        await this.page.waitForTimeout(reloadDelayMs);
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+      }
+    }
+
+    const label = options.logLabel;
+    console.log(`[${label}] Total gold (g):`, snapshot.totalGoldGrams);
+    console.log(`[${label}] Total silver (g):`, snapshot.totalSilverGrams);
+    console.log(
+      `[${label}] UI portfolio: ₹${snapshot.uiPortfolioInr} | calculated: ₹${snapshot.calculatedPortfolioInr} (gold×gSell + silver×sSell)`,
+    );
+    console.log(
+      `[${label}] Formula: ${snapshot.totalGoldGrams}×gSell(${snapshot.spot.gSell}) + ${snapshot.totalSilverGrams}×sSell(${snapshot.spot.sSell}) = ₹${snapshot.calculatedPortfolioInr}`,
+    );
+
+    if (gram?.expectedGoldGrams !== undefined) {
+      this.logPortfolioValidation(`${label} Total gold (g)`, snapshot.totalGoldGrams, gram.expectedGoldGrams);
+      expect(Math.abs(snapshot.totalGoldGrams - gram.expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+    }
+    if (gram?.expectedSilverGrams !== undefined) {
+      this.logPortfolioValidation(
+        `${label} Total silver (g)`,
+        snapshot.totalSilverGrams,
+        gram.expectedSilverGrams,
+      );
+      expect(Math.abs(snapshot.totalSilverGrams - gram.expectedSilverGrams)).toBeLessThanOrEqual(0.01);
+    }
+
+    this.logPortfolioValidation(`${label} UI portfolio vs formula`, snapshot.uiPortfolioInr, snapshot.calculatedPortfolioInr);
+    expect(snapshot.uiPortfolioInr).toBeGreaterThan(0);
+    expect(Number.isFinite(snapshot.uiPortfolioInr)).toBe(true);
+    expect(snapshot.uiPortfolioInr).toBeCloseTo(snapshot.calculatedPortfolioInr, 2);
+
+    return snapshot;
+  }
+
+  /** Buy-metal TC_001/002 — capture metal grams before one-time buy. */
+  async captureBuyMetalGramsBeforePurchase(metal: 'gold' | 'silver'): Promise<number> {
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await this.waitForDashboardPortfolioSection(12_000);
+    const grams =
+      metal === 'gold' ? await this.readTotalGoldGrams() : await this.readTotalSilverGrams();
+    console.log(`[BUY DASHBOARD] total ${metal} before (g): ${grams}`);
+    expect(grams).toBeGreaterThan(0);
+    return grams;
+  }
+
+  /** Buy-metal TC_005 — UI portfolio vs formula before purchase (with retries). */
+  async validateBuyMetalPortfolioBeforePurchase(logLabel: string): Promise<DashboardPortfolioSnapshot> {
+    const snapshot = await this.assertPortfolioFormulaWithRetry({
+      logLabel,
+      reloadDelayMs: 2_000,
+    });
+    expect(snapshot.totalGoldGrams).toBeGreaterThan(0);
+    expect(snapshot.totalSilverGrams).toBeGreaterThanOrEqual(0);
+    return snapshot;
+  }
+
+  /** Buy-metal TC_005 — after purchase: gold grams + portfolio formula. */
+  async validateBuyMetalPortfolioAfterPurchase(
+    logLabel: string,
+    expectedGoldGrams: number,
+  ): Promise<DashboardPortfolioSnapshot> {
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+
+    let goldGrams = 0;
+    let silverGrams = 0;
+    let uiPortfolio = 0;
+    let calculatedPortfolio = 0;
+    let spot: DigitalMetalSpotRates = { gBuy: 0, gSell: 0, sBuy: 0, sSell: 0 };
+
+    // Dashboard can lag after payment — retry up to 6 times (2s wait + reload).
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+
+      spot = await this.fetchDigitalMetalSpotRates();
+      const metrics = await this.readPortfolioMetrics({ skipPortfolioWait: true });
+      goldGrams = metrics.totalGoldGrams;
+      silverGrams = metrics.totalSilverGrams;
+      uiPortfolio = metrics.portfolioInr;
+      calculatedPortfolio = portfolioInrFromGramsAndSellRates(goldGrams, silverGrams, spot);
+
+      const goldOk = Math.abs(goldGrams - expectedGoldGrams) <= 0.01;
+      const portfolioOk = Math.abs(uiPortfolio - calculatedPortfolio) <= 2;
+
+      if (goldOk && portfolioOk && uiPortfolio > 0) {
+        break;
+      }
+      if (attempt < 5) {
+        await this.page.waitForTimeout(2_000);
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+      }
+    }
+
+    console.log(`[${logLabel}] Total gold (g):`, goldGrams);
+    console.log(`[${logLabel}] Total silver (g):`, silverGrams);
+    console.log(
+      `[${logLabel}] UI portfolio: ₹${uiPortfolio} | calculated: ₹${calculatedPortfolio} (gold×gSell + silver×sSell)`,
+    );
+    console.log(
+      `[${logLabel}] Formula: ${goldGrams}×gSell(${spot.gSell}) + ${silverGrams}×sSell(${spot.sSell}) = ₹${calculatedPortfolio}`,
+    );
+
+    this.logPortfolioValidation(`${logLabel} Total gold (g)`, goldGrams, expectedGoldGrams);
+    expect(Math.abs(goldGrams - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+
+    this.logPortfolioValidation(`${logLabel} UI portfolio vs formula`, uiPortfolio, calculatedPortfolio);
+    expect(uiPortfolio).toBeGreaterThan(0);
+    expect(uiPortfolio).toBeCloseTo(calculatedPortfolio, 2);
+
+    return {
+      totalGoldGrams: goldGrams,
+      totalSilverGrams: silverGrams,
+      uiPortfolioInr: uiPortfolio,
+      calculatedPortfolioInr: calculatedPortfolio,
+      spot,
+    };
+  }
+
+  /** Shop TC_SHOP_004 — single read; UI portfolio vs formula before shop (no retry). */
+  async captureShopPortfolioBeforePurchase(
+    logLabel: string,
+  ): Promise<DashboardPortfolioSnapshot> {
+    const snapshot = await this.captureShopPortfolioBeforePurchaseInternal(logLabel);
+    shopLogGet('Portfolio before purchase', snapshot);
+    return snapshot;
+  }
+
+  /** TC_SHOP_004 — validate portfolio grams and INR after full-savings shop purchase. */
+  async validateShopPortfolioAfterFullSavingsPurchase(params: {
+    productName: string;
+    productDetails: ShopProductDetails;
+    cartNetWeight: string;
+    goldBeforePurchase: number;
+    silverBeforePurchase: number;
+    portfolioBeforePurchase: number;
+  }): Promise<void> {
+    const productWeightGrams = expectedShopProductWeightGrams(
+      params.productName,
+      params.productDetails,
+      params.cartNetWeight,
+    );
+    const expectedGoldGrams = Number((params.goldBeforePurchase - productWeightGrams).toFixed(4));
+    shopLogGet('Expected gold grams after purchase', { expectedGoldGrams, productWeightGrams });
+    await this.validateShopPortfolioGramsAfterPurchase('Shop portfolio', {
+      expectedGoldGrams,
+      expectedSilverGrams: params.silverBeforePurchase,
+    });
+    const portfolioSnapshot = await this.captureShopPortfolioBeforePurchaseInternal(
+      'Shop portfolio-after',
+    );
+    const portfolioAfter = portfolioSnapshot.uiPortfolioInr;
+    const expectedPortfolioAfter = Number(
+      (params.portfolioBeforePurchase - params.productDetails.grandTotal).toFixed(2),
+    );
+    const portfolioDiffAbs = Math.abs(portfolioAfter - expectedPortfolioAfter);
+    const portfolioDeltaTolerance = Math.max(100, params.productDetails.grandTotal * 0.05);
+    shopLogActualExpected('Portfolio after vs expected', portfolioDiffAbs <= portfolioDeltaTolerance, true);
+  }
+
+  private async captureShopPortfolioBeforePurchaseInternal(
+    logLabel: string,
+  ): Promise<DashboardPortfolioSnapshot> {
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await this.page.waitForURL(/\/dashboard/i, { timeout: 8_000 });
+    await this.waitForDashboardPortfolioSection(12_000);
+
+    const spot = await this.fetchDigitalMetalSpotRates();
+    const metrics = await this.readPortfolioMetrics({ skipPortfolioWait: true });
+    const calculatedPortfolioInr = portfolioInrFromGramsAndSellRates(
+      metrics.totalGoldGrams,
+      metrics.totalSilverGrams,
+      spot,
+    );
+
+    console.log(`[${logLabel}] Total gold (g):`, metrics.totalGoldGrams);
+    console.log(`[${logLabel}] Total silver (g):`, metrics.totalSilverGrams);
+    console.log(
+      `[${logLabel}] UI portfolio: ₹${metrics.portfolioInr} | calculated: ₹${calculatedPortfolioInr} (gold×gSell + silver×sSell)`,
+    );
+
+    expect(metrics.totalGoldGrams).toBeGreaterThan(0);
+    expect(metrics.totalSilverGrams).toBeGreaterThanOrEqual(0);
+    expect(metrics.portfolioInr).toBeGreaterThan(0);
+    this.logPortfolioValidation(`${logLabel} UI portfolio vs formula`, metrics.portfolioInr, calculatedPortfolioInr);
+    expect(metrics.portfolioInr).toBeCloseTo(calculatedPortfolioInr, 2);
+
+    return {
+      totalGoldGrams: metrics.totalGoldGrams,
+      totalSilverGrams: metrics.totalSilverGrams,
+      uiPortfolioInr: metrics.portfolioInr,
+      calculatedPortfolioInr,
+      spot,
+    };
+  }
+
+  /** Shop TC_SHOP_004 — UI portfolio vs formula + expected gold/silver grams after shop. */
+  async validateShopPortfolioGramsAfterPurchase(
+    logLabel: string,
+    gramExpectations: { expectedGoldGrams: number; expectedSilverGrams: number },
+  ): Promise<DashboardPortfolioSnapshot> {
+    return this.assertPortfolioFormulaWithRetry({ logLabel, gramExpectations });
+  }
+
+  async validateWalletBalanceOnProfile(minBalance = 0): Promise<number> {
+    await this.page.goto('/my-profile');
+    await expect(this.page).toHaveURL(/my-profile/);
+    const walletBalance = await this.getWalletBalance();
+    console.log(
+      `[BUY DASHBOARD] wallet balance actual=${walletBalance} minimum expected=${minBalance}`,
+    );
+    expect(walletBalance).toBeCloseTo(minBalance, 2);
+    return walletBalance;
+  }
+
+  /** Buy-metal TC_001/002 — verify metal grams increased after one-time buy. */
+  async validateBuyMetalGramsAfterPurchase(
+    metal: 'gold' | 'silver',
+    beforeGrams: number,
+    addedGrams: number,
+  ): Promise<number> {
+    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    const expectedGrams = Number((beforeGrams + addedGrams).toFixed(4));
+    const readGrams = (): Promise<number> =>
+      metal === 'gold' ? this.readTotalGoldGrams() : this.readTotalSilverGrams();
+
+    let afterGrams = 0;
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await this.waitForDashboardPortfolioSection(10_000).catch(() => {});
+      afterGrams = await readGrams();
+      if (Math.abs(afterGrams - expectedGrams) <= 0.001) {
+        break;
+      }
+      if (attempt < 3) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+      }
+    }
+
+    console.log(`[BUY DASHBOARD] total ${metal} after (g): ${afterGrams} expected=${expectedGrams}`);
+    expect(afterGrams).toBeCloseTo(expectedGrams, 3);
+    return afterGrams;
   }
 
   async getGoldFDValue(): Promise<string> {

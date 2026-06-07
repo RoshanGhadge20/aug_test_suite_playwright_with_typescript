@@ -1,6 +1,14 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
+export type BankDetailsParams = {
+  bankName: string;
+  accountHolderName: string;
+  accountNumber: string;
+  ifscCode: string;
+  accountType: string;
+};
+
 export class AddNewBankPage extends BasePage {
   private readonly addNewBankButton: Locator;
   private readonly bankDropdown: Locator;
@@ -111,5 +119,22 @@ export class AddNewBankPage extends BasePage {
     await this.addNewBtn.waitFor({ state: 'visible' });
    // await expect(this.addNewBtn).toBeEnabled({ timeout: 15_000 });
     await this.addNewBtn.click();
+  }
+
+  async fillAndSubmitBankForm(params: BankDetailsParams): Promise<void> {
+    await this.openBankDropdown();
+    await this.selectBankOption(params.bankName);
+    await this.enterBeneficiaryName(params.accountHolderName);
+    await this.enterAccountNumber(params.accountNumber);
+    await this.enterIFSCCode(params.ifscCode);
+    await this.openAccountTypeDropdown();
+    await this.selectAccountType(params.accountType);
+    await this.clickAddNew();
+  }
+
+  /** Opens add-bank dialog (when not already visible) then submits bank details. */
+  async addBankDetails(params: BankDetailsParams): Promise<void> {
+    await this.clickAddNewBank();
+    await this.fillAndSubmitBankForm(params);
   }
 }

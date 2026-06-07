@@ -1,11 +1,21 @@
-import { test, expect } from '../../fixtures/base.fixture';
-import { getSipFlowsDataset } from '../../utils/data/customer-excel-data';
+import { test } from '../../fixtures/base.fixture';
+import {
+  getSipFlowsDataset,
+  parseSipFrequencyType,
+  parseSipMetalType,
+} from '../../utils/data/customer-excel-data';
 
-let planName = '';
 const dataset = getSipFlowsDataset();
 const sipStartAfterDays = Number(dataset.SIPStartAfterDays || 5);
 const recreateSipStartAfterDays = 5;
-let selectedSipStartDate = '';
+
+const bankDetails = {
+  bankName: dataset.BankName,
+  accountHolderName: dataset.AccountHolderName,
+  accountNumber: dataset.AccountNumber,
+  ifscCode: dataset.IFSCCode,
+  accountType: dataset.AccountType,
+};
 
 test.describe('customer SIP flows @customer-flows', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,7 +23,6 @@ test.describe('customer SIP flows @customer-flows', () => {
   });
 
   test('TC_001 - Create Gold SIP Weekly with Add New Bank and Payment done through emandate', async ({
-    page,
     buyMetalPage,
     buySummaryPage,
     paymentPage,
@@ -22,224 +31,152 @@ test.describe('customer SIP flows @customer-flows', () => {
   }) => {
     test.setTimeout(180_000);
 
-    await test.step('Print TC_001 input values', async () => {
-      const tc001Inputs = {
-        SIPEmandateAmount: dataset.SIPEmandateAmount,
-        SIPInvestmentDay: dataset.SIPInvestmentDay,
-        SIPRecreateInvestmentDay: dataset.SIPRecreateInvestmentDay,
-        SIPStartAfterDays: sipStartAfterDays,
-        SIPDurationWeekly: dataset.SIPDurationWeekly,
-        SIPStatus: dataset.SIPStatus,
-        GoldLabel: dataset.GoldLabel,
-        metal: dataset.metal,
-        BankName: dataset.BankName,
-        EmandateBankName: dataset.EmandateBankName,
-        AccountHolderName: dataset.AccountHolderName,
-        AccountNumber: dataset.AccountNumber,
-        IFSCCode: dataset.IFSCCode,
-        AccountType: dataset.AccountType,
-        ContactNumber: dataset.ContactNumber,
-      };
-      console.log(`[TC_001 INPUTS] ${JSON.stringify(tc001Inputs, null, 2)}`);
-    });
+    const tc001Data = {
+      metal: dataset.SIPMetal,
+      frequency: dataset.SIPFrequency,
+      amount: dataset.SIPEmandateAmount,
+      investmentDay: dataset.SIPInvestmentDay,
+      recreateInvestmentDay: dataset.SIPRecreateInvestmentDay,
+      frequencyLabel: dataset.SIPDurationWeekly,
+      metalLabel: dataset.SIPMetal === 'gold' ? dataset.GoldLabel : dataset.SilverLabel,
+      metalName: dataset.metal,
+      planPrefix: `Sip_plan_${dataset.SIPFrequency}`,
+    };
 
-    await test.step('Navigate to SIP Gold and Create SIP Weekly', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalGold();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectWeeklyFrequency();
-      await buyMetalPage.enterAmount(dataset.SIPEmandateAmount);
-      await buyMetalPage.selectInvestmentDay(dataset.SIPInvestmentDay);
-      await buyMetalPage.clickOnCreateSIP();
+    let planName = '';
+    let selectedSipStartDate = '';
+    let recreatedPlanName = '';
 
-      planName = await buyMetalPage.enterUniquePlanName();
-      selectedSipStartDate = await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
-      await buyMetalPage.clickOnCreateSIP();
-    });
-
-    await test.step('Verify SIP summary page and values', async () => {
-      const investingAmount = Number(await buySummaryPage.getInvestingAmountSIP());
-      console.log(
-        `[TC_001 VALIDATION] investingAmount actual=${investingAmount} expected=${Number(dataset.SIPEmandateAmount)}`
-      );
-      expect(investingAmount).toBe(Number(dataset.SIPEmandateAmount));
-      const isEditVisible = await buySummaryPage.isEditVisible();
-      console.log(`[TC_001 VALIDATION] editVisible actual=${isEditVisible} expected=true`);
-      expect(isEditVisible).toBe(true);
-      const frequencyText = await buySummaryPage.getFrequencyText();
-      console.log(`[TC_001 VALIDATION] frequency actual=${frequencyText} expected=${dataset.SIPDurationWeekly}`);
-      expect(frequencyText).toBe(dataset.SIPDurationWeekly);
-      const investmentPurposeText = await buySummaryPage.getInvestmentPurposeText();
-      console.log(`[TC_001 VALIDATION] investmentPurpose actual=${investmentPurposeText} expected=${planName}`);
-      expect(investmentPurposeText).toBe(planName);
-
-      const metalType = (await buySummaryPage.getMetalTypeText(dataset.GoldLabel)).toLowerCase();
-      console.log(`[TC_001 VALIDATION] metalType actual=${metalType} expected=${dataset.metal.toLowerCase()}`);
-      expect(metalType).toBe(dataset.metal.toLowerCase());
-
-      const sipStartDate = await buySummaryPage.getSipStartDate();
-      const [day, month, year] = selectedSipStartDate.split('/');
-      const expectedDate = `${year}-${month}-${day}`;
-      console.log(`[TC_001 VALIDATION] sipStartDate actual=${sipStartDate} expected=${expectedDate}`);
-      expect(sipStartDate).toBe(expectedDate);
-
-      const amountPerWeek = Number(await buySummaryPage.getAmountPerWeek());
-      console.log(
-        `[TC_001 VALIDATION] amountPerWeek actual=${amountPerWeek} expected=${Number(dataset.SIPEmandateAmount)}`
-      );
-      expect(amountPerWeek).toBe(Number(dataset.SIPEmandateAmount));
-    });
-
-    await test.step('Cancel flow', async () => {
-      await buySummaryPage.clickCancel();
-      await expect(page.getByText('Yes, Cancel', { exact: true })).toBeVisible();
-      await expect(page.getByText('No, Complete Process', { exact: true })).toBeVisible();
-
-      await buySummaryPage.clickNoCompleteProcess();
-      await expect(page).toHaveURL(/summary/);
-
-      await buySummaryPage.clickCancel();
-      await buySummaryPage.clickYesCancel();
-      await expect(page).toHaveURL(/digital-gold/);
-    });
-
-    await test.step('Re-create SIP and proceed to payment', async () => {
-      await buyMetalPage.hoverOnProductsAndClickDigitalGold();
-      await buyMetalPage.clickOnCreateSIP();
-      await buyMetalPage.selectWeeklyFrequency();
-      await buyMetalPage.enterAmount(dataset.SIPEmandateAmount);
-      await buyMetalPage.selectInvestmentDay(dataset.SIPRecreateInvestmentDay);
-      await buyMetalPage.clickOnCreateSIP();
-      planName = await buyMetalPage.enterUniquePlanName();
-      await buyMetalPage.enterStartDatePlusDays(recreateSipStartAfterDays);
-      await buyMetalPage.clickOnCreateSIP();
-      planName = await buySummaryPage.getInvestmentPurposeText();
-      expect(await buySummaryPage.getFrequencyText()).toBe(dataset.SIPDurationWeekly);
-      await buySummaryPage.clickProceedToPay();
-    });
-
-    await test.step('Add New Bank', async () => {
-      await addNewBankPage.clickAddNewBank();
-      await addNewBankPage.openBankDropdown();
-      await addNewBankPage.selectBankOption(dataset.BankName);
-      await addNewBankPage.enterBeneficiaryName(dataset.AccountHolderName);
-      await addNewBankPage.enterAccountNumber(dataset.AccountNumber);
-      await addNewBankPage.enterIFSCCode(dataset.IFSCCode);
-      await addNewBankPage.openAccountTypeDropdown();
-      await addNewBankPage.selectAccountType(dataset.AccountType);
-      await addNewBankPage.clickAddNew();
-    });
-
-    await test.step('Payment Method', async () => {
-      await paymentPage.enterPhoneNumber(dataset.ContactNumber);
-      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
-      await paymentPage.clickContactContinue();
-      await paymentPage.getPriceSummaryEmandate();
-      await paymentPage.clickAadhaarEmandate();
-      await paymentPage.clickAuthenticate();
-      await paymentPage.completeEmandateFlow();
-    });
-
-    await test.step('Validate SIP details on Dashboard', async () => {
-      await dashboardPage.clickViewAll();
-      const sipName = await dashboardPage.getSipNameByText(planName).catch(async () => {
-        const fallback = await (dashboardPage as any).getWeeklySipName();
-        return fallback;
+    await test.step('createSip', async () => {
+      const result = await buyMetalPage.createSip({
+        metal: tc001Data.metal,
+        frequency: tc001Data.frequency,
+        amount: tc001Data.amount,
+        investmentDay: tc001Data.investmentDay,
+        startAfterDays: sipStartAfterDays,
+        planPrefix: tc001Data.planPrefix,
       });
-      console.log(
-        `[TC_001 VALIDATION] sipName actual=${sipName.toLowerCase()} expected-contains=sip_plan_weekly`
-      );
-      expect(sipName.toLowerCase()).toContain('sip_plan_weekly');
-      const amountIsZero = await dashboardPage.validateAmountIsZero(sipName);
-      console.log(`[TC_001 VALIDATION] amountIsZero actual=${amountIsZero} expected=true`);
-      expect(amountIsZero).toBeTruthy();
-      const weeklyAmount = await dashboardPage.getWeeklyAmount();
-      console.log(
-        `[TC_001 VALIDATION] weeklyAmount actual=${weeklyAmount} expected=${Number(dataset.SIPEmandateAmount)}`
-      );
-      expect(weeklyAmount).toBe(Number(dataset.SIPEmandateAmount));
-      const statusText = await dashboardPage.getStatusText(sipName);
-      console.log(`[TC_001 VALIDATION] statusText actual=${statusText} expected=${dataset.SIPStatus}`);
-      expect(statusText).toBe(dataset.SIPStatus);
+      planName = result.planName;
+      selectedSipStartDate = result.startDate;
+    });
+
+    await test.step('validateSipSummary', async () => {
+      await buySummaryPage.validateSipSummary({
+        amount: tc001Data.amount,
+        frequency: tc001Data.frequencyLabel,
+        planName,
+        metalLabel: tc001Data.metalLabel,
+        metal: tc001Data.metalName,
+        frequencyType: tc001Data.frequency,
+        selectedSipStartDate,
+      });
+    });
+
+    await test.step('cancelSipFlow', async () => {
+      await buySummaryPage.cancelSipFlow();
+    });
+
+    await test.step('recreateSip', async () => {
+      await buyMetalPage.createSip({
+        metal: tc001Data.metal,
+        frequency: tc001Data.frequency,
+        amount: tc001Data.amount,
+        investmentDay: tc001Data.recreateInvestmentDay,
+        startAfterDays: recreateSipStartAfterDays,
+        planPrefix: tc001Data.planPrefix,
+      });
+    });
+
+    await test.step('confirmRecreateAndProceed', async () => {
+      recreatedPlanName = await buySummaryPage.confirmRecreateAndProceed(tc001Data.frequencyLabel);
+    });
+
+    await test.step('addBankDetails', async () => {
+      await addNewBankPage.addBankDetails(bankDetails);
+    });
+
+    await test.step('completeEmandatePayment', async () => {
+      await paymentPage.completeEmandatePayment(dataset.ContactNumber, dataset.EmandateBankName);
+    });
+
+    await test.step('validateSipOnDashboard', async () => {
+      await dashboardPage.validateSipOnDashboard({
+        planName: recreatedPlanName,
+        expectedAmount: tc001Data.amount,
+        expectedStatus: dataset.SIPStatus,
+        frequency: tc001Data.frequency,
+        planNameMatch: 'contains',
+        planNameContains: tc001Data.planPrefix.toLowerCase(),
+      });
     });
   });
 
   test('TC_002 - Create Silver SIP Weekly with Emandate and UPI', async ({
-    page,
     buyMetalPage,
     buySummaryPage,
     paymentPage,
     addNewBankPage,
     dashboardPage,
   }) => {
-    const sipUpiEmandateData = {
-      amount: dataset.SIPWeeklyAmount,
-      investmentDay: dataset.SIPWeeklyInvestmentDay,
-      frequency: dataset.SIPWeeklyFrequency,
-      metal: dataset.SIPWeeklySilverMetal,
-    };
     test.setTimeout(180_000);
 
-    await test.step('Create weekly SIP for silver', async () => {
-      await buyMetalPage.startSipAndOpenPlanForm({
-        metal: 'silver',
-        amount: sipUpiEmandateData.amount,
-        frequency: 'weekly',
-        investmentDay: sipUpiEmandateData.investmentDay,
+    const tc002Data = {
+      metal: parseSipMetalType(dataset.SIPWeeklySilverMetal),
+      frequency: parseSipFrequencyType(dataset.SIPWeeklyFrequency),
+      amount: dataset.SIPWeeklyAmount,
+      investmentDay: dataset.SIPWeeklyInvestmentDay,
+      frequencyLabel: dataset.SIPWeeklyFrequency,
+      metalLabel: dataset.SilverLabel,
+      metalName: dataset.SIPWeeklySilverMetal,
+      planPrefix: 'Sip_plan_weekly',
+    };
+
+    let planName = '';
+
+    await test.step('createSip', async () => {
+      const result = await buyMetalPage.createSip({
+        metal: tc002Data.metal,
+        frequency: tc002Data.frequency,
+        amount: tc002Data.amount,
+        investmentDay: tc002Data.investmentDay,
+        startAfterDays: sipStartAfterDays,
+        planPrefix: tc002Data.planPrefix,
       });
-      planName = await buyMetalPage.enterUniquePlanName();
-      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
-      await buyMetalPage.clickOnCreateSIP();
+      planName = result.planName;
     });
 
-    await test.step('Validate summary and proceed', async () => {
-      expect(Number(await buySummaryPage.getInvestingAmountSIP())).toBe(Number(sipUpiEmandateData.amount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-      expect(await buySummaryPage.getFrequencyText()).toBe(sipUpiEmandateData.frequency);
-      expect(await buySummaryPage.getInvestmentPurposeText()).toBe(planName);
-      expect((await buySummaryPage.getMetalTypeText(dataset.SilverLabel)).toLowerCase()).toBe(sipUpiEmandateData.metal.toLowerCase());
-      expect(Number(await buySummaryPage.getAmountPerWeek())).toBe(Number(sipUpiEmandateData.amount));
+    await test.step('validateSipSummaryAndProceed', async () => {
+      await buySummaryPage.validateSipSummaryAndProceed({
+        amount: tc002Data.amount,
+        frequency: tc002Data.frequencyLabel,
+        planName,
+        metalLabel: tc002Data.metalLabel,
+        metal: tc002Data.metalName,
+        frequencyType: tc002Data.frequency,
+      });
+    });
+
+    await test.step('assertUpiAndEmandateVisibleAndCloseToSummary', async () => {
+      await paymentPage.assertUpiAndEmandateVisibleAndCloseToSummary();
+    });
+
+    await test.step('completeEmandateWithBankSetup', async () => {
       await buySummaryPage.clickProceedToPay();
+      await paymentPage.completeEmandateWithBankSetup(addNewBankPage, {
+        contactNumber: dataset.ContactNumber,
+        emandateBankName: dataset.EmandateBankName,
+        bankDetails,
+        useEmandateTab: true,
+      });
     });
 
-    await test.step('Payment option checks', async () => {
-      const options = await paymentPage.verifyUpiAndEmandateOptionsVisible();
-      expect(options.secureUpi).toBe(true);
-      expect(options.emandate).toBe(true);
-      const urlAfterClose = await paymentPage.clickCloseAndWaitForSummary();
-      expect(urlAfterClose).toMatch(/summary/);
-    });
-
-    await test.step('Complete eMandate flow', async () => {
-      await buySummaryPage.clickProceedToPay();
-      await paymentPage.clickEmandate();
-      const hasExistingBank = await paymentPage.selectBankOrAddNew();
-      if (!hasExistingBank) {
-        await addNewBankPage.openBankDropdown();
-        await addNewBankPage.selectBankOption(dataset.BankName);
-        await addNewBankPage.enterBeneficiaryName(dataset.AccountHolderName);
-        await addNewBankPage.enterAccountNumber(dataset.AccountNumber);
-        await addNewBankPage.enterIFSCCode(dataset.IFSCCode);
-        await addNewBankPage.openAccountTypeDropdown();
-        await addNewBankPage.selectAccountType(dataset.AccountType);
-        await addNewBankPage.clickAddNew();
-      }
-      await paymentPage.clickPayButton();
-    //  await paymentPage.clickOnBankByCodeEmandate('KKBK');
-      await paymentPage.enterPhoneNumber(dataset.ContactNumber);
-      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
-      await paymentPage.clickContactContinue();
-      await paymentPage.getPriceSummaryEmandate();
-      await paymentPage.clickAadhaarEmandate();
-      await paymentPage.clickAuthenticate();
-      await paymentPage.completeEmandateFlow();
-    });
-
-    await test.step('Validate on dashboard', async () => {
-      await dashboardPage.clickViewAll();
-      expect((await dashboardPage.getSipNameByText(planName)).toLowerCase()).toBe(planName.toLowerCase());
-      expect(await dashboardPage.validateAmountIsZero(planName)).toBeTruthy();
-      expect(await dashboardPage.getWeeklyAmount()).toBe(Number(sipUpiEmandateData.amount));
-      expect(await dashboardPage.getStatusText(planName)).toBe(dataset.SIPStatus);
+    await test.step('validateSipOnDashboard', async () => {
+      await dashboardPage.validateSipOnDashboard({
+        planName,
+        expectedAmount: tc002Data.amount,
+        expectedStatus: dataset.SIPStatus,
+        frequency: tc002Data.frequency,
+      });
     });
   });
 
@@ -250,73 +187,65 @@ test.describe('customer SIP flows @customer-flows', () => {
     addNewBankPage,
     dashboardPage,
   }) => {
-    const sipUpiEmandateData = {
-      amount: dataset.SIPWeeklyAmount,
-      investmentDay: dataset.SIPWeeklyInvestmentDay,
-      frequency: dataset.SIPWeeklyFrequency,
-      metal: dataset.metal,
-    };
     test.setTimeout(180_000);
 
-    await test.step('Create weekly SIP for gold', async () => {
-      await buyMetalPage.startSipAndOpenPlanForm({
-        metal: 'gold',
-        amount: sipUpiEmandateData.amount,
-        frequency: 'weekly',
-        investmentDay: sipUpiEmandateData.investmentDay,
+    const tc003Data = {
+      metal: parseSipMetalType(dataset.SIPWeeklyGoldMetal),
+      frequency: parseSipFrequencyType(dataset.SIPWeeklyFrequency),
+      amount: dataset.SIPWeeklyAmount,
+      investmentDay: dataset.SIPWeeklyInvestmentDay,
+      frequencyLabel: dataset.SIPWeeklyFrequency,
+      metalLabel: dataset.GoldLabel,
+      metalName: dataset.SIPWeeklyGoldMetal,
+      planPrefix: 'Sip_plan_weekly',
+    };
+
+    let planName = '';
+
+    await test.step('createSip', async () => {
+      const result = await buyMetalPage.createSip({
+        metal: tc003Data.metal,
+        frequency: tc003Data.frequency,
+        amount: tc003Data.amount,
+        investmentDay: tc003Data.investmentDay,
+        startAfterDays: sipStartAfterDays,
+        planPrefix: tc003Data.planPrefix,
       });
-      planName = await buyMetalPage.enterUniquePlanName();
-      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
-      await buyMetalPage.clickOnCreateSIP();
+      planName = result.planName;
     });
 
-    await test.step('Validate summary and proceed', async () => {
-      expect(Number(await buySummaryPage.getInvestingAmountSIP())).toBe(Number(sipUpiEmandateData.amount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-      expect(await buySummaryPage.getFrequencyText()).toBe(sipUpiEmandateData.frequency);
-      expect(await buySummaryPage.getInvestmentPurposeText()).toBe(planName);
-      expect((await buySummaryPage.getMetalTypeText(dataset.GoldLabel)).toLowerCase()).toBe(dataset.metal.toLowerCase());
-      expect(Number(await buySummaryPage.getAmountPerWeek())).toBe(Number(sipUpiEmandateData.amount));
+    await test.step('validateSipSummaryAndProceed', async () => {
+      await buySummaryPage.validateSipSummaryAndProceed({
+        amount: tc003Data.amount,
+        frequency: tc003Data.frequencyLabel,
+        planName,
+        metalLabel: tc003Data.metalLabel,
+        metal: tc003Data.metalName,
+        frequencyType: tc003Data.frequency,
+      });
+    });
+
+    await test.step('assertUpiAndEmandateVisibleAndCloseToSummary', async () => {
+      await paymentPage.assertUpiAndEmandateVisibleAndCloseToSummary();
+    });
+
+    await test.step('completeEmandateWithBankSetup', async () => {
       await buySummaryPage.clickProceedToPay();
+      await paymentPage.completeEmandateWithBankSetup(addNewBankPage, {
+        contactNumber: dataset.ContactNumber,
+        emandateBankName: dataset.EmandateBankName,
+        bankDetails,
+        useEmandateTab: true,
+      });
     });
 
-    await test.step('Payment option checks and eMandate flow', async () => {
-      const options = await paymentPage.verifyUpiAndEmandateOptionsVisible();
-      expect(options.secureUpi).toBe(true);
-      expect(options.emandate).toBe(true);
-
-      const urlAfterClose = await paymentPage.clickCloseAndWaitForSummary();
-      expect(urlAfterClose).toMatch(/summary/);
-
-      await buySummaryPage.clickProceedToPay();
-      await paymentPage.clickEmandate();
-      const hasExistingBank = await paymentPage.selectBankOrAddNew();
-      if (!hasExistingBank) {
-        await addNewBankPage.openBankDropdown();
-        await addNewBankPage.selectBankOption(dataset.BankName);
-        await addNewBankPage.enterBeneficiaryName(dataset.AccountHolderName);
-        await addNewBankPage.enterAccountNumber(dataset.AccountNumber);
-        await addNewBankPage.enterIFSCCode(dataset.IFSCCode);
-        await addNewBankPage.openAccountTypeDropdown();
-        await addNewBankPage.selectAccountType(dataset.AccountType);
-        await addNewBankPage.clickAddNew();
-      }
-      await paymentPage.clickPayButton();
-      await paymentPage.enterPhoneNumber(dataset.ContactNumber);
-      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
-      await paymentPage.clickContactContinue();
-      await paymentPage.getPriceSummaryEmandate();
-      await paymentPage.clickAadhaarEmandate();
-      await paymentPage.clickAuthenticate();
-      await paymentPage.completeEmandateFlow();
-    });
-
-    await test.step('Validate on dashboard', async () => {
-      await dashboardPage.clickViewAll();
-      expect((await dashboardPage.getSipNameByText(planName)).toLowerCase()).toBe(planName.toLowerCase());
-      expect(await dashboardPage.validateAmountIsZero(planName)).toBeTruthy();
-      expect(await dashboardPage.getWeeklyAmount()).toBe(Number(sipUpiEmandateData.amount));
-      expect(await dashboardPage.getStatusText(planName)).toBe(dataset.SIPStatus);
+    await test.step('validateSipOnDashboard', async () => {
+      await dashboardPage.validateSipOnDashboard({
+        planName,
+        expectedAmount: tc003Data.amount,
+        expectedStatus: dataset.SIPStatus,
+        frequency: tc003Data.frequency,
+      });
     });
   });
 
@@ -327,97 +256,58 @@ test.describe('customer SIP flows @customer-flows', () => {
     addNewBankPage,
     dashboardPage,
   }) => {
-    const sipMonthlyData = {
-      amount: dataset.SIPEmandateAmount,
-      frequency: dataset.SIPMonthlyFrequency,
-      metal: dataset.SIPMonthlyGoldMetal,
-      planPrefix: dataset.SIPMonthlyPlanPrefix,
-    };
     test.setTimeout(180_000);
 
-    await test.step('Print TC_004 input values', async () => {
-      const tc004Inputs = {
-        SIPEmandateAmount: sipMonthlyData.amount,
-        SIPMonthlyFrequency: sipMonthlyData.frequency,
-        SIPMonthlyGoldMetal: sipMonthlyData.metal,
-        SIPMonthlyPlanPrefix: sipMonthlyData.planPrefix,
-        SIPStartAfterDays: sipStartAfterDays,
-        BankName: dataset.BankName,
-        EmandateBankName: dataset.EmandateBankName,
-        AccountHolderName: dataset.AccountHolderName,
-        AccountNumber: dataset.AccountNumber,
-        IFSCCode: dataset.IFSCCode,
-        AccountType: dataset.AccountType,
-        ContactNumber: dataset.ContactNumber,
-        SIPStatus: dataset.SIPStatus,
-      };
-      console.log(`[TC_004 INPUTS] ${JSON.stringify(tc004Inputs, null, 2)}`);
-    });
+    const tc004Data = {
+      metal: parseSipMetalType(dataset.SIPMonthlyGoldMetal),
+      frequency: parseSipFrequencyType(dataset.SIPMonthlyFrequency),
+      amount: dataset.SIPEmandateAmount,
+      frequencyLabel: dataset.SIPMonthlyFrequency,
+      metalLabel: dataset.GoldLabel,
+      metalName: dataset.SIPMonthlyGoldMetal,
+      planPrefix: dataset.SIPMonthlyPlanPrefix,
+    };
 
-    await test.step('Create monthly SIP for gold', async () => {
-      await buyMetalPage.startSipAndOpenPlanForm({
-        metal: 'gold',
-        amount: sipMonthlyData.amount,
-        frequency: 'monthly',
+    let planName = '';
+
+    await test.step('createSip', async () => {
+      const result = await buyMetalPage.createSip({
+        metal: tc004Data.metal,
+        frequency: tc004Data.frequency,
+        amount: tc004Data.amount,
+        startAfterDays: sipStartAfterDays,
+        planPrefix: tc004Data.planPrefix,
       });
-      planName = await buyMetalPage.enterUniquePlanName(sipMonthlyData.planPrefix);
-      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays);
-      await buyMetalPage.clickOnCreateSIP();
+      planName = result.planName;
     });
 
-    await test.step('Validate monthly summary', async () => {
-      expect(Number(await buySummaryPage.getInvestingAmountSIP())).toBe(Number(sipMonthlyData.amount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-      expect(await buySummaryPage.getFrequencyText()).toBe(sipMonthlyData.frequency);
-      expect(await buySummaryPage.getInvestmentPurposeText()).toBe(planName);
-      expect((await buySummaryPage.getMetalTypeText(dataset.GoldLabel)).toLowerCase()).toBe(sipMonthlyData.metal.toLowerCase());
-      expect(Number(await buySummaryPage.getAmountPerMonth())).toBe(Number(sipMonthlyData.amount));
+    await test.step('validateSipSummary', async () => {
+      await buySummaryPage.validateSipSummary({
+        amount: tc004Data.amount,
+        frequency: tc004Data.frequencyLabel,
+        planName,
+        metalLabel: tc004Data.metalLabel,
+        metal: tc004Data.metalName,
+        frequencyType: tc004Data.frequency,
+      });
     });
 
-    await test.step('Complete monthly eMandate payment', async () => {
-      await buySummaryPage.clickProceedToPay();;
-      const hasExistingBank = await paymentPage.selectBankOrAddNew();
-      if (!hasExistingBank) {
-        await addNewBankPage.openBankDropdown();
-        await addNewBankPage.selectBankOption(dataset.BankName);
-        await addNewBankPage.enterBeneficiaryName(dataset.AccountHolderName);
-        await addNewBankPage.enterAccountNumber(dataset.AccountNumber);
-        await addNewBankPage.enterIFSCCode(dataset.IFSCCode);
-        await addNewBankPage.openAccountTypeDropdown();
-        await addNewBankPage.selectAccountType(dataset.AccountType);
-        await addNewBankPage.clickAddNew();
-      }
-      await paymentPage.clickPayButton();
-      await paymentPage.enterPhoneNumber(dataset.ContactNumber);
-      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
-      await paymentPage.clickContactContinue();
-      await paymentPage.getPriceSummaryEmandate();
-      await paymentPage.clickAadhaarEmandate();
-      await paymentPage.clickAuthenticate();
-      await paymentPage.completeEmandateFlow();
+    await test.step('completeEmandateWithBankSetup', async () => {
+      await buySummaryPage.clickProceedToPay();
+      await paymentPage.completeEmandateWithBankSetup(addNewBankPage, {
+        contactNumber: dataset.ContactNumber,
+        emandateBankName: dataset.EmandateBankName,
+        bankDetails,
+      });
     });
 
-    await test.step('Validate on dashboard', async () => {
-      await dashboardPage.clickViewAll();
-      const sipName = await dashboardPage.getSipNameByText(planName);
-      console.log(
-        `[TC_004 VALIDATION] sipName actual=${sipName.toLowerCase()} expected=${planName.toLowerCase()}`
-      );
-      expect(sipName.toLowerCase()).toBe(planName.toLowerCase());
-
-      const amountIsZero = await dashboardPage.validateAmountIsZero(planName);
-      console.log(`[TC_004 VALIDATION] amountIsZero actual=${amountIsZero} expected=true`);
-      expect(amountIsZero).toBeTruthy();
-
-      const monthlyAmount = await dashboardPage.getMonthlyAmount();
-      console.log(
-        `[TC_004 VALIDATION] monthlyAmount actual=${monthlyAmount} expected=${Number(sipMonthlyData.amount)}`
-      );
-      expect(monthlyAmount).toBe(Number(sipMonthlyData.amount));
-
-      const statusText = await dashboardPage.getStatusText(planName);
-      console.log(`[TC_004 VALIDATION] statusText actual=${statusText} expected=${dataset.SIPStatus}`);
-      expect(statusText).toBe(dataset.SIPStatus);
+    await test.step('validateSipOnDashboard', async () => {
+      await dashboardPage.validateSipOnDashboard({
+        planName,
+        expectedAmount: tc004Data.amount,
+        expectedStatus: dataset.SIPStatus,
+        frequency: tc004Data.frequency,
+      });
     });
   });
 
@@ -428,125 +318,80 @@ test.describe('customer SIP flows @customer-flows', () => {
     addNewBankPage,
     dashboardPage,
   }) => {
-    const sipMonthlyUpiData = {
-      amount: dataset.SIPMonthlyAmount,
-      frequency: dataset.SIPMonthlyFrequency,
-      metal: dataset.SIPMonthlySilverMetal,
-      planPrefix: dataset.SIPMonthlyPlanPrefix,
-    };
     test.setTimeout(180_000);
 
-    await test.step('Print TC_005 input values', async () => {
-      const tc005Inputs = {
-        SIPMonthlyAmount: sipMonthlyUpiData.amount,
-        SIPMonthlyFrequency: sipMonthlyUpiData.frequency,
-        SIPMonthlySilverMetal: sipMonthlyUpiData.metal,
-        SIPMonthlyPlanPrefix: sipMonthlyUpiData.planPrefix,
-        SIPStartAfterDays: sipStartAfterDays,
-        BankName: dataset.BankName,
-        EmandateBankName: dataset.EmandateBankName,
-        AccountHolderName: dataset.AccountHolderName,
-        AccountNumber: dataset.AccountNumber,
-        IFSCCode: dataset.IFSCCode,
-        AccountType: dataset.AccountType,
-        ContactNumber: dataset.ContactNumber,
-        SIPStatus: dataset.SIPStatus,
-      };
-      console.log(`[TC_005 INPUTS] ${JSON.stringify(tc005Inputs, null, 2)}`);
-    });
-
-    await test.step('Create monthly SIP for silver', async () => {
-      // TC005 only: if (today + sipStartAfterDays) lands on day 29/30/31,
-      // move SIP start to day 1 of the next month (works for all months).
-      const tc005SipStartDate = (() => {
-        const base = new Date();
-        base.setHours(0, 0, 0, 0);
-
-        const target = new Date(base);
-        target.setDate(target.getDate() + sipStartAfterDays);
-
-        if ([29, 30, 31].includes(target.getDate())) {
-          return new Date(target.getFullYear(), target.getMonth() + 1, 1);
-        }
-        return target;
-      })();
-
-      const pad = (n: number): string => String(n).padStart(2, '0');
-      console.log(
-        `[TC_005] SIP start date (TC005 rule): ${pad(tc005SipStartDate.getDate())}/${pad(tc005SipStartDate.getMonth() + 1)}/${tc005SipStartDate.getFullYear()}`,
-      );
-
-      await buyMetalPage.startSipAndOpenPlanForm({
-        metal: 'silver',
-        amount: sipMonthlyUpiData.amount,
-        frequency: 'monthly',
-      });
-      planName = await buyMetalPage.enterUniquePlanName(sipMonthlyUpiData.planPrefix);
-      await buyMetalPage.enterStartDatePlusDays(sipStartAfterDays, tc005SipStartDate);
-      await buyMetalPage.clickOnCreateSIP();
-    });
-
-    await test.step('Validate summary and payment options', async () => {
-      expect(Number(await buySummaryPage.getInvestingAmountSIP())).toBe(Number(sipMonthlyUpiData.amount));
-      expect(await buySummaryPage.isEditVisible()).toBe(true);
-      expect(await buySummaryPage.getFrequencyText()).toBe(sipMonthlyUpiData.frequency);
-      expect(await buySummaryPage.getInvestmentPurposeText()).toBe(planName);
-      expect((await buySummaryPage.getMetalTypeText(dataset.SilverLabel)).toLowerCase()).toBe(sipMonthlyUpiData.metal.toLowerCase());
-      expect(Number(await buySummaryPage.getAmountPerMonth())).toBe(Number(sipMonthlyUpiData.amount));
-      await buySummaryPage.clickProceedToPay();
-
-      const options = await paymentPage.verifyUpiAndEmandateOptionsVisible();
-      expect(options.secureUpi).toBe(true);
-      expect(options.emandate).toBe(true);
-      const urlAfterClose = await paymentPage.clickCloseAndWaitForSummary();
-      expect(urlAfterClose).toMatch(/summary/);
-    });
-
-    await test.step('Complete monthly eMandate payment', async () => {
-      await buySummaryPage.clickProceedToPay();
-      await paymentPage.clickEmandate();
-      const hasExistingBank = await paymentPage.selectBankOrAddNew();
-      if (!hasExistingBank) {
-        await addNewBankPage.openBankDropdown();
-        await addNewBankPage.selectBankOption(dataset.BankName);
-        await addNewBankPage.enterBeneficiaryName(dataset.AccountHolderName);
-        await addNewBankPage.enterAccountNumber(dataset.AccountNumber);
-        await addNewBankPage.enterIFSCCode(dataset.IFSCCode);
-        await addNewBankPage.openAccountTypeDropdown();
-        await addNewBankPage.selectAccountType(dataset.AccountType);
-        await addNewBankPage.clickAddNew();
+    const tc005SipStartDate = (() => {
+      const target = new Date();
+      target.setHours(0, 0, 0, 0);
+      target.setDate(target.getDate() + sipStartAfterDays);
+      if ([29, 30, 31].includes(target.getDate())) {
+        return new Date(target.getFullYear(), target.getMonth() + 1, 1);
       }
-      await paymentPage.clickPayButton();
-      await paymentPage.enterPhoneNumber(dataset.ContactNumber);
-      await paymentPage.clickOnBankByNameEmandate(dataset.EmandateBankName);
-      await paymentPage.clickContactContinue();
-      await paymentPage.getPriceSummaryEmandate();
-      await paymentPage.clickAadhaarEmandate();
-      await paymentPage.clickAuthenticate();
-      await paymentPage.completeEmandateFlow();
+      return target;
+    })();
+
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    console.log(
+      `[TC_005] SIP start date (TC005 rule): ${pad(tc005SipStartDate.getDate())}/${pad(tc005SipStartDate.getMonth() + 1)}/${tc005SipStartDate.getFullYear()}`,
+    );
+
+    const tc005Data = {
+      metal: parseSipMetalType(dataset.SIPMonthlySilverMetal),
+      frequency: parseSipFrequencyType(dataset.SIPMonthlyFrequency),
+      amount: dataset.SIPMonthlyAmount,
+      frequencyLabel: dataset.SIPMonthlyFrequency,
+      metalLabel: dataset.SilverLabel,
+      metalName: dataset.SIPMonthlySilverMetal,
+      planPrefix: dataset.SIPMonthlyPlanPrefix,
+      startDateOverride: tc005SipStartDate,
+    };
+
+    let planName = '';
+
+    await test.step('createSip', async () => {
+      const result = await buyMetalPage.createSip({
+        metal: tc005Data.metal,
+        frequency: tc005Data.frequency,
+        amount: tc005Data.amount,
+        startAfterDays: sipStartAfterDays,
+        planPrefix: tc005Data.planPrefix,
+        startDateOverride: tc005Data.startDateOverride,
+      });
+      planName = result.planName;
     });
 
-    await test.step('Validate on dashboard', async () => {
-      await dashboardPage.clickViewAll();
-      const sipName = await dashboardPage.getSipNameByText(planName);
-      console.log(
-        `[TC_005 VALIDATION] sipName actual=${sipName.toLowerCase()} expected=${planName.toLowerCase()}`
-      );
-      expect(sipName.toLowerCase()).toBe(planName.toLowerCase());
+    await test.step('validateSipSummaryAndProceed', async () => {
+      await buySummaryPage.validateSipSummaryAndProceed({
+        amount: tc005Data.amount,
+        frequency: tc005Data.frequencyLabel,
+        planName,
+        metalLabel: tc005Data.metalLabel,
+        metal: tc005Data.metalName,
+        frequencyType: tc005Data.frequency,
+      });
+    });
 
-      const amountIsZero = await dashboardPage.validateAmountIsZero(planName);
-      console.log(`[TC_005 VALIDATION] amountIsZero actual=${amountIsZero} expected=true`);
-      expect(amountIsZero).toBeTruthy();
+    await test.step('assertUpiAndEmandateVisibleAndCloseToSummary', async () => {
+      await paymentPage.assertUpiAndEmandateVisibleAndCloseToSummary();
+    });
 
-      const monthlyAmount = await dashboardPage.getMonthlyAmount();
-      console.log(
-        `[TC_005 VALIDATION] monthlyAmount actual=${monthlyAmount} expected=${Number(sipMonthlyUpiData.amount)}`
-      );
-      expect(monthlyAmount).toBe(Number(sipMonthlyUpiData.amount));
+    await test.step('completeEmandateWithBankSetup', async () => {
+      await buySummaryPage.clickProceedToPay();
+      await paymentPage.completeEmandateWithBankSetup(addNewBankPage, {
+        contactNumber: dataset.ContactNumber,
+        emandateBankName: dataset.EmandateBankName,
+        bankDetails,
+        useEmandateTab: true,
+      });
+    });
 
-      const statusText = await dashboardPage.getStatusText(planName);
-      console.log(`[TC_005 VALIDATION] statusText actual=${statusText} expected=${dataset.SIPStatus}`);
-      expect(statusText).toBe(dataset.SIPStatus);
+    await test.step('validateSipOnDashboard', async () => {
+      await dashboardPage.validateSipOnDashboard({
+        planName,
+        expectedAmount: tc005Data.amount,
+        expectedStatus: dataset.SIPStatus,
+        frequency: tc005Data.frequency,
+      });
     });
   });
 });
