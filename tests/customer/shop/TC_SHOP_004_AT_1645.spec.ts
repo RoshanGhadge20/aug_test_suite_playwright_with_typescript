@@ -4,7 +4,7 @@ import type { ShopProductDetails } from '../../../pages/customer/shop.page';
 import type { ShopBillingAddressDetails } from '../../../pages/customer/shop-checkout.page';
 
 test.describe('TC_SHOP_004 @customer-flows', () => {
-  test('TC_SHOP_004|AT-1645 - Shop gold coin flow payment by savings', async ({
+  test('TC_SHOP_004|AT-1645 - Shop gold coin flow fully paid payment by saving-spotorder', async ({
     dashboardPage,
     shopPage,
     shopCartPage,
@@ -25,16 +25,20 @@ test.describe('TC_SHOP_004 @customer-flows', () => {
     let placedOrderId = '';
     let cartNetWeight = '';
     let cartSavingsAmount = 0;
-    let goldBeforePurchase = 0;
-    let silverBeforePurchase = 0;
-    let portfolioBeforePurchase = 0;
+    let getTotalSilverbeforePurchase = 0;
+    let getTotalGoldbeforePurchase = 0;
+    let getcurrentValuebeforePurchase = 0;
 
-    await test.step('TC004_1 | Dashboard — capture portfolio before purchase', async () => {
-      logSub(1, 'Dashboard — capture portfolio before purchase');
-      const snapshot = await dashboardPage.captureShopPortfolioBeforePurchase('portfolio-before');
-      goldBeforePurchase = snapshot.totalGoldGrams;
-      silverBeforePurchase = snapshot.totalSilverGrams;
-      portfolioBeforePurchase = snapshot.uiPortfolioInr;
+    await test.step('TC004_1 | Dashboard — get portfolio before purchase', async () => {
+      logSub(1, 'Dashboard — get portfolio before purchase');
+        await dashboardPage.gotoDashboard();
+       getcurrentValuebeforePurchase = await dashboardPage.getCurrentValue();
+       getTotalGoldbeforePurchase = await dashboardPage.getTotalGold();
+       getTotalSilverbeforePurchase = await dashboardPage.getTotalSilver();
+      
+      console.log('currentValuebeforePurchase', getcurrentValuebeforePurchase); 
+      console.log('totalGoldbeforePurchase', getTotalGoldbeforePurchase);    
+      console.log('totalSilverbeforePurchase', getTotalSilverbeforePurchase);  
     });
 
     await test.step('TC004_2 | Prepare gold coin listing', async () => {
@@ -104,9 +108,9 @@ test.describe('TC_SHOP_004 @customer-flows', () => {
         productName,
         productDetails,
         cartNetWeight,
-        goldBeforePurchase,
-        silverBeforePurchase,
-        portfolioBeforePurchase,
+        getTotalGoldbeforePurchase,
+        getTotalSilverbeforePurchase,
+        getcurrentValuebeforePurchase,
       });
     });
   });

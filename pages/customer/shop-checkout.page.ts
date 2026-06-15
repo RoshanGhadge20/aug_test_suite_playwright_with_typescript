@@ -1,6 +1,7 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { getShopDataset } from '../../utils/data/customer-excel-data';
 import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
+import type { ShopCartPriceDetailsWithCoupon } from './shop-cart.page';
 import type { ShopProductDetails } from './shop.page';
 import type { ShopEmiDetails } from './shop-emi.page';
 import { BasePage } from '../shared/base.page';
@@ -16,6 +17,18 @@ export type ShopCheckoutPriceDetails = {
 /** TC004 checkout Price Details after Use Saving. */
 export type ShopCheckoutPriceDetailsWithSavings = ShopCheckoutPriceDetails & {
   savings: number;
+};
+
+/** TC_SHOP_014 checkout Price Details with coupon discount. */
+export type ShopCheckoutPriceDetailsWithCoupon = ShopCheckoutPriceDetails & {
+  couponDiscount: number;
+  totalSum: number;
+};
+
+/** TC_SHOP_016 checkout Price Details with coupon discount and User Savings. */
+export type ShopCheckoutPriceDetailsWithCouponAndSavings = ShopCheckoutPriceDetailsWithSavings & {
+  couponDiscount: number;
+  totalSum: number;
 };
 
 /** TC003 — EMI Details panel on order summary (after OTP). */
@@ -243,6 +256,138 @@ export class ShopCheckoutPage extends BasePage {
   /** TC001 / TC002 — metal + charges + tax − paid-from-funds (no savings). */
   getCalculatedGrandTotal(price: ShopCheckoutPriceDetails): number {
     return price.metalPrice + price.makingAndDeliveryCharges + price.tax - price.paidFromFunds;
+  }
+
+  /** TC_SHOP_014 — checkout price panel with coupon discount. */
+  async getPriceDetailsWithCoupon(): Promise<ShopCheckoutPriceDetailsWithCoupon> {
+    const section = await this.priceSection();
+    const metalPrice = await this.priceRow('Metal Price', section);
+    const makingAndDeliveryCharges = await this.priceRow('Making & Delivery Charges', section);
+    const tax = await this.priceRow('Tax', section);
+    const paidFromFunds = await this.optionalPriceRow(section, 'Paid From Funds');
+    const grandTotal = await this.priceRow('Grand Total', section);
+    const couponDiscount = await this.readCouponDiscount(section);
+    const totalSum = Number((metalPrice + makingAndDeliveryCharges + tax).toFixed(2));
+    return { metalPrice, makingAndDeliveryCharges, tax, paidFromFunds, grandTotal, couponDiscount, totalSum };
+  }
+
+  /** TC_SHOP_014 — checkout matches cart; grandTotal = totalSum − couponDiscount. */
+  async validateCheckoutPriceMatchesCartWithCoupon(
+    cartPrice: ShopCartPriceDetailsWithCoupon,
+  ): Promise<ShopCheckoutPriceDetailsWithCoupon> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getPriceDetailsWithCoupon();
+
+    shopLogGet('Cart price (coupon)', cartPrice);
+    shopLogGet('Checkout price (coupon)', checkoutPrice);
+
+    const cartExpectedGrand = Number(
+      (cartPrice.totalSum - cartPrice.couponDiscount - cartPrice.savings).toFixed(2),
+    );
+    shopLogActualExpected('Cart grand total formula', cartPrice.grandTotal, cartExpectedGrand);
+    expect(cartPrice.grandTotal).toBe(cartExpectedGrand);
+
+    shopLogActualExpected('Checkout metal price', checkoutPrice.metalPrice, cartPrice.metalPrice);
+    shopLogActualExpected('Checkout making & delivery', checkoutPrice.makingAndDeliveryCharges, cartPrice.makingAndDeliveryCharges);
+    shopLogActualExpected('Checkout tax', checkoutPrice.tax, cartPrice.tax);
+
+    expect(checkoutPrice.metalPrice).toBe(cartPrice.metalPrice);
+    expect(checkoutPrice.makingAndDeliveryCharges).toBe(cartPrice.makingAndDeliveryCharges);
+    expect(checkoutPrice.tax).toBe(cartPrice.tax);
+
+    const expectedCheckoutGrand = Number(
+      (cartPrice.totalSum - checkoutPrice.couponDiscount - checkoutPrice.paidFromFunds - cartPrice.savings).toFixed(2),
+    );
+    shopLogActualExpected('Checkout grand total', checkoutPrice.grandTotal, expectedCheckoutGrand);
+    expect(checkoutPrice.grandTotal).toBe(expectedCheckoutGrand);
+
+    const checkoutExpectedGrand = Number(
+      (checkoutPrice.totalSum - checkoutPrice.couponDiscount - checkoutPrice.paidFromFunds).toFixed(2),
+    );
+    shopLogActualExpected('Checkout grand total formula', checkoutPrice.grandTotal, checkoutExpectedGrand);
+    expect(checkoutPrice.grandTotal).toBe(checkoutExpectedGrand);
+
+    return checkoutPrice;
+  }
+
+  /**
+   * TC_SHOP_015 only — EMI address step: coupon lines match cart; savings apply on summary after OTP.
+   */
+  async validateEmiCheckoutCouponLinesMatchCart(
+    cartPrice: ShopCartPriceDetailsWithCoupon,
+  ): Promise<ShopCheckoutPriceDetailsWithCoupon> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.getEmiCheckoutPriceDetailsWithCoupon();
+    shopLogGet('Cart price (coupon)', cartPrice);
+    shopLogGet('Checkout price (EMI coupon)', checkoutPrice);
+    shopLogActualExpected('Checkout coupon discount', checkoutPrice.couponDiscount, cartPrice.couponDiscount);
+    expect(checkoutPrice.couponDiscount).toBe(cartPrice.couponDiscount);
+    this.expectNoPaidFromFunds(checkoutPrice);
+    return checkoutPrice;
+  }
+
+  /** TC_SHOP_015 only — EMI billing when coupon is on address step but payable is still down payment. */
+  async confirmEmiBillingAfterCoupon(expectedGrandTotal: number): Promise<ShopBillingAddressDetails> {
+    const checkoutPrice = await this.getEmiCheckoutPriceDetailsWithCoupon();
+    shopLogActualExpected('Checkout grand total before billing', checkoutPrice.grandTotal, expectedGrandTotal);
+    expect(checkoutPrice.grandTotal).toBe(expectedGrandTotal);
+    const billingAddress = await this.getBillingAddress();
+    expect(billingAddress.address).toBeTruthy();
+    expect(billingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return billingAddress;
+  }
+
+  /** TC_SHOP_015 only — EMI order summary after OTP: coupon + savings → Pay ₹0. */
+  async validateEmiCouponSavingsZeroPayOrderSummaryAndPay(): Promise<void> {
+    await this.waitForOrderSummary();
+    let paidFromFunds = 0;
+    await expect
+      .poll(async () => {
+        const emiSummary = await this.getEmiSummaryPriceDetails();
+        shopLogGet('Order summary price (EMI coupon + savings)', emiSummary);
+        paidFromFunds = emiSummary.paidFromFunds;
+        return emiSummary.grandTotal;
+      }, { timeout: 25_000, intervals: [400, 800, 1500] })
+      .toBe(0);
+    this.expectNoPaidFromFunds({ paidFromFunds });
+    shopLogActualExpected('Summary grand total', 0, 0);
+    await expect(this.payButton).toContainText('₹0');
+    await this.clickPay();
+  }
+
+  /** TC_SHOP_014 — billing + delivery after coupon price validation. */
+  async confirmBillingAfterCoupon(
+    cartPrice: ShopCartPriceDetailsWithCoupon,
+  ): Promise<ShopBillingAddressDetails> {
+    const checkoutPrice = await this.getPriceDetailsWithCoupon();
+    shopLogActualExpected('Checkout grand total before billing', checkoutPrice.grandTotal, cartPrice.grandTotal);
+    expect(checkoutPrice.grandTotal).toBe(cartPrice.grandTotal);
+    const billingAddress = await this.getBillingAddress();
+    expect(billingAddress.address).toBeTruthy();
+    expect(billingAddress.pincode).toMatch(/^\d{6}$/);
+    await this.confirmBillingAndDelivery();
+    return billingAddress;
+  }
+
+  /** TC_SHOP_014 — coupon-only flow; no wallet funds used. */
+  expectNoPaidFromFunds(price: { paidFromFunds: number }): void {
+    shopLogActualExpected('Paid from funds', price.paidFromFunds, 0);
+    expect(price.paidFromFunds).toBe(0);
+  }
+
+  /** TC_SHOP_014 — order summary Pay ₹0 (no netbanking). */
+  async validateZeroPayOrderSummaryAndPay(
+    cartPrice: ShopCartPriceDetailsWithCoupon,
+  ): Promise<void> {
+    await this.waitForOrderSummary();
+    const checkoutPrice = await this.getPriceDetailsWithCoupon();
+    shopLogGet('Order summary price (coupon)', checkoutPrice);
+    this.expectNoPaidFromFunds(checkoutPrice);
+    shopLogActualExpected('Summary grand total', checkoutPrice.grandTotal, cartPrice.grandTotal);
+    expect(checkoutPrice.grandTotal).toBe(0);
+    await expect(this.payButton).toContainText('₹0');
+    await this.clickPay();
   }
 
   /** Reads the billing card you select (default: first card with green tick, else first saved). */
@@ -696,6 +841,72 @@ export class ShopCheckoutPage extends BasePage {
     expect(emiSummary.grandTotal).toBe(params.combinedGrandTotal);
   }
 
+  /** TC_SHOP_013 — EMI billing address step (savings applied on order summary after OTP, not here). */
+  async validateEmiBillingWithFullSavingsAndConfirm(params: {
+    emiPlanDetails: ShopEmiDetails;
+    emiInitialPayment: number;
+    expectedEmiPerMonth: number;
+  }): Promise<ShopBillingAddressDetails> {
+    return this.validateEmiCheckoutBilling({
+      emiPlanDetails: params.emiPlanDetails,
+      emiInitialPayment: params.emiInitialPayment,
+      expectedEmiPerMonth: params.expectedEmiPerMonth,
+    });
+  }
+
+  /** TC_SHOP_013 — poll EMI order summary until full savings shows ₹0 payable. */
+  async waitForEmiSummaryWithFullSavings(
+    cartSavingsAmount: number,
+    timeoutMs = 25_000,
+  ): Promise<ShopEmiSummaryPriceDetails> {
+    let summary: ShopEmiSummaryPriceDetails | undefined;
+    await expect
+      .poll(
+        async () => {
+          summary = await this.getEmiSummaryPriceDetails();
+          return summary.grandTotal === 0 ? summary.savings : 0;
+        },
+        { timeout: timeoutMs, intervals: [400, 800, 1500] })
+      .toBe(cartSavingsAmount);
+    return summary!;
+  }
+
+  /** TC_SHOP_013 — EMI order summary after OTP; Pay ₹0 via full User Savings. */
+  async validateEmiFullSavingsOrderSummaryAndPay(params: {
+    productName: string;
+    emiLinePrice: number;
+    emiInitialPayment: number;
+    emiPlanDetails: ShopEmiDetails;
+    expectedEmiPerMonth: number;
+    savedBillingAddress: ShopBillingAddressDetails;
+    cartSavingsAmount: number;
+  }): Promise<ShopEmiOrderSummarySnapshot> {
+    await this.waitForOrderSummary();
+    const orderItem = await this.getOrderItemDetails(params.productName);
+    const emiSummary = await this.waitForEmiSummaryWithFullSavings(params.cartSavingsAmount);
+    const deliveryAddress = await this.getDeliveryAddress();
+    const billingAddress = await this.getBilledToAddress();
+
+    shopLogGet('Order summary item (EMI full savings)', orderItem);
+    shopLogGet('EMI summary (full savings)', emiSummary);
+    expect(orderItem.productName).toContain(params.productName);
+    expect(orderItem.itemPrice).toBe(params.emiLinePrice);
+    expect(emiSummary.downPayment).toBe(params.emiInitialPayment);
+    expect(emiSummary.savings).toBe(params.cartSavingsAmount);
+    expect(emiSummary.grandTotal).toBe(0);
+    expect(emiSummary.paidFromFunds).toBe(0);
+    expect(emiSummary.emiScheme).toBe(params.emiPlanDetails.emiScheme);
+    expect(emiSummary.emiPerMonth).toBe(params.expectedEmiPerMonth);
+    shopLogActualExpected('Summary remaining payable (zero)', emiSummary.grandTotal, 0);
+    this.assertOrderSummaryAddressesMatchBilling(
+      deliveryAddress,
+      billingAddress,
+      params.savedBillingAddress,
+    );
+    await this.clickPay();
+    return { orderItem, emiSummary, deliveryAddress, billingAddress };
+  }
+
   /** TC_SHOP_004 — checkout with full savings applied; confirm billing + delivery. */
   async validateBillingWithFullSavingsAndConfirm(
     cartSavingsAmount: number): Promise<ShopBillingAddressDetails> {
@@ -727,6 +938,206 @@ export class ShopCheckoutPage extends BasePage {
     expect(orderItem.itemPrice).toBe(params.productDetails.grandTotal);
     expect(checkoutPrice.grandTotal).toBe(0);
     await this.clickPay();
+  }
+
+  /** TC_SHOP_016 — coupon + savings on checkout address step before Razorpay. */
+  async getPriceDetailsWithCouponAndSavings(): Promise<ShopCheckoutPriceDetailsWithCouponAndSavings> {
+    const section = await this.priceSection();
+    await section.getByText('Savings', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+    const metalPrice = await this.priceRow('Metal Price', section);
+    const makingAndDeliveryCharges = await this.priceRow('Making & Delivery Charges', section);
+    const savings = await this.priceRow('Savings', section);
+    const paidFromFunds = await this.optionalPriceRow(section, 'Paid From Funds');
+    const tax = await this.priceRow('Tax', section);
+    const grandTotal = await this.priceRow('Grand Total', section);
+    const couponDiscount = await this.readCouponDiscount(section);
+    const totalSum = Number((metalPrice + makingAndDeliveryCharges + tax).toFixed(2));
+    return {
+      metalPrice,
+      makingAndDeliveryCharges,
+      savings,
+      paidFromFunds,
+      tax,
+      grandTotal,
+      couponDiscount,
+      totalSum,
+    };
+  }
+
+  /** TC_SHOP_016 — poll until checkout shows savings and coupon discount. */
+  async waitForCheckoutPriceWithCouponAndSavings(
+    expectedCouponAmount: number,
+    timeoutMs = 25_000,
+  ): Promise<ShopCheckoutPriceDetailsWithCouponAndSavings> {
+    let price: ShopCheckoutPriceDetailsWithCouponAndSavings | undefined;
+    await expect
+      .poll(
+        async () => {
+          try {
+            price = await this.getPriceDetailsWithCouponAndSavings();
+            return price.savings > 0 && price.couponDiscount === expectedCouponAmount ? 1 : 0;
+          } catch {
+            return 0;
+          }
+        },
+        { timeout: timeoutMs, intervals: [400, 800, 1500] },
+      )
+      .toBe(1);
+    return price!;
+  }
+
+  /** TC_SHOP_016 — partial savings + ₹100 coupon checkout; Razorpay remainder required. */
+  async validatePartialSavingsCouponCheckout(params: {
+    productDetails: ShopProductDetails;
+    couponAmount: number;
+  }): Promise<{ cartSavingsAmount: number; summaryPayableSum: number }> {
+    await this.waitForCheckoutPage();
+    const checkoutPrice = await this.waitForCheckoutPriceWithCouponAndSavings(params.couponAmount);
+    const summaryPayableSum = this.calculateCheckoutGrandTotalWithCouponAndSavings(checkoutPrice);
+    shopLogGet('Checkout price (partial savings + coupon)', checkoutPrice);
+    shopLogActualExpected('Coupon discount', checkoutPrice.couponDiscount, params.couponAmount);
+    shopLogActualExpected('Savings applied', checkoutPrice.savings, '> 0');
+    shopLogActualExpected('Razorpay remainder', summaryPayableSum, '> 0');
+    expect(checkoutPrice.couponDiscount).toBe(params.couponAmount);
+    this.assertPartialSavingsCouponAndNetbankingRequired(
+      checkoutPrice.savings,
+      checkoutPrice.couponDiscount,
+      summaryPayableSum,
+      params.productDetails.grandTotal,
+      'Partial savings + coupon checkout',
+    );
+    return { cartSavingsAmount: checkoutPrice.savings, summaryPayableSum };
+  }
+
+  /** TC_SHOP_016 — order summary with partial savings + coupon before Razorpay. */
+  async validatePartialSavingsCouponOrderSummary(params: {
+    productDetails: ShopProductDetails;
+    cartSavingsAmount: number;
+    couponAmount: number;
+  }): Promise<number> {
+    await this.waitForOrderSummary();
+    const checkoutPrice = await this.getPriceDetailsWithCouponAndSavings();
+    const summaryPayableSum = this.expectCheckoutGrandTotalWithCouponAndSavings(
+      checkoutPrice,
+      params.cartSavingsAmount,
+      params.couponAmount,
+    );
+    shopLogActualExpected('Summary Razorpay payable', summaryPayableSum, summaryPayableSum);
+    this.assertPartialSavingsCouponAndNetbankingRequired(
+      params.cartSavingsAmount,
+      params.couponAmount,
+      summaryPayableSum,
+      params.productDetails.grandTotal,
+      'Partial savings + coupon summary',
+    );
+    expect(summaryPayableSum).toBeGreaterThan(0);
+    return summaryPayableSum;
+  }
+
+  /** TC_SHOP_017 — mixed EMI address step: coupon + EMI rows (savings finalize on summary after OTP). */
+  async validateMixedEmiCouponCheckoutAddressStep(params: {
+    couponAmount: number;
+    emiPlanDetails: ShopEmiDetails;
+    emiInitialPayment: number;
+    expectedEmiPerMonth: number;
+  }): Promise<void> {
+    await this.waitForCheckoutPage();
+    await this.emiPriceDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
+
+    let couponDiscount = 0;
+    await expect
+      .poll(async () => {
+        couponDiscount = await this.readCouponDiscount(this.emiPriceDetailsPanel);
+        return couponDiscount === params.couponAmount ? 1 : 0;
+      }, { timeout: 25_000, intervals: [400, 800, 1500] })
+      .toBe(1);
+
+    const initialPayment = await this.emiPriceRow('Initial Payment');
+    const emiScheme = await this.emiPriceRowText('EMI Scheme');
+    const emiPerMonth = await this.emiPriceRow('EMI Amount per month');
+    shopLogActualExpected('Coupon discount', couponDiscount, params.couponAmount);
+    shopLogActualExpected('EMI initial payment', initialPayment, params.emiInitialPayment);
+    shopLogActualExpected('EMI scheme', emiScheme, params.emiPlanDetails.emiScheme);
+    shopLogActualExpected('EMI per month', emiPerMonth, params.expectedEmiPerMonth);
+    expect(couponDiscount).toBe(params.couponAmount);
+    expect(initialPayment).toBe(params.emiInitialPayment);
+    expect(emiScheme).toBe(params.emiPlanDetails.emiScheme);
+    expect(emiPerMonth).toBe(params.expectedEmiPerMonth);
+  }
+
+  /** TC_SHOP_017 — poll EMI summary until partial savings + coupon reduce payable below combined total. */
+  async waitForMixedEmiSummaryWithPartialSavings(
+    combinedGrandTotal: number,
+    couponAmount: number,
+    timeoutMs = 25_000,
+  ): Promise<ShopEmiSummaryPriceDetails> {
+    let summary: ShopEmiSummaryPriceDetails | undefined;
+    await expect
+      .poll(
+        async () => {
+          summary = await this.getEmiSummaryPriceDetails();
+          if (summary.savings <= 0) {
+            return 0;
+          }
+          const payable = summary.grandTotal;
+          return payable > 0 && payable < combinedGrandTotal - couponAmount ? payable : 0;
+        },
+        { timeout: timeoutMs, intervals: [400, 800, 1500] },
+      )
+      .toBeGreaterThan(0);
+    return summary!;
+  }
+
+  /** TC_SHOP_017 — mixed EMI + Buy Now checkout with partial savings + coupon. */
+  async validateMixedPartialSavingsCouponCheckout(params: {
+    combinedGrandTotal: number;
+    couponAmount: number;
+    emiPlanDetails: ShopEmiDetails;
+    emiInitialPayment: number;
+    expectedEmiPerMonth: number;
+  }): Promise<void> {
+    await this.validateMixedEmiCouponCheckoutAddressStep({
+      couponAmount: params.couponAmount,
+      emiPlanDetails: params.emiPlanDetails,
+      emiInitialPayment: params.emiInitialPayment,
+      expectedEmiPerMonth: params.expectedEmiPerMonth,
+    });
+  }
+
+  /** TC_SHOP_017 — mixed cart order summary after OTP with partial savings + coupon. */
+  async validateMixedPartialSavingsCouponOrderSummary(params: {
+    productNames: string[];
+    productLinePrices: Record<string, number>;
+    emiInitialPayment: number;
+    combinedGrandTotal: number;
+    couponAmount: number;
+  }): Promise<number> {
+    await this.waitForOrderSummary();
+    for (const name of params.productNames) {
+      const orderItem = await this.getOrderItemDetails(name);
+      shopLogActualExpected(`${name} summary line price`, orderItem.itemPrice, params.productLinePrices[name]);
+      expect(orderItem.itemPrice).toBe(params.productLinePrices[name]);
+    }
+    const emiSummary = await this.waitForMixedEmiSummaryWithPartialSavings(
+      params.combinedGrandTotal,
+      params.couponAmount,
+    );
+    const summaryPayableSum = emiSummary.grandTotal;
+    shopLogGet('EMI summary (mixed coupon + savings)', emiSummary);
+    shopLogActualExpected('Down payment', emiSummary.downPayment, params.emiInitialPayment);
+    shopLogActualExpected('Savings applied', emiSummary.savings, '> 0');
+    shopLogActualExpected('Summary Razorpay payable', summaryPayableSum, summaryPayableSum);
+    expect(emiSummary.downPayment).toBe(params.emiInitialPayment);
+    expect(emiSummary.savings).toBeGreaterThan(0);
+    this.assertPartialSavingsCouponAndNetbankingRequired(
+      emiSummary.savings,
+      params.couponAmount,
+      summaryPayableSum,
+      params.combinedGrandTotal,
+      'Mixed partial savings + coupon summary',
+    );
+    expect(summaryPayableSum).toBeGreaterThan(0);
+    return summaryPayableSum;
   }
 
   /** TC_SHOP_012 — partial savings checkout after Use Saving on cart. */
@@ -778,6 +1189,25 @@ export class ShopCheckoutPage extends BasePage {
         price.savings -
         price.paidFromFunds
       ).toFixed(2));
+  }
+
+  private calculateCheckoutGrandTotalWithCouponAndSavings(
+    price: ShopCheckoutPriceDetailsWithCouponAndSavings,
+  ): number {
+    return Number((price.totalSum - price.couponDiscount - price.savings - price.paidFromFunds).toFixed(2));
+  }
+
+  private expectCheckoutGrandTotalWithCouponAndSavings(
+    price: ShopCheckoutPriceDetailsWithCouponAndSavings,
+    cartSavingsAmount: number,
+    couponAmount: number,
+  ): number {
+    const calculated = this.calculateCheckoutGrandTotalWithCouponAndSavings(price);
+    expect(price.savings).toBe(cartSavingsAmount);
+    expect(price.couponDiscount).toBe(couponAmount);
+    expect(price.paidFromFunds).toBe(0);
+    expect(calculated).toBeCloseTo(price.grandTotal, 2);
+    return calculated;
   }
 
   private expectCheckoutGrandTotalWithSavings(
@@ -937,6 +1367,16 @@ export class ShopCheckoutPage extends BasePage {
     return Math.abs(this.parseAmount(value));
   }
 
+  private async readCouponDiscount(section: Locator): Promise<number> {
+    for (const label of ['Coupon Discount', 'Coupon Benefit', 'Coupon', 'Discount']) {
+      const labelCell = section.getByText(label, { exact: true });
+      if (await labelCell.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        return this.optionalPriceRow(section, label);
+      }
+    }
+    return 0;
+  }
+
   private async optionalPriceRow(section: Locator, label: string): Promise<number> {
     const labelCell = section.getByText(label, { exact: true });
     if (!(await labelCell.isVisible({ timeout: 2_000 }).catch(() => false))) {
@@ -955,6 +1395,40 @@ export class ShopCheckoutPage extends BasePage {
       }
     }
     throw new Error(`Price row not found in checkout: ${labels.join(' | ')}`);
+  }
+
+  /** TC_SHOP_015 only — EMI address-step price panel with coupon discount. */
+  private async getEmiCheckoutPriceDetailsWithCoupon(): Promise<ShopCheckoutPriceDetailsWithCoupon> {
+    await this.emiPriceDetailsPanel.waitFor({ state: 'visible', timeout: 10_000 });
+    const section = this.emiPriceDetailsPanel;
+    const metalPrice = await this.emiPriceRow('Metal Price');
+    const makingAndDeliveryCharges = await this.emiPriceRow('Making & Delivery Charges');
+    const tax = await this.emiPriceRowEither('Tax', 'TAX');
+    const grandTotal = await this.emiPriceRow('Grand Total');
+    const couponDiscount = await this.readCouponDiscount(section);
+    const initialPayment = await this.optionalEmiPriceRow('Initial Payment');
+    const totalSum =
+      initialPayment > 0
+        ? initialPayment
+        : Number((metalPrice + makingAndDeliveryCharges + tax).toFixed(2));
+    return {
+      metalPrice,
+      makingAndDeliveryCharges,
+      tax,
+      paidFromFunds: 0,
+      grandTotal,
+      couponDiscount,
+      totalSum,
+    };
+  }
+
+  private async optionalEmiPriceRow(label: string): Promise<number> {
+    const labelCell = this.emiPriceDetailsPanel.getByText(label, { exact: true });
+    if (!(await labelCell.isVisible({ timeout: 2_000 }).catch(() => false))) {
+      return 0;
+    }
+    return Math.abs(
+      this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]'))));
   }
 
   private async emiPriceRow(label: string): Promise<number> {
@@ -1003,6 +1477,31 @@ export class ShopCheckoutPage extends BasePage {
 
   private async text(locator: Locator): Promise<string> {
     return ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+  }
+
+  /** TC_SHOP_016 — savings + coupon must not zero out payable; Razorpay amount required. */
+  private assertPartialSavingsCouponAndNetbankingRequired(
+    savings: number,
+    couponDiscount: number,
+    payable: number,
+    productGrandTotal: number,
+    stepLabel: string,
+  ): void {
+    if (payable <= 0) {
+      throw new Error(
+        `[TC_SHOP_016] ${stepLabel}: Payable after savings and coupon is ₹${payable}. ` +
+          'Razorpay remainder must be greater than zero.',
+      );
+    }
+    if (productGrandTotal <= savings + couponDiscount) {
+      throw new Error(
+        `[TC_SHOP_016] ${stepLabel}: Product price (₹${productGrandTotal}) must exceed ` +
+          `User Savings (₹${savings}) + coupon (₹${couponDiscount}).`,
+      );
+    }
+    expect(savings, 'TC_SHOP_016 requires User Savings on account').toBeGreaterThan(0);
+    expect(couponDiscount, 'TC_SHOP_016 requires coupon discount').toBeGreaterThan(0);
+    expect(payable, 'TC_SHOP_016 requires Razorpay remainder after savings + coupon').toBeGreaterThan(0);
   }
 
   /** TC_SHOP_012 / AT-1647 — fail fast when savings cover the full order (no Netbanking remainder). */

@@ -4,19 +4,19 @@ import { expect, type Page } from '@playwright/test';
 import { storageStatePath } from '../../../config/constants';
 import { getTargetEnv } from '../../../config/environments';
 import { panelCreds } from '../../../config/urls';
+import type { CustomerLoginPage } from '../../../pages/customer/login.page';
 import type { ShopCheckoutPriceDetailsWithSavings } from '../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../pages/customer/my-order-verification.page';
 
 // ---------------------------------------------------------------------------
-// Alt customer credentials (buy-metal TC005, etc.) — not used by TC_SHOP_004 (main panel user)
-// Override mobile: TC005_CUSTOMER_USER_MOBILE or ALT_CUSTOMER_MOBILE
+// Alt customer — partial savings, buy-metal TC005, shop TC016, etc.
+// Override: ALT_CUSTOMER_MOBILE in .env
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_ALT_CUSTOMER_MOBILE = '8141122222';
+export const DEFAULT_ALT_CUSTOMER_MOBILE = '8141100000';
 
 export function resolveAltCustomerMobile(): string {
-  const fromEnv =
-    process.env.ALT_CUSTOMER_MOBILE?.trim() || process.env.TC005_CUSTOMER_USER_MOBILE?.trim();
+  const fromEnv = process.env.ALT_CUSTOMER_MOBILE?.trim();
   return fromEnv || DEFAULT_ALT_CUSTOMER_MOBILE;
 }
 
@@ -92,9 +92,8 @@ export async function waitAndRetryIfKycRedirect(page: Page, targetPath: string):
   return page.url();
 }
 
-/** Clear cookies + web storage so a fresh OTP login can replace project storageState. */
-export async function clearCustomerBrowserStorage(page: Page): Promise<void> {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
+/** Wipe cookies and web storage without assuming the current route. */
+export async function clearCustomerSessionState(page: Page): Promise<void> {
   await page.evaluate(() => {
     try {
       localStorage.clear();
@@ -104,12 +103,38 @@ export async function clearCustomerBrowserStorage(page: Page): Promise<void> {
     }
   });
   await page.context().clearCookies();
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page
-    .locator("input[placeholder*='Mobile'], input[placeholder*='Phone'], input[name*='mobile' i], input[type='tel']")
-    .first()
-    .waitFor({ state: 'visible', timeout: 8_000 })
-    .catch(() => {});
+}
+
+/** Clear cookies + web storage so a fresh OTP login can replace project storageState. */
+export async function clearCustomerBrowserStorage(page: Page): Promise<void> {
+  await clearCustomerSessionState(page);
+  await waitForCustomerLoginPage(page);
+}
+
+export async function waitForCustomerLoginPage(page: Page): Promise<void> {
+  const mobileInput = page
+    .locator('#mobileNumber')
+    .or(page.locator("input[placeholder*='Mobile'], input[placeholder*='Phone'], input[type='tel']").first());
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.goto('/login', { waitUntil: 'domcontentloaded' });
+
+    if (await mobileInput.isVisible().catch(() => false)) {
+      return;
+    }
+
+    if (!/\/login/i.test(page.url())) {
+      await clearCustomerSessionState(page);
+      continue;
+    }
+
+    await mobileInput.waitFor({ state: 'visible', timeout: 15_000 });
+    return;
+  }
+
+  throw new Error(
+    `Customer login form did not appear after clearing browser storage. Last URL: ${page.url()}`,
+  );
 }
 
 /**
@@ -122,6 +147,28 @@ export async function persistCustomerStorageState(page: Page): Promise<void> {
   fs.mkdirSync(path.dirname(storagePath), { recursive: true });
   await page.context().storageState({ path: storagePath });
   console.log(`[customer session] Persisted storage state to ${storagePath}`);
+}
+
+/** Re-login as the default customer and persist storage for following tests. */
+export async function restoreDefaultCustomerSession(
+  page: Page,
+  customerLogin: CustomerLoginPage,
+  logLabel = 'restoreDefaultCustomerSession',
+): Promise<void> {
+  const { mobile: defaultMobile, otp } = panelCreds('customer', getTargetEnv());
+  const altMobile = resolveAltCustomerMobile();
+
+  if (defaultMobile === altMobile) {
+    console.log(`[${logLabel}] Alt user matches default (${defaultMobile}); skipping re-login.`);
+    await persistCustomerStorageState(page);
+    return;
+  }
+
+  console.log(`[${logLabel}] Switching from alt ${altMobile} to default ${defaultMobile}.`);
+  await clearCustomerSessionState(page);
+  await customerLogin.login(defaultMobile, otp);
+  await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+  await persistCustomerStorageState(page);
 }
 
 // ---------------------------------------------------------------------------

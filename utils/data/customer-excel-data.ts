@@ -382,7 +382,7 @@ export interface ShopEmiJourneyDataset {
 }
 
 export function getShopEmiJourneyDataset(
-  testCaseKey: '007' | '009',
+  testCaseKey: '007' | '009' | '013',
   defaults: ShopEmiJourneyDataset,
 ): ShopEmiJourneyDataset {
   const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
@@ -429,4 +429,28 @@ export function getShopTc011Dataset(): ShopTc011Dataset {
   return {
     productName: normalizeCell(firstRow.ShopTc011ProductName) || SHOP_TC011_DEFAULT_PRODUCT,
   };
+}
+
+const SHOP_TC014_DEFAULT_PRODUCT = 'Bharrat B 10 gram Silver Coin';
+
+export interface ShopTc014Dataset {
+  /** Silver jewellery product (`ShopTc014ProductName` on `shop` sheet). */
+  productName: string;
+}
+
+/** TC_SHOP_014 — product from `shop` sheet (`ShopTc014ProductName`). */
+export function getShopTc014Dataset(): ShopTc014Dataset {
+  const [firstRow] = readSheetRows<Record<string, unknown>>('shop', CUSTOMER_DATA_WORKBOOK);
+  if (!firstRow) {
+    throw new Error(`No rows found in sheet "shop" inside ${CUSTOMER_DATA_WORKBOOK}`);
+  }
+
+  return {
+    productName: normalizeCell(firstRow.ShopTc014ProductName) || SHOP_TC014_DEFAULT_PRODUCT,
+  };
+}
+
+/** Persist TC_SHOP_014 product on the `shop` sheet (`ShopTc014ProductName`, first data row). */
+export function saveShopTc014ProductName(productName: string): void {
+  updateFirstDataRowCellByHeader('shop', 'ShopTc014ProductName', normalizeCell(productName));
 }

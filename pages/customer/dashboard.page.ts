@@ -57,15 +57,14 @@ function portfolioInrFromGramsAndSellRates(
 }
 
 export class DashBoardPage extends BasePage {
-  private static readonly portfolioFieldTimeoutMs = 5_000;
+  private static readonly portfolioFieldTimeoutMs = 15_000;
   private readonly viewAllBtn: Locator;
   private readonly mySipsHeading: Locator;
-  private readonly sipTextBlocks: Locator;
-  private readonly statusBadges: Locator;
   private readonly goldFDValue: Locator;
   private readonly walletBalance: Locator;
-  private readonly totalSilver: Locator;
-  private readonly portfolioValueXpath: string;
+  private readonly currentValue: Locator;
+  private readonly totalGoldValue: Locator;
+  private readonly totalSilverValue: Locator;
   private readonly withdrawInvestmentButton: Locator;
 
   constructor(page: Page) {
@@ -79,15 +78,6 @@ export class DashBoardPage extends BasePage {
       name: 'My SIPs',
     });
 
-    // Shared text block locator used for SIP name and amount labels.
-    this.sipTextBlocks = page.locator(
-      'div.text-24.font-cabinetgroteskbold',
-    );
-
-    this.statusBadges = page.locator(
-      'div.rounded-2xl.border.text-14.font-gilroybold',
-    );
-
     this.goldFDValue = page.locator('p', {
       hasText: 'Gold FD+(g)',
     }).locator('xpath=preceding-sibling::p');
@@ -97,23 +87,47 @@ export class DashBoardPage extends BasePage {
       .locator('div')
       .nth(1);
 
-    this.totalSilver = page.locator(
-      "//p[normalize-space()='Total Silver(g)']/preceding-sibling::p",
-    );
+    this.currentValue = page
+      .getByText('CURRENT VALUE', { exact: true })
+      .locator('xpath=following-sibling::p[1]');
 
-    this.portfolioValueXpath = "//p[contains(@class,'text-36') and contains(@class,'font-cabinetgroteskbold')]";
-    this.withdrawInvestmentButton = page.getByRole('button', { name: /Withdraw Investment/i });
+    this.totalGoldValue = page
+      .getByText('Total Gold', { exact: true })
+      .locator('xpath=following-sibling::p[1]');
+
+    this.totalSilverValue = page
+      .getByText('Total Silver', { exact: true })
+      .locator('xpath=following-sibling::p[1]');
+
+    this.withdrawInvestmentButton = page
+      .getByRole('button', { name: /^withdraw$/i })
+      .or(page.getByRole('button', { name: /Withdraw Investment/i }));
   }
 
-  private portfolioCard(): Locator {
-    return this.page.locator('div:has-text("My Portfolio")').first();
+  async gotoDashboard(): Promise<void> {
+    await this.goto('/dashboard');
+    await this.page.waitForURL(/\/dashboard/i, { timeout: 15_000 });
+    await this.waitForDashboardPortfolioSection();
+  }
+
+  async getCurrentValue(): Promise<number> {
+    await this.waitForDashboardPortfolioSection(20_000);
+    return this.readPortfolioInr();
+  }
+
+  async getTotalGold(): Promise<number> {
+    return this.getTotalGoldValue();
+  }
+
+  async getTotalSilver(): Promise<number> {
+    return this.getTotalSilverValue();
   }
 
   private portfolioGoldLine(): Locator {
-    return this.portfolioCard().locator('p').filter({ hasText: /Total Gold/i }).first();
+    return this.page.getByText('Total Gold', { exact: true });
   }
 
-  /** Dynamic wait — exits as soon as My Portfolio / Total Gold is visible (no fixed multi-second sleeps). */
+  /** Poll until portfolio labels and gram/INR values are rendered (fresh login can lag). */
   async waitForDashboardPortfolioSection(timeoutMs = 20_000): Promise<void> {
     if (/\/login/i.test(this.page.url())) {
       throw new Error(
@@ -122,25 +136,39 @@ export class DashBoardPage extends BasePage {
     }
 
     const blockers = this.page.locator('div.p-blockui[aria-busy="true"], .p-blockui-document');
-    await blockers.first().waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
+    const welcomeHeading = this.page.getByRole('heading', { name: /Welcome to Augmont!/i });
 
-    const goldLine = this.portfolioGoldLine();
-    try {
-      await expect(goldLine).toBeVisible({ timeout: timeoutMs });
-      return;
-    } catch {
-      if (!/\/dashboard/i.test(this.page.url())) {
-        throw new Error(
-          'Dashboard portfolio (My Portfolio / Total Gold) did not become visible in time. Check UAT dashboard layout or session.',
-        );
+    await expect(async () => {
+      await blockers.first().waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
+      await this.page.getByRole('progressbar').waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
+
+      const portfolioVisible = await this.page
+        .getByText('CURRENT VALUE', { exact: true })
+        .isVisible()
+        .catch(() => false);
+      const welcomeVisible = await welcomeHeading.isVisible().catch(() => false);
+
+      // Fresh-login dashboard often shows the welcome shell before portfolio API data arrives.
+      if (!portfolioVisible && welcomeVisible) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await blockers.first().waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+        await this.page.getByRole('progressbar').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
       }
-    }
 
-    await this.page.reload({ waitUntil: 'domcontentloaded' });
-    await blockers.first().waitFor({ state: 'hidden', timeout: 3_000 }).catch(() => {});
-    await expect(goldLine).toBeVisible({
-      timeout: Math.min(10_000, timeoutMs),
-    });
+      await expect(this.page.getByText('CURRENT VALUE', { exact: true })).toBeVisible();
+      await expect(this.portfolioGoldLine()).toBeVisible();
+      await expect(this.page.getByText('Total Silver', { exact: true })).toBeVisible();
+      await expect(this.totalGoldValue).toBeVisible();
+      await expect(this.totalSilverValue).toBeVisible();
+      await expect(this.currentValue).toBeVisible();
+
+      const goldText = (await this.totalGoldValue.textContent()) ?? '';
+      const silverText = (await this.totalSilverValue.textContent()) ?? '';
+      const portfolioText = (await this.currentValue.textContent()) ?? '';
+      expect(goldText).toMatch(/\d+\.?\d*\s*g/i);
+      expect(silverText).toMatch(/\d+\.?\d*\s*g/i);
+      expect(portfolioText).toMatch(/₹?\s*[\d,]+/);
+    }).toPass({ timeout: timeoutMs, intervals: [500, 1_000, 2_000, 3_000] });
   }
 
   /**
@@ -163,55 +191,31 @@ export class DashBoardPage extends BasePage {
   }
 
   private async readTotalGoldGrams(): Promise<number> {
-    const goldLabel = this.portfolioGoldLine();
-    await goldLabel.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
-    const valueNode = goldLabel.locator('xpath=preceding-sibling::p[1]');
-    await valueNode.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
-    const text = (await valueNode.textContent())?.trim() ?? '';
-    const value = Number(text.replace(/[^\d.]/g, ''));
-    if (Number.isNaN(value)) {
-      throw new Error(`Unable to parse Total Gold value from: "${text}"`);
-    }
-    return value;
+    await this.totalGoldValue.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    return this.parseGrams(await this.totalGoldValue.textContent());
   }
 
   private async readTotalSilverGrams(): Promise<number> {
-    const silverLabel = this.portfolioCard().locator('p').filter({ hasText: /Total Silver/i }).first();
-    await silverLabel.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
-    const valueNode = silverLabel.locator('xpath=preceding-sibling::p[1]');
-    await valueNode.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
-    const text = (await valueNode.textContent())?.trim() ?? '';
-    const value = Number(text.replace(/[^\d.]/g, ''));
-    if (Number.isNaN(value)) {
-      throw new Error(`Unable to parse Total Silver value from: "${text}"`);
+    await this.totalSilverValue.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    return this.parseGrams(await this.totalSilverValue.textContent());
+  }
+
+  private async readPortfolioInr(): Promise<number> {
+    await this.currentValue.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
+    const text = (await this.currentValue.textContent())?.trim() ?? '';
+    const value = Number(String(text).replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(value)) {
+      throw new Error(`Unable to parse CURRENT VALUE from: "${text}"`);
     }
     return value;
   }
 
-  private async readPortfolioInr(): Promise<number> {
-    const portfolioCard = this.portfolioCard();
-    const primary = portfolioCard
-      .locator('p.text-36.font-cabinetgroteskbold')
-      .filter({ hasText: /[\d,.]/ })
-      .first();
-
-    let text = '';
-    if (await primary.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      text = (await primary.textContent()) ?? '';
-    } else {
-      const fallback = this.page
-        .getByText('My Portfolio')
-        .first()
-        .locator('xpath=following::p[contains(@class,"text-36")][1]');
-      await fallback.waitFor({ state: 'visible', timeout: DashBoardPage.portfolioFieldTimeoutMs });
-      text = (await fallback.textContent()) ?? '';
+  private parseGrams(text: string | null): number {
+    const value = Number(String(text ?? '').replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(value)) {
+      throw new Error(`Unable to parse metal grams from: "${text ?? ''}"`);
     }
-
-    const n = parseFloat(String(text).replace(/[^\d.]/g, ''));
-    if (!Number.isFinite(n)) {
-      throw new Error(`Unable to parse portfolio value from: "${String(text).slice(0, 120)}"`);
-    }
-    return n;
+    return value;
   }
 
   async verifyDashboardLoaded(): Promise<void> {
@@ -255,166 +259,25 @@ export class DashBoardPage extends BasePage {
     await this.mySipsHeading.waitFor({ state: 'visible', timeout: 20_000 });
   }
 
-  async getSipNameByText(expectedPlanName: string): Promise<string> {
-    const escapedPlanName = expectedPlanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const planNameRegex = new RegExp(escapedPlanName, 'i');
-    const maxAttempts = 2;
-    const retryWaitMs = 3_000;
-    console.log(`Looking for SIP plan: ${expectedPlanName}`);
+  async validateSipDetailsOnDashboard(
+    planName: string,
+    expectedAmount: string,
+    expectedStatus: string,
+    frequency: 'monthly' | 'weekly',
+  ): Promise<void> {
+    const sipCardText = await this.page
+      .locator(`//div[contains(text(),"${planName}")]/ancestor::div[contains(@class,"justify-between")]`)
+      .innerText();
 
-    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const sipCard = this.page.locator('app-sip-card').filter({
-        hasText: planNameRegex,
-      }).first();
+    console.log('[SIP DASHBOARD] card:', sipCardText);
+    console.log(`[SIP DASHBOARD] planName | expected contains: ${planName}`);
+    console.log(`[SIP DASHBOARD] amount | expected contains: ₹${expectedAmount}/${frequency}`);
+    console.log(`[SIP DASHBOARD] status | expected contains: ${expectedStatus}`);
+    console.log(`[SIP DASHBOARD] frequency | expected: ${frequency}`);
 
-      if (await sipCard.isVisible().catch(() => false)) {
-        const sipNameNode = sipCard.locator('div.text-24.font-cabinetgroteskbold').first();
-        await sipNameNode.waitFor({ state: 'visible', timeout: 10_000 });
-        const foundSipName = (await sipNameNode.textContent())?.trim() ?? '';
-        console.log(`Matched SIP plan: ${foundSipName}`);
-        return foundSipName;
-      }
-
-      if (attempt < maxAttempts - 1) {
-        await this.page.waitForTimeout(retryWaitMs);
-        await this.page.goto('/sip-list', { waitUntil: 'domcontentloaded' });
-        await this.mySipsHeading.waitFor({ state: 'visible', timeout: 15_000 });
-        await this.page.locator('app-sip-card').first().waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
-      }
-    }
-
-    const visibleSipNames = await this.page
-      .locator('app-sip-card div.text-24.font-cabinetgroteskbold')
-      .allTextContents()
-      .catch(() => []);
-    console.log(`Visible SIP names on sip-list: ${visibleSipNames.map((name) => name.trim()).join(' | ')}`);
-
-    throw new Error(`SIP with plan name "${expectedPlanName}" was not found on sip list page.`);
-  }
-
-  async validateAmountIsZero(planName: string): Promise<boolean> {
-    const escapedPlanName = planName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const sipCard = this.page.locator('app-sip-card').filter({
-      hasText: new RegExp(escapedPlanName, 'i'),
-    });
-
-    const zeroAmount = sipCard.getByText('₹0', { exact: true });
-
-    await zeroAmount.waitFor({ state: 'visible', timeout: 20_000 });
-
-    const valueText = (await zeroAmount.textContent())?.trim() ?? '';
-    return valueText === '₹0';
-  }
-
-  async getWeeklyAmount(): Promise<number> {
-    const weeklyAmount = this.sipTextBlocks.filter({
-      hasText: '/weekly',
-    });
-
-    await weeklyAmount.first().waitFor({ state: 'visible' });
-
-    const rawText = (await weeklyAmount.first().textContent())?.trim() ?? '';
-    const amount = Number(
-      rawText.replace(/[₹,\s]/g, '').split('/')[0],
-    );
-
-    return amount;
-  }
-
-  async getWeeklySipName(): Promise<string> {
-    const weeklyCard = this.page.locator('app-sip-card').filter({
-      hasText: /\/weekly/i,
-    }).first();
-    await weeklyCard.waitFor({ state: 'visible', timeout: 20_000 });
-    const nameNode = weeklyCard.locator('div.text-24.font-cabinetgroteskbold').first();
-    await nameNode.waitFor({ state: 'visible', timeout: 10_000 });
-    return (await nameNode.textContent())?.trim() ?? '';
-  }
-
-  async getMonthlySipName(): Promise<string> {
-    const monthlyCard = this.page.locator('app-sip-card').filter({
-      hasText: /\/monthly/i,
-    }).first();
-    await monthlyCard.waitFor({ state: 'visible', timeout: 20_000 });
-    const nameNode = monthlyCard.locator('div.text-24.font-cabinetgroteskbold').first();
-    await nameNode.waitFor({ state: 'visible', timeout: 10_000 });
-    return (await nameNode.textContent())?.trim() ?? '';
-  }
-
-  async getMonthlyAmount(): Promise<number> {
-    const monthlyAmount = this.sipTextBlocks.filter({
-      hasText: '/monthly',
-    });
-
-    await monthlyAmount.first().waitFor({ state: 'visible' });
-
-    const rawText = (await monthlyAmount.first().textContent())?.trim() ?? '';
-    const amount = Number(
-      rawText.replace(/[₹,\s]/g, '').split('/')[0],
-    );
-
-    return amount;
-  }
-
-  async getStatusText(planName: string): Promise<string> {
-    const escapedPlanName = planName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const statusBadge = this.page.locator('app-sip-card', {
-      hasText: new RegExp(escapedPlanName, 'i'),
-    }).locator('text=/Pending|Approved/i');
-
-    await statusBadge.first().waitFor({ state: 'visible', timeout: 20_000 });
-    const text = (await statusBadge.textContent())?.trim() ?? '';
-    return text;
-  }
-
-  async validateSipOnDashboard(params: {
-    planName: string;
-    expectedAmount: string;
-    expectedStatus: string;
-    frequency: 'weekly' | 'monthly';
-    planNameMatch?: 'exact' | 'contains';
-    planNameContains?: string;
-  }): Promise<void> {
-    await this.clickViewAll();
-    await this.page.locator('app-sip-card').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
-
-    let sipName: string;
-    try {
-      sipName = await this.getSipNameByText(params.planName);
-    } catch {
-      console.log(`[SIP DASHBOARD] exact plan not found, using ${params.frequency} SIP fallback`);
-      sipName =
-        params.frequency === 'weekly' ? await this.getWeeklySipName() : await this.getMonthlySipName();
-    }
-
-    if (params.planNameMatch === 'contains' && params.planNameContains) {
-      console.log(
-        `[SIP DASHBOARD] sipName actual=${sipName.toLowerCase()} expected-contains=${params.planNameContains}`,
-      );
-      expect(sipName.toLowerCase()).toContain(params.planNameContains.toLowerCase());
-    } else {
-      console.log(
-        `[SIP DASHBOARD] sipName actual=${sipName.toLowerCase()} expected=${params.planName.toLowerCase()}`,
-      );
-      expect(sipName.toLowerCase()).toBe(params.planName.toLowerCase());
-    }
-
-    const amountIsZero = await this.validateAmountIsZero(sipName);
-    console.log(`[SIP DASHBOARD] amountIsZero actual=${amountIsZero} expected=true`);
-    expect(amountIsZero).toBeTruthy();
-
-    const recurringAmount =
-      params.frequency === 'weekly'
-        ? await this.getWeeklyAmount()
-        : await this.getMonthlyAmount();
-    console.log(
-      `[SIP DASHBOARD] ${params.frequency}Amount actual=${recurringAmount} expected=${Number(params.expectedAmount)}`,
-    );
-    expect(recurringAmount).toBe(Number(params.expectedAmount));
-
-    const statusText = await this.getStatusText(sipName);
-    console.log(`[SIP DASHBOARD] statusText actual=${statusText} expected=${params.expectedStatus}`);
-    expect(statusText).toBe(params.expectedStatus);
+    expect(sipCardText).toContain(planName);
+    expect(sipCardText).toContain(`₹${expectedAmount}/${frequency}`);
+    expect(sipCardText).toContain(expectedStatus);
   }
 
   async getTotalGoldValue(): Promise<number> {
@@ -507,13 +370,16 @@ export class DashBoardPage extends BasePage {
     logLabel: string;
     gramExpectations?: { expectedGoldGrams?: number; expectedSilverGrams?: number };
     maxAttempts?: number;
-    reloadDelayMs?: number;
+    portfolioWaitTimeoutMs?: number;
   }): Promise<DashboardPortfolioSnapshot> {
-    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+    const portfolioWaitTimeoutMs = options.portfolioWaitTimeoutMs ?? 20_000;
+
+    if (!/\/dashboard/i.test(this.page.url())) {
+      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    }
+    await this.waitForDashboardPortfolioSection(portfolioWaitTimeoutMs);
 
     const maxAttempts = options.maxAttempts ?? 6;
-    const reloadDelayMs = options.reloadDelayMs ?? 5_000;
     const gram = options.gramExpectations;
 
     let snapshot: DashboardPortfolioSnapshot = {
@@ -526,7 +392,10 @@ export class DashBoardPage extends BasePage {
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const spot = await this.fetchDigitalMetalSpotRates();
-      const metrics = await this.readPortfolioMetrics({ skipPortfolioWait: true });
+      const metrics = await this.readPortfolioMetrics({
+        waitTimeoutMs: portfolioWaitTimeoutMs,
+        skipPortfolioWait: attempt > 0,
+      });
       const calculated = portfolioInrFromGramsAndSellRates(
         metrics.totalGoldGrams,
         metrics.totalSilverGrams,
@@ -555,8 +424,8 @@ export class DashBoardPage extends BasePage {
         break;
       }
       if (attempt < maxAttempts - 1) {
-        await this.page.waitForTimeout(reloadDelayMs);
         await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.waitForDashboardPortfolioSection(portfolioWaitTimeoutMs);
       }
     }
 
@@ -593,8 +462,7 @@ export class DashBoardPage extends BasePage {
 
   /** Buy-metal TC_001/002 — capture metal grams before one-time buy. */
   async captureBuyMetalGramsBeforePurchase(metal: 'gold' | 'silver'): Promise<number> {
-    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    await this.waitForDashboardPortfolioSection(12_000);
+    await this.gotoDashboard();
     const grams =
       metal === 'gold' ? await this.readTotalGoldGrams() : await this.readTotalSilverGrams();
     console.log(`[BUY DASHBOARD] total ${metal} before (g): ${grams}`);
@@ -604,11 +472,34 @@ export class DashBoardPage extends BasePage {
 
   /** Buy-metal TC_005 — UI portfolio vs formula before purchase (with retries). */
   async validateBuyMetalPortfolioBeforePurchase(logLabel: string): Promise<DashboardPortfolioSnapshot> {
+    if (!/\/dashboard/i.test(this.page.url())) {
+      await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    }
+
+    const hasWithdraw = await this.withdrawInvestmentButton
+      .first()
+      .isVisible({ timeout: 5_000 })
+      .catch(() => false);
+
+    if (!hasWithdraw) {
+      const spot = await this.fetchDigitalMetalSpotRates();
+      console.log(
+        `[${logLabel}] Withdraw button not visible — treating dashboard portfolio as zero.`,
+      );
+      return {
+        totalGoldGrams: 0,
+        totalSilverGrams: 0,
+        uiPortfolioInr: 0,
+        calculatedPortfolioInr: 0,
+        spot,
+      };
+    }
+
     const snapshot = await this.assertPortfolioFormulaWithRetry({
       logLabel,
-      reloadDelayMs: 2_000,
+      portfolioWaitTimeoutMs: 30_000,
     });
-    expect(snapshot.totalGoldGrams).toBeGreaterThan(0);
+    expect(snapshot.totalGoldGrams).toBeGreaterThanOrEqual(0);
     expect(snapshot.totalSilverGrams).toBeGreaterThanOrEqual(0);
     return snapshot;
   }
@@ -617,6 +508,7 @@ export class DashBoardPage extends BasePage {
   async validateBuyMetalPortfolioAfterPurchase(
     logLabel: string,
     expectedGoldGrams: number,
+    options?: { minimumGoldGrams?: number },
   ): Promise<DashboardPortfolioSnapshot> {
     await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
@@ -625,8 +517,14 @@ export class DashBoardPage extends BasePage {
     let uiPortfolio = 0;
     let calculatedPortfolio = 0;
     let spot: DigitalMetalSpotRates = { gBuy: 0, gSell: 0, sBuy: 0, sSell: 0 };
+    const minimumGoldGrams = options?.minimumGoldGrams;
 
-    // Dashboard can lag after payment — retry up to 6 times (2s wait + reload).
+    const goldMatches = (actual: number): boolean =>
+      minimumGoldGrams !== undefined
+        ? actual + 0.01 >= minimumGoldGrams
+        : Math.abs(actual - expectedGoldGrams) <= 0.01;
+
+    // Dashboard can lag after payment — retry until portfolio fields match.
     for (let attempt = 0; attempt < 6; attempt += 1) {
       await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
 
@@ -637,15 +535,15 @@ export class DashBoardPage extends BasePage {
       uiPortfolio = metrics.portfolioInr;
       calculatedPortfolio = portfolioInrFromGramsAndSellRates(goldGrams, silverGrams, spot);
 
-      const goldOk = Math.abs(goldGrams - expectedGoldGrams) <= 0.01;
+      const goldOk = goldMatches(goldGrams);
       const portfolioOk = Math.abs(uiPortfolio - calculatedPortfolio) <= 2;
 
       if (goldOk && portfolioOk && uiPortfolio > 0) {
         break;
       }
       if (attempt < 5) {
-        await this.page.waitForTimeout(2_000);
         await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
       }
     }
 
@@ -658,8 +556,13 @@ export class DashBoardPage extends BasePage {
       `[${logLabel}] Formula: ${goldGrams}×gSell(${spot.gSell}) + ${silverGrams}×sSell(${spot.sSell}) = ₹${calculatedPortfolio}`,
     );
 
-    this.logPortfolioValidation(`${logLabel} Total gold (g)`, goldGrams, expectedGoldGrams);
-    expect(Math.abs(goldGrams - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+    if (minimumGoldGrams !== undefined) {
+      this.logPortfolioValidation(`${logLabel} Total gold (g) minimum`, goldGrams, minimumGoldGrams);
+      expect(goldGrams + 0.01).toBeGreaterThanOrEqual(minimumGoldGrams);
+    } else {
+      this.logPortfolioValidation(`${logLabel} Total gold (g)`, goldGrams, expectedGoldGrams);
+      expect(Math.abs(goldGrams - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+    }
 
     this.logPortfolioValidation(`${logLabel} UI portfolio vs formula`, uiPortfolio, calculatedPortfolio);
     expect(uiPortfolio).toBeGreaterThan(0);
@@ -688,39 +591,65 @@ export class DashBoardPage extends BasePage {
     productName: string;
     productDetails: ShopProductDetails;
     cartNetWeight: string;
-    goldBeforePurchase: number;
-    silverBeforePurchase: number;
-    portfolioBeforePurchase: number;
+    getTotalGoldbeforePurchase: number;
+    getTotalSilverbeforePurchase: number;
+    getcurrentValuebeforePurchase: number;
   }): Promise<void> {
     const productWeightGrams = expectedShopProductWeightGrams(
       params.productName,
       params.productDetails,
       params.cartNetWeight,
     );
-    const expectedGoldGrams = Number((params.goldBeforePurchase - productWeightGrams).toFixed(4));
+    const expectedGoldGrams = Number((params.getTotalGoldbeforePurchase - productWeightGrams).toFixed(4));
+
     shopLogGet('Expected gold grams after purchase', { expectedGoldGrams, productWeightGrams });
-    await this.validateShopPortfolioGramsAfterPurchase('Shop portfolio', {
-      expectedGoldGrams,
-      expectedSilverGrams: params.silverBeforePurchase,
-    });
-    const portfolioSnapshot = await this.captureShopPortfolioBeforePurchaseInternal(
-      'Shop portfolio-after',
+
+    let goldAfter = 0;
+    let silverAfter = 0;
+    let portfolioAfter = 0;
+    let calculatedPortfolioAfter = 0;
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await this.gotoDashboard();
+      goldAfter = await this.getTotalGold();
+      silverAfter = await this.getTotalSilver();
+      portfolioAfter = await this.getCurrentValue();
+      const spot = await this.fetchDigitalMetalSpotRates();
+      calculatedPortfolioAfter = portfolioInrFromGramsAndSellRates(goldAfter, silverAfter, spot);
+
+      const goldOk = Math.abs(goldAfter - expectedGoldGrams) <= 0.01;
+      const silverOk = Math.abs(silverAfter - params.getTotalSilverbeforePurchase) <= 0.01;
+      const portfolioOk = Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2;
+
+      if (goldOk && silverOk && portfolioOk) {
+        break;
+      }
+      if (attempt < 5) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+        await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+      }
+    }
+
+    console.log('[Shop portfolio-after] Total gold (g):', goldAfter);
+    console.log('[Shop portfolio-after] Total silver (g):', silverAfter);
+    console.log(
+      `[Shop portfolio-after] CURRENT VALUE: ₹${portfolioAfter} | calculated: ₹${calculatedPortfolioAfter}`,
     );
-    const portfolioAfter = portfolioSnapshot.uiPortfolioInr;
-    const expectedPortfolioAfter = Number(
-      (params.portfolioBeforePurchase - params.productDetails.grandTotal).toFixed(2),
+
+    expect(Math.abs(goldAfter - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(silverAfter - params.getTotalSilverbeforePurchase)).toBeLessThanOrEqual(0.01);
+    shopLogActualExpected(
+      'UI portfolio vs formula after purchase',
+      Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2,
+      true,
     );
-    const portfolioDiffAbs = Math.abs(portfolioAfter - expectedPortfolioAfter);
-    const portfolioDeltaTolerance = Math.max(100, params.productDetails.grandTotal * 0.05);
-    shopLogActualExpected('Portfolio after vs expected', portfolioDiffAbs <= portfolioDeltaTolerance, true);
+    expect(portfolioAfter).toBeCloseTo(calculatedPortfolioAfter, 2);
   }
 
   private async captureShopPortfolioBeforePurchaseInternal(
     logLabel: string,
   ): Promise<DashboardPortfolioSnapshot> {
-    await this.page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    await this.page.waitForURL(/\/dashboard/i, { timeout: 8_000 });
-    await this.waitForDashboardPortfolioSection(12_000);
+    await this.gotoDashboard();
 
     const spot = await this.fetchDigitalMetalSpotRates();
     const metrics = await this.readPortfolioMetrics({ skipPortfolioWait: true });

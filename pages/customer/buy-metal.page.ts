@@ -55,6 +55,7 @@ export class BuyMetalPage extends BasePage {
   }
 
   async hoverOnProductsAndClickDigitalGold(): Promise<void> {
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
     await this.productsMenu.waitFor({ state: 'visible' });
     await this.productsMenu.hover();
     await this.digitalGold.waitFor({ state: 'visible' });
@@ -65,6 +66,7 @@ export class BuyMetalPage extends BasePage {
   }
 
   async hoverOnProductsAndClickDigitalSilver(): Promise<void> {
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
     await this.productsMenu.waitFor({ state: 'visible' });
     await this.productsMenu.hover();
     await this.digitalSilver.waitFor({ state: 'visible' });
@@ -116,11 +118,43 @@ export class BuyMetalPage extends BasePage {
     await this.amountInput.click();
     await this.amountInput.press('Control+A');
     await this.amountInput.fill(amount);
+    await this.amountInput.press('Tab');
+    await this.waitForBlockUiHidden(15_000);
+  }
+
+  private async ensureSipModeSelected(): Promise<void> {
+    const sipRadio = this.page.getByRole('radio', { name: /SIP Recommended/i });
+    if (await sipRadio.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      if (!(await sipRadio.isChecked().catch(() => false))) {
+        await sipRadio.click();
+        await this.waitForBlockUiHidden(15_000);
+      }
+    }
+  }
+
+  private sipFrequencyRadio(frequency: 'weekly' | 'monthly'): Locator {
+    const label = frequency === 'monthly' ? 'Monthly' : 'Weekly';
+    return this.page.getByRole('radio', { name: label, exact: true });
+  }
+
+  private async selectInvestmentDayIfVisible(day: string): Promise<void> {
+    const dropdownVisible = await this.investmentDayDropdown.isVisible().catch(() => false);
+    const altVisible = await this.page
+      .locator('label:has-text("Investment Day"), text=Investment Day')
+      .first()
+      .isVisible()
+      .catch(() => false);
+    if (dropdownVisible || altVisible) {
+      await this.selectInvestmentDay(day);
+    }
+  }
+
+  private async waitForBlockUiHidden(timeoutMs = 30_000): Promise<void> {
+    await this.page.locator('div.p-blockui[aria-busy="true"]').waitFor({ state: 'hidden', timeout: timeoutMs });
   }
 
   async waitForBuyFormReady(): Promise<void> {
-    const blockUI = this.page.locator('.p-blockui-document');
-    await blockUI.waitFor({ state: 'hidden' }).catch(() => {});
+    await this.waitForBlockUiHidden(30_000);
 
     await this.amountInput.waitFor({ state: 'visible', timeout: 20_000 });
     await expect(this.amountInput).toBeEnabled({ timeout: 20_000 });
@@ -146,8 +180,7 @@ export class BuyMetalPage extends BasePage {
 
   /** Wait until overlays are gone and Create SIP is ready to click. */
   private async waitForCreateSipButtonReady(): Promise<void> {
-    const blockUI = this.page.locator('.p-blockui-document');
-    await blockUI.waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
+    await this.waitForBlockUiHidden(30_000);
     await this.page.waitForLoadState('domcontentloaded').catch(() => {});
     await this.page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 
@@ -159,8 +192,7 @@ export class BuyMetalPage extends BasePage {
     await this.createSipClick.waitFor({ state: 'visible', timeout: 30_000 });
     await expect(this.createSipClick).toBeEnabled({ timeout: 30_000 });
     await this.createSipClick.scrollIntoViewIfNeeded();
-    // Brief settle for Angular/PrimeNG after frequency/amount changes.
-    await this.page.waitForTimeout(500);
+    await this.waitForBlockUiHidden(30_000);
   }
 
   async clickOnCreateSIP(): Promise<void> {
@@ -181,11 +213,25 @@ export class BuyMetalPage extends BasePage {
     planPrefix?: string;
     startDateOverride?: Date;
   }): Promise<{ planName: string; startDate: string }> {
+    const targetDate =
+      options.startDateOverride ??
+      (() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        d.setDate(d.getDate() + options.startAfterDays);
+        return d;
+      })();
+
+    let investmentDay = options.investmentDay;
+    if (!investmentDay && options.frequency === 'monthly') {
+      investmentDay = String(targetDate.getDate());
+    }
+
     await this.startSipAndOpenPlanForm({
       metal: options.metal,
       amount: options.amount,
       frequency: options.frequency,
-      investmentDay: options.investmentDay,
+      investmentDay,
     });
     const planName = await this.enterUniquePlanName(options.planPrefix);
     const startDate = await this.enterStartDatePlusDays(
@@ -216,9 +262,9 @@ export class BuyMetalPage extends BasePage {
 
     if (!options.skipNavigation) {
       if (options.metal === 'gold') {
-        await this.hoverOnProductsAndClickDigitalGold();
+        await this.openDigitalGoldBuyPage();
       } else {
-        await this.hoverOnProductsAndClickDigitalSilver();
+        await this.openDigitalSilverBuyPage();
       }
     }
 
@@ -226,10 +272,11 @@ export class BuyMetalPage extends BasePage {
       return;
     }
 
-    await this.clickOnCreateSIP();
+    await this.ensureSipModeSelected();
 
     if (await this.isOnSipPlanForm()) {
-      return;
+      await this.page.goBack();
+      await this.waitForBuyFormReady();
     }
 
     if (options.frequency === 'monthly') {
@@ -239,7 +286,7 @@ export class BuyMetalPage extends BasePage {
     }
     await this.enterAmount(options.amount);
     if (options.investmentDay) {
-      await this.selectInvestmentDay(options.investmentDay);
+      await this.selectInvestmentDayIfVisible(options.investmentDay);
     }
 
     await this.clickOnCreateSIP();
@@ -280,7 +327,7 @@ export class BuyMetalPage extends BasePage {
     }
     await this.enterAmount(options.amount);
     if (options.investmentDay) {
-      await this.selectInvestmentDay(options.investmentDay);
+      await this.selectInvestmentDayIfVisible(options.investmentDay);
     }
     await this.clickOnCreateSIP();
     await this.planNameInput.waitFor({ state: 'visible', timeout: 20_000 });
@@ -288,18 +335,20 @@ export class BuyMetalPage extends BasePage {
 
   async selectWeeklyFrequency(): Promise<void> {
     if (await this.isOnSipPlanForm()) return;
-    const weekly = this.page.getByText('Weekly', { exact: true });
+    const weekly = this.sipFrequencyRadio('weekly');
     await weekly.waitFor({ state: 'visible', timeout: 20_000 });
     await weekly.click();
-    await this.page.locator('.p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await expect(weekly).toBeChecked({ timeout: 10_000 });
+    await this.waitForBlockUiHidden(15_000);
   }
 
   async selectMonthlyFrequency(): Promise<void> {
     if (await this.isOnSipPlanForm()) return;
-    const monthly = this.page.getByText('Monthly', { exact: true });
+    const monthly = this.sipFrequencyRadio('monthly');
     await monthly.waitFor({ state: 'visible', timeout: 20_000 });
     await monthly.click();
-    await this.page.locator('.p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await expect(monthly).toBeChecked({ timeout: 10_000 });
+    await this.waitForBlockUiHidden(15_000);
   }
 
   async selectInvestmentDay(day: string): Promise<void> {
