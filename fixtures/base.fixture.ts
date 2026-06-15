@@ -17,6 +17,8 @@ import { EmiOrderDetailValidationPage } from '../pages/customer/emi-order-detail
 import { ShopEmiForeclosePage } from '../pages/customer/shop-emi-foreclose.page';
 import { CancellationSummaryPage } from '../pages/customer/cancellation-summary.page';
 import { ShopCancelBookingPage } from '../pages/customer/shop-cancel-booking.page';
+import { ShopSearchPage } from '../pages/customer/shop-search-page';
+import { ShopWishlistPage } from '../pages/customer/shop-wishlist.page';
 import {
   getWorkerShopEmiPurchaseChainState,
   type ShopEmiPurchaseChainState,
@@ -34,6 +36,8 @@ type PageObjectFixtures = {
   shopEmiForeclosePage: ShopEmiForeclosePage;
   cancellationSummaryPage: CancellationSummaryPage;
   shopCancelBookingPage: ShopCancelBookingPage;
+  shopSearchPage: ShopSearchPage;
+  shopWishlistPage: ShopWishlistPage;
   buyMetalPage: BuyMetalPage;
   buySummaryPage: BuySummaryPage;
   dashboardPage: DashBoardPage;
@@ -73,6 +77,8 @@ export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
   shopCancelBookingPage: async ({ page }, use) => {
     await use(new ShopCancelBookingPage(page));
   },
+  shopSearchPage: async ({ page }, use) => { await use(new ShopSearchPage(page)); },
+  shopWishlistPage: async ({ page }, use) => { await use(new ShopWishlistPage(page)); },
   buyMetalPage: async ({ page }, use) => { await use(new BuyMetalPage(page)); },
   buySummaryPage: async ({ page }, use) => { await use(new BuySummaryPage(page)); },
   dashboardPage: async ({ page }, use) => { await use(new DashBoardPage(page)); },

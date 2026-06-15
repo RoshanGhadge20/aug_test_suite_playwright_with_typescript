@@ -2300,6 +2300,42 @@ export class MyOrderVerificationPage extends BasePage {
     expect(orderMeta.orderId).toBe(params.placedOrderId);
   }
 
+  /** TC_SHOP_015 only — EMI order list row after coupon + savings Pay ₹0. */
+  async validateShopEmiOrderListCouponSummary(params: {
+    productName: string;
+    expectedAmount: number;
+  }): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    const shopOrder = await this.getShopEmiOrderDetails(params.productName);
+    shopLogGet('My Orders SHOP row (EMI coupon)', shopOrder);
+    shopLogActualExpected('List product name', shopOrder.productName, params.productName);
+    shopLogActualExpected('List amount', shopOrder.priceAmount, params.expectedAmount);
+    expect(shopOrder.productName).toContain(params.productName);
+    expect(shopOrder.priceAmount).toBe(params.expectedAmount);
+    expect(shopOrder.status).toMatch(/booked|payment received/i);
+  }
+
+  /** TC_SHOP_014 — order detail: product name, Payment Received, amount only. */
+  async validateShopBuyNowOrderDetailCouponSummary(params: {
+    productName: string;
+    expectedAmount: number;
+  }): Promise<void> {
+    await this.goToMyOrders();
+    await this.clickShopTabSingleOrder();
+    await this.openShopOrderDetailSingle(params.productName);
+    const detail = await this.getShopOrderDetailView();
+    const orderMeta = await this.getShopOrderDetailStatusAndDate();
+    shopLogGet('Order detail (coupon)', detail);
+    shopLogGet('Order detail status', orderMeta);
+    shopLogActualExpected('Detail product name', detail.productName, params.productName);
+    shopLogActualExpected('Detail status', orderMeta.status, 'Payment Received');
+    shopLogActualExpected('Detail amount', detail.priceAmount, params.expectedAmount);
+    expect(detail.productName).toContain(params.productName);
+    expect(orderMeta.status).toMatch(/payment received/i);
+    expect(detail.priceAmount).toBe(params.expectedAmount);
+  }
+
   /** TC_SHOP_007 / TC_SHOP_010 — EMI order detail with all installments pending. */
   async validateShopEmiOrderDetailPendingInstallments(params: {
     productName: string;
@@ -2860,14 +2896,41 @@ export class MyOrderVerificationPage extends BasePage {
     const netPayable = isEmiProforma
       ? shopPdfUtils.extractShopEmiProformaNetPayable(pdfText, params.emiLinePrice)
       : shopPdfUtils.extractShopNetPayable(pdfText);
-    expect(shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.placedOrderId)).toBe(true);
-    expect(
+    const invoiceNo = shopPdfUtils.extractShopInvoiceNumber(pdfText);
+    const invoiceDate = shopPdfUtils.extractShopInvoiceDate(pdfText);
+    const invoiceDateMissingInPdf = shopPdfUtils.isShopInvoiceDateMissingInPdf(pdfText);
+    const gstin = pdfUtils.extractGstin(pdfText);
+    const cin = pdfUtils.extractCin(pdfText);
+    const gstDetails = shopPdfUtils.extractShopInvoiceGstDetails(pdfText);
+    const pdfHasOrderId = shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.placedOrderId);
+    const pdfHasProduct =
       shopPdfUtils.shopPdfContainsProductName(pdfText, params.productName) ||
-        shopPdfUtils.shopPdfContainsProductName(pdfText, params.productDetails.productName)).toBe(true);
+      shopPdfUtils.shopPdfContainsProductName(pdfText, params.productDetails.productName);
+
+    shopLogGet('Invoice PDF URL', pdfUrl);
+    shopLogGet('Invoice type', isEmiProforma ? 'EMI proforma contract' : 'Shop tax invoice');
+    shopLogGet('Invoice number / transaction ID', invoiceNo);
+    shopLogGet('Invoice date', invoiceDate || (invoiceDateMissingInPdf ? '(missing in PDF)' : ''));
+    shopLogGet('GSTIN', gstin || '(not in PDF)');
+    shopLogGet('CIN', cin || '(not in PDF)');
+    shopLogGet('Net payable (PDF)', Number.isNaN(netPayable) ? '(not parsed)' : netPayable);
+    shopLogGet('Expected net payable', expectedPdfNet);
+    shopLogGet('EMI line price', params.emiLinePrice);
+    shopLogGet('EMI initial payment (down payment)', params.emiInitialPayment);
+    if (gstDetails.taxableAmount != null || gstDetails.igstAmount != null) {
+      shopLogGet('GST details', gstDetails);
+    }
+    shopLogActualExpected('PDF order reference', pdfHasOrderId, true);
+    shopLogActualExpected('PDF product name', pdfHasProduct, true);
+    if (!Number.isNaN(netPayable)) {
+      shopLogActualExpected('Net payable (PDF)', netPayable, expectedPdfNet);
+    }
+
+    expect(pdfHasOrderId).toBe(true);
+    expect(pdfHasProduct).toBe(true);
     if (!Number.isNaN(netPayable)) {
       expect(Math.abs(netPayable - expectedPdfNet)).toBeLessThanOrEqual(1);
     }
-    shopLogGet('Invoice PDF URL', pdfUrl);
     return pdfUrl;
   }
 

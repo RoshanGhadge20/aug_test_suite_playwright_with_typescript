@@ -16,6 +16,7 @@ export class ShopEmiPage extends BasePage {
   /** EMI tenure labels on shop PDP (e.g. `3 Months`, `9 Months`). */
   static readonly planTenures = {
     THREE_MONTHS: '3 Months',
+    SIX_MONTHS: '6 Months',
     NINE_MONTHS: '9 Months',
   } as const;
 

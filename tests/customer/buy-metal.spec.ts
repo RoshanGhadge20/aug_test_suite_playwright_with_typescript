@@ -1,15 +1,14 @@
 import { test, expect } from '../../fixtures/base.fixture';
 import { getTargetEnv } from '../../config/environments';
-import { panelCreds } from '../../config/urls';
 import {
   getBuyMetalDataset,
   type BuyMetalType,
 } from '../../utils/data/customer-excel-data';
 import type { OneTimeSummaryResult } from '../../pages/customer/buy-summary.page';
 import {
-  clearCustomerBrowserStorage,
   logValidation,
   persistCustomerStorageState,
+  restoreDefaultCustomerSession,
   resolveAltCustomerMobile,
   resolveAltCustomerOtp,
 } from './helpers/customer-alt-user.helpers';
@@ -212,7 +211,10 @@ test.describe('customer buy metal flows @customer-flows', () => {
     });
   });
 
-  test('TC_005-Buy Gold one-time — capture portfolio, purchase, validate portfolio', async ({
+  test.describe('TC_005 fresh session', () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
+
+    test('TC_005-Buy Gold one-time — capture portfolio, purchase, validate portfolio', async ({
     page,
     customerLogin,
     dashboardPage,
@@ -241,16 +243,16 @@ test.describe('customer buy metal flows @customer-flows', () => {
       console.log(`\n[${TC005(n)}] ${title}`);
     };
 
+    try {
     await test.step('clearStorageAndLogin', async () => {
-      logSub(1, 'Session: clear storage + customer login');
+      logSub(1, 'Fresh login (no preloaded storage state)');
       const mobile = resolveAltCustomerMobile();
       const otp = resolveAltCustomerOtp();
       console.log(
         `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
       );
-      await clearCustomerBrowserStorage(page);
       await customerLogin.login(mobile, otp);
-      await page.goto('/dashboard');
+      await page.waitForLoadState('domcontentloaded');
       await persistCustomerStorageState(page);
     });
 
@@ -304,20 +306,17 @@ test.describe('customer buy metal flows @customer-flows', () => {
       logSub(7, 'Dashboard: UI portfolio vs formula (after) + total gold grams');
       const goldQty = purchasedQuantity || summary!.quantity;
       const expectedGold = Number((totalGoldBeforePurchase + goldQty).toFixed(4));
-      await dashboardPage.validateBuyMetalPortfolioAfterPurchase(TC005(7), expectedGold);
+      await dashboardPage.validateBuyMetalPortfolioAfterPurchase(TC005(7), expectedGold, {
+        minimumGoldGrams: totalGoldBeforePurchase === 0 ? goldQty : undefined,
+      });
     });
-
-    await test.step('restoreDefaultCustomerSession', async () => {
-      logSub(8, 'Clear session + login default customer (fresh storage state)');
-      const { mobile, otp } = panelCreds('customer', getTargetEnv());
-      console.log(
-        `[${TC005(8)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
-      );
-      await clearCustomerBrowserStorage(page);
-      await customerLogin.login(mobile, otp);
-      await page.goto('/dashboard');
-      await persistCustomerStorageState(page);
-    });
+    } finally {
+      await test.step('restoreDefaultCustomerSession', async () => {
+        logSub(8, 'Persist customer storage state for following tests');
+        await restoreDefaultCustomerSession(page, customerLogin, TC005(8));
+      });
+    }
+  });
   });
 
   test.skip('TC_003-Buy Silver one-time fully Payment using wallet', async () => {});

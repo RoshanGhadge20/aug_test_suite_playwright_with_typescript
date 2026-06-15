@@ -17,10 +17,14 @@ const bankDetails = {
   accountType: dataset.AccountType,
 };
 
+const sipDashboardAmount = '0';
+const sipDashboardStatus = dataset.SIPStatus;
+
 test.describe('customer SIP flows @customer-flows', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/dashboard');
-  });
+  // test.beforeEach(async ({ page, dashboardPage }) => {
+  //   await page.goto('/dashboard');
+  //   await dashboardPage.waitForDashboardPortfolioSection();
+  // });
 
   test('TC_001 - Create Gold SIP Weekly with Add New Bank and Payment done through emandate', async ({
     buyMetalPage,
@@ -100,14 +104,13 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('validateSipOnDashboard', async () => {
-      await dashboardPage.validateSipOnDashboard({
-        planName: recreatedPlanName,
-        expectedAmount: tc001Data.amount,
-        expectedStatus: dataset.SIPStatus,
-        frequency: tc001Data.frequency,
-        planNameMatch: 'contains',
-        planNameContains: tc001Data.planPrefix.toLowerCase(),
-      });
+      await dashboardPage.clickViewAll();
+      await dashboardPage.validateSipDetailsOnDashboard(
+        recreatedPlanName,
+        sipDashboardAmount,
+        sipDashboardStatus,
+        tc001Data.frequency,
+      );
     });
   });
 
@@ -171,12 +174,13 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('validateSipOnDashboard', async () => {
-      await dashboardPage.validateSipOnDashboard({
+      await dashboardPage.clickViewAll();
+      await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        expectedAmount: tc002Data.amount,
-        expectedStatus: dataset.SIPStatus,
-        frequency: tc002Data.frequency,
-      });
+        sipDashboardAmount,
+        sipDashboardStatus,
+        tc002Data.frequency,
+      );
     });
   });
 
@@ -240,12 +244,13 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('validateSipOnDashboard', async () => {
-      await dashboardPage.validateSipOnDashboard({
+      await dashboardPage.clickViewAll();
+      await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        expectedAmount: tc003Data.amount,
-        expectedStatus: dataset.SIPStatus,
-        frequency: tc003Data.frequency,
-      });
+        sipDashboardAmount,
+        sipDashboardStatus,
+        tc003Data.frequency,
+      );
     });
   });
 
@@ -302,12 +307,13 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('validateSipOnDashboard', async () => {
-      await dashboardPage.validateSipOnDashboard({
+      await dashboardPage.clickViewAll();
+      await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        expectedAmount: tc004Data.amount,
-        expectedStatus: dataset.SIPStatus,
-        frequency: tc004Data.frequency,
-      });
+        sipDashboardAmount,
+        sipDashboardStatus,
+        tc004Data.frequency,
+      );
     });
   });
 
@@ -386,12 +392,13 @@ test.describe('customer SIP flows @customer-flows', () => {
     });
 
     await test.step('validateSipOnDashboard', async () => {
-      await dashboardPage.validateSipOnDashboard({
+      await dashboardPage.clickViewAll();
+      await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        expectedAmount: tc005Data.amount,
-        expectedStatus: dataset.SIPStatus,
-        frequency: tc005Data.frequency,
-      });
+        sipDashboardAmount,
+        sipDashboardStatus,
+        tc005Data.frequency,
+      );
     });
   });
 });

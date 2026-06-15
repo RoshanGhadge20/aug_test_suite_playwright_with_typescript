@@ -7,9 +7,7 @@ test.describe('customer @smoke', () => {
     await page.goto('/dashboard');
     // Avoid `networkidle` here — dashboards usually keep requests open (analytics, APIs, websockets),
     // so Playwright may wait far longer than the UI needs. Wait for the UI you care about instead.
-    const withdrawBtn = page.locator('button', {
-      hasText: 'Withdraw Investment'
-    });
+    const withdrawBtn = page.getByRole('button', { name: /^withdraw$/i });
     await expect(withdrawBtn).toBeVisible({ timeout: 20000 });
     await withdrawBtn.click();
   });

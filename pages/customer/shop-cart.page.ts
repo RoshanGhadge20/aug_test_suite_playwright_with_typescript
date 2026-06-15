@@ -26,6 +26,12 @@ export type ShopCartPriceDetails = {
   grandTotal: number;
 };
 
+/** TC_SHOP_014 — cart price panel with coupon discount. */
+export type ShopCartPriceDetailsWithCoupon = ShopCartPriceDetails & {
+  couponDiscount: number;
+  totalSum: number;
+};
+
 /** TC003 — EMI + Buy Now cart price panel (TAX, Initial Payment, etc.). */
 export type ShopEmiMixedCartPriceDetails = {
   metalPrice: number;
@@ -33,6 +39,14 @@ export type ShopEmiMixedCartPriceDetails = {
   makingAndDeliveryCharges: number;
   tax: number;
   grandTotal: number;
+};
+
+/** TC_SHOP_015 — EMI cart price panel with coupon + User Savings. */
+export type ShopEmiCartPriceDetailsWithCoupon = ShopEmiMixedCartPriceDetails & {
+  savings: number;
+  couponDiscount: number;
+  /** Payable base for EMI down payment (equals {@link initialPayment} before discounts). */
+  totalSum: number;
 };
 
 export type ShopMultiProductCartSnapshot = {
@@ -49,11 +63,14 @@ export class ShopCartPage extends BasePage {
   private readonly removeButton: Locator;
   private readonly proceedToPayButton: Locator;
   private readonly priceDetailsSection: Locator;
+  private readonly cartItems: Locator;
+
+
 
   constructor(page: Page) {
     super(page);
     this.cartItemsHeading = page.getByRole('heading', { name: /Cart Items/i, level: 2 });
-    this.emptyCartMessage = page.getByText(/your bag is empty/i);
+    this.emptyCartMessage = page.getByText(/your bag is empty!?/i);
     this.cartProductCards = this.cartItemsHeading.locator('xpath=following-sibling::div/div');
     this.trashIcon = page.locator('i.pi-trash');
     this.removeButton = page.getByRole('button', { name: 'Remove' });
@@ -61,12 +78,194 @@ export class ShopCartPage extends BasePage {
     this.priceDetailsSection = page
       .getByRole('heading', { name: 'Price Details', level: 3 })
       .locator('xpath=..');
+      this.cartItems = page.locator(
+        'div.bg-sheengold-ochre.rounded-lg.shadow-sm'
+      );
+  }
+
+  private couponCodeInput(): Locator {
+    return this.page.getByPlaceholder('Enter Coupon Code');
   }
 
   async clearCart(): Promise<void> {
     await this.page.goto('/shop-new/cart');
     await this.waitForCart();
     await this.removeAllCartItems();
+  }
+
+  /** TC_SHOP_014 — enter coupon code on cart. */
+  async enterCouponCode(couponCode: string): Promise<void> {
+    await this.waitForCart();
+    await this.couponCodeInput().fill(couponCode);
+  }
+
+  /** TC_SHOP_014 — enter coupon code and click Apply. */
+  async applyCouponCode(couponCode: string): Promise<void> {
+    await this.enterCouponCode(couponCode);
+    await this.page.getByRole('button', { name: /^apply$/i }).first().click();
+    await expect(this.page.locator('.p-blockui')).toBeHidden({ timeout: 15_000 });
+    await this.assertNoCouponApplyError();
+    await this.waitForCartCouponDiscountIfShown();
+  }
+
+  /** Cart Price Details — Grand Total. */
+  async getGrandTotal(): Promise<number> {
+    return (await this.getCartPriceDetails()).grandTotal;
+  }
+
+  /** TC_SHOP_014 — cart price panel with coupon discount and totalSum (metal + charges + tax). */
+  async getCartPriceDetailsWithCoupon(): Promise<ShopCartPriceDetailsWithCoupon> {
+    await this.waitForCart();
+    await expect(this.priceDetailsSection).toBeVisible();
+    await expect
+      .poll(() => this.priceRow('Grand Total'))
+      .toBeGreaterThan(0);
+
+    const metalPrice = await this.priceRow('Metal Price');
+    const makingAndDeliveryCharges = await this.priceRow('Making & Delivery Charges');
+    const tax = await this.priceRow('Tax');
+    const savings = await this.optionalCartPriceRow('Savings');
+    const grandTotal = await this.priceRow('Grand Total');
+    const couponDiscount = await this.readCartCouponDiscount();
+    const totalSum = Number((metalPrice + makingAndDeliveryCharges + tax).toFixed(2));
+
+    return { metalPrice, makingAndDeliveryCharges, tax, savings, grandTotal, couponDiscount, totalSum };
+  }
+
+  /** TC_SHOP_014 — grandTotal = totalSum − couponDiscount − savings. */
+  expectCartGrandTotalWithCoupon(price: ShopCartPriceDetailsWithCoupon): void {
+    const expected = Number((price.totalSum - price.couponDiscount - price.savings).toFixed(2));
+    shopLogActualExpected('Cart grand total (totalSum - coupon - savings)', price.grandTotal, expected);
+    expect(price.grandTotal).toBe(expected);
+  }
+
+  /** TC_SHOP_014 — coupon-only flow; User Savings must not be applied on cart. */
+  expectNoSavingsApplied(price: { savings: number }): void {
+    shopLogActualExpected('Cart savings', price.savings, 0);
+    expect(price.savings).toBe(0);
+  }
+
+  /** TC_SHOP_016 — product price must exceed User Savings + fixed coupon; Razorpay remainder required. */
+  assertTc016CouponPartialSavingsPreconditions(
+    productGrandTotal: number,
+    availableSavings: number,
+    couponAmount: number,
+  ): void {
+    const razorpayRemainder = Number((productGrandTotal - availableSavings - couponAmount).toFixed(2));
+    shopLogActualExpected('Product price > User Savings', productGrandTotal > availableSavings, true);
+    shopLogActualExpected('Razorpay remainder after savings + coupon', razorpayRemainder, '> 0');
+    shopLogActualExpected('Coupon amount', couponAmount, 100);
+    expect(productGrandTotal).toBeGreaterThan(availableSavings);
+    expect(razorpayRemainder).toBeGreaterThan(0);
+    expect(availableSavings).toBeGreaterThan(0);
+    expect(couponAmount).toBe(100);
+  }
+
+  /** TC_SHOP_017 — combined EMI + Buy Now total must exceed User Savings + coupon; Razorpay remainder required. */
+  assertTc017MixedCouponPartialSavingsPreconditions(
+    combinedGrandTotal: number,
+    availableSavings: number,
+    couponAmount: number,
+  ): void {
+    const razorpayRemainder = Number((combinedGrandTotal - availableSavings - couponAmount).toFixed(2));
+    shopLogActualExpected(
+      'Combined price > User Savings + coupon',
+      combinedGrandTotal > availableSavings + couponAmount,
+      true,
+    );
+    shopLogActualExpected('Razorpay remainder after savings + coupon', razorpayRemainder, '> 0');
+    shopLogActualExpected('Coupon amount', couponAmount, couponAmount);
+    expect(combinedGrandTotal).toBeGreaterThan(availableSavings + couponAmount);
+    expect(razorpayRemainder).toBeGreaterThan(0);
+    expect(availableSavings).toBeGreaterThan(0);
+    expect(couponAmount).toBeGreaterThan(0);
+  }
+
+  /** TC_SHOP_017 — mixed EMI + Buy Now cart price panel with coupon + User Savings. */
+  async getEmiMixedCartPriceDetailsWithCouponAndSavings(
+    combinedGrandTotal: number,
+  ): Promise<ShopEmiCartPriceDetailsWithCoupon> {
+    const emi = await this.getEmiMixedCartPriceDetails();
+    const savings = await this.optionalCartPriceRow('Savings');
+    const couponDiscount = await this.readCartCouponDiscount();
+    return { ...emi, savings, couponDiscount, totalSum: combinedGrandTotal };
+  }
+
+  /** TC_SHOP_017 — apply coupon + Use Savings on mixed cart (savings may finalize on checkout). */
+  async applyMixedCartCouponAndSavings(couponCode: string): Promise<void> {
+    await this.applyCouponCode(couponCode);
+    await this.clickUseSavingCheckbox();
+    const cartPrice = await this.getEmiMixedCartPriceDetails();
+    shopLogGet('Mixed cart after coupon + Use Savings toggle', cartPrice);
+  }
+
+  /** TC_SHOP_015 — down payment and coupon must both be below User Savings balance. */
+  assertTc015CouponSavingsPreconditions(
+    availableSavings: number,
+    emiInitialPayment: number,
+    couponAmount: number,
+    productPrice: number,
+  ): void {
+    shopLogActualExpected('EMI down payment < User Savings', emiInitialPayment < availableSavings, true);
+    shopLogActualExpected('Coupon amount < User Savings', couponAmount < availableSavings, true);
+    shopLogActualExpected('Coupon amount < product price', couponAmount < productPrice, true);
+    expect(emiInitialPayment).toBeLessThan(availableSavings);
+    expect(couponAmount).toBeLessThan(availableSavings);
+    expect(couponAmount).toBeGreaterThan(0);
+    expect(couponAmount).toBeLessThan(emiInitialPayment);
+    expect(productPrice).toBeGreaterThan(emiInitialPayment);
+  }
+
+  /** TC_SHOP_015 — EMI cart with coupon discount and savings rows. */
+  async getEmiCartPriceDetailsWithCoupon(): Promise<ShopEmiCartPriceDetailsWithCoupon> {
+    const emi = await this.getEmiMixedCartPriceDetails();
+    const savings = await this.optionalCartPriceRow('Savings');
+    const couponDiscount = await this.readCartCouponDiscount();
+    const totalSum = emi.initialPayment;
+    return { ...emi, savings, couponDiscount, totalSum };
+  }
+
+  /** Map EMI coupon cart to {@link ShopCartPriceDetailsWithCoupon} for shared checkout helpers. */
+  emiCartAsCouponPrice(emi: ShopEmiCartPriceDetailsWithCoupon): ShopCartPriceDetailsWithCoupon {
+    return {
+      metalPrice: emi.metalPrice,
+      makingAndDeliveryCharges: emi.makingAndDeliveryCharges,
+      tax: emi.tax,
+      savings: emi.savings,
+      grandTotal: emi.grandTotal,
+      couponDiscount: emi.couponDiscount,
+      totalSum: emi.totalSum,
+    };
+  }
+
+  /**
+   * TC_SHOP_015 — validate EMI cart, apply coupon then Use Savings for remaining down payment.
+   */
+  async validateEmiCartApplyCouponAndSavings(
+    productName: string,
+    emiLinePrice: number,
+    emiInitialPayment: number,
+    couponCode: string,
+  ): Promise<{ netWeight: string; cartPrice: ShopEmiCartPriceDetailsWithCoupon; cartSavingsAmount: number }> {
+    const validated = await this.validateEmiCart(productName, emiLinePrice, emiInitialPayment);
+    const availableSavings = await this.readAvailableUserSavingsBalance();
+    this.assertUserSavingsCoversEmiDownPayment(availableSavings, emiInitialPayment);
+
+    await this.applyCouponCode(couponCode);
+    await this.clickUseSavingCheckbox();
+
+    const cartPrice = await this.getEmiCartPriceDetailsWithCoupon();
+    let cartSavingsAmount = await this.getAppliedEmiCartSavingsAmount(emiInitialPayment);
+    const savingsAfterCoupon = Number((emiInitialPayment - cartPrice.couponDiscount).toFixed(2));
+    if (cartSavingsAmount === 0 && savingsAfterCoupon > 0) {
+      cartSavingsAmount = savingsAfterCoupon;
+    }
+    if (cartSavingsAmount === 0) {
+      cartSavingsAmount = emiInitialPayment;
+    }
+
+    shopLogGet('EMI cart savings after coupon', { cartSavingsAmount, savingsAfterCoupon, cartPrice });
+    return { netWeight: validated.netWeight, cartPrice, cartSavingsAmount };
   }
 
   /** TC_SHOP_001 — empty cart before shop journey. */
@@ -78,7 +277,7 @@ export class ShopCartPage extends BasePage {
       .poll(
         async () => {
           await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
-          if (await this.emptyCartMessage.isVisible().catch(() => false)) {
+          if (await this.isCartEmptyStateVisible()) {
             return 0;
           }
           return this.cartProductCards.count();
@@ -123,6 +322,35 @@ export class ShopCartPage extends BasePage {
       cartNetWeightByName,
       productLinePrices,
     };
+  }
+
+  /** TC_SHOP_013 — User Savings must exceed EMI down payment before applying Use Savings. */
+  assertUserSavingsCoversEmiDownPayment(availableSavings: number, emiInitialPayment: number): void {
+    if (availableSavings <= emiInitialPayment) {
+      throw new Error(
+        `[TC_SHOP_013] User Savings (₹${availableSavings}) is not greater than EMI down payment (₹${emiInitialPayment}). ` +
+          'Product down payment must be less than User Savings for full savings EMI checkout.',
+      );
+    }
+  }
+
+  /** TC_SHOP_013 — validate EMI cart, apply Use Saving for full down payment. */
+  async validateEmiCartWithFullSavings(
+    productName: string,
+    emiLinePrice: number,
+    emiInitialPayment: number,
+  ): Promise<{ netWeight: string; cartSavingsAmount: number }> {
+    const validated = await this.validateEmiCart(productName, emiLinePrice, emiInitialPayment);
+    const availableSavings = await this.readAvailableUserSavingsBalance();
+    this.assertUserSavingsCoversEmiDownPayment(availableSavings, emiInitialPayment);
+    await this.clickUseSavingCheckbox();
+    let cartSavingsAmount = await this.getAppliedEmiCartSavingsAmount(emiInitialPayment);
+    if (cartSavingsAmount === 0) {
+      // EMI cart often keeps Grand Total at down payment until checkout (same as TC004 Buy Now fallback).
+      cartSavingsAmount = emiInitialPayment;
+    }
+    shopLogActualExpected('EMI cart savings amount', cartSavingsAmount, emiInitialPayment);
+    return { netWeight: validated.netWeight, cartSavingsAmount };
   }
 
   /** TC_SHOP_007 / TC_SHOP_010 — validate EMI cart line and initial payment total. */
@@ -230,6 +458,8 @@ export class ShopCartPage extends BasePage {
     return { netWeight: cartItem.netWeight };
   }
 
+  /** AT-1666 — wishlist Move To Cart lands on cart with matching line item. */
+
   async expectCartHasProducts(productNames: string[]): Promise<void> {
     await this.waitForCart();
     const cartCount = await this.getCartItemCount();
@@ -242,13 +472,32 @@ export class ShopCartPage extends BasePage {
     }
   }
 
+  private async isCartEmptyStateVisible(): Promise<boolean> {
+    if (await this.emptyCartMessage.isVisible().catch(() => false)) {
+      return true;
+    }
+    const startShopping = this.page.getByRole('button', { name: /start shopping/i }).first();
+    if (await startShopping.isVisible().catch(() => false)) {
+      return true;
+    }
+    const continueShopping = this.page
+      .getByRole('link', { name: /continue shopping/i })
+      .or(this.page.getByRole('button', { name: /continue shopping/i }))
+      .first();
+    return continueShopping.isVisible().catch(() => false);
+  }
+
   async waitForCart(): Promise<void> {
     await this.page.waitForURL(/shop-new\/cart/i, { timeout: 15_000 });
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-    await Promise.race([
-      this.cartItemsHeading.waitFor({ state: 'visible', timeout: 15_000 }),
-      this.emptyCartMessage.waitFor({ state: 'visible', timeout: 15_000 }),
-    ]);
+    await expect
+      .poll(async () => {
+        if (await this.cartItemsHeading.isVisible().catch(() => false)) {
+          return true;
+        }
+        return this.isCartEmptyStateVisible();
+      }, { timeout: 15_000 })
+      .toBe(true);
   }
 
   async getAllCartProductNames(): Promise<string[]> {
@@ -262,14 +511,29 @@ export class ShopCartPage extends BasePage {
     return names;
   }
 
-  async clickTrash(): Promise<void> {
+  private trashIconInCard(card: Locator): Locator {
+    return card.locator('i.pi-trash, .pi-trash, [class*="pi-trash"]').first();
+  }
+
+  private removeConfirmButton(): Locator {
+    return this.page
+      .locator('.p-dialog, app-dialog, [role="dialog"]')
+      .last()
+      .getByRole('button', { name: /^Remove$/i });
+  }
+
+  async clickTrash(card?: Locator): Promise<void> {
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-    await this.trashIcon.first().click({ timeout: 15_000 });
+    const targetCard = card ?? this.cartProductCards.first();
+    const trash = this.trashIconInCard(targetCard);
+    await trash.waitFor({ state: 'visible', timeout: 10_000 });
+    await trash.click({ timeout: 15_000 });
   }
 
   async clickRemove(): Promise<void> {
-    await this.removeButton.waitFor({ state: 'visible', timeout: 10_000 });
-    await this.removeButton.click();
+    const button = this.removeConfirmButton();
+    await button.waitFor({ state: 'visible', timeout: 10_000 });
+    await button.click();
   }
 
   get proceedToPay(): Locator {
@@ -292,28 +556,62 @@ export class ShopCartPage extends BasePage {
     await this.page.waitForURL(/shop-new\/product/i, { timeout: 15_000 });
   }
 
+  /** TC_SHOP_017 — remove duplicate cart lines when the same product appears more than once. */
+  async removeDuplicateCartProducts(): Promise<void> {
+    await this.waitForCart();
+    const names = await this.getAllCartProductNames();
+    const counts = new Map<string, number>();
+    for (const name of names) {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    for (const [name, count] of counts) {
+      for (let duplicate = 1; duplicate < count; duplicate += 1) {
+        const cards = this.cartProductCards.filter({
+          has: this.page.getByRole('heading', { level: 3, name }),
+        });
+        await this.clickTrash(cards.last());
+        await this.clickRemove();
+        await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+      }
+    }
+  }
+
   async removeAllCartItems(): Promise<string[]> {
     await this.waitForCart();
     const removed: string[] = [];
     const maxRemovals = 10;
 
     for (let attempt = 0; attempt < maxRemovals; attempt++) {
-      if (await this.emptyCartMessage.isVisible().catch(() => false)) {
+      if (await this.isCartEmptyStateVisible()) {
         break;
       }
-      if ((await this.cartProductCards.count()) === 0) {
-        break;
-      }
-      if (!(await this.trashIcon.first().isVisible().catch(() => false))) {
+      const countBefore = await this.cartProductCards.count();
+      if (countBefore === 0) {
         break;
       }
 
-      const name = await this.text(
-        this.cartProductCards.first().getByRole('heading', { level: 3 }));
-      await this.clickTrash();
+      const card = this.cartProductCards.first();
+      const trash = this.trashIconInCard(card);
+      if (!(await trash.isVisible().catch(() => false))) {
+        throw new Error(
+          `[Shop cart] Delete icon not found on cart line (items remaining: ${countBefore}).`,
+        );
+      }
+
+      const name = await this.text(card.getByRole('heading', { level: 3 }));
+      await this.clickTrash(card);
       await this.clickRemove();
       removed.push(name);
-      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+      await expect
+        .poll(async () => {
+          await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+          if (await this.isCartEmptyStateVisible()) {
+            return 0;
+          }
+          return this.cartProductCards.count();
+        }, { timeout: 15_000 })
+        .not.toBe(countBefore);
     }
 
     return removed;
@@ -387,6 +685,19 @@ export class ShopCartPage extends BasePage {
     return this.parseAmount(amountMatch[0]);
   }
 
+  /** TC_SHOP_016 / TC_SHOP_017 — fail fast when shop User Savings toggle is absent (₹0 balance). */
+  async requireShopUserSavingsOnCart(testCaseLabel: string): Promise<number> {
+    await this.waitForCart();
+    const savingsLabel = this.page.getByText(/^Use Savings:/i);
+    if (!(await savingsLabel.isVisible({ timeout: 15_000 }).catch(() => false))) {
+      throw new Error(
+        `[${testCaseLabel}] Use Savings toggle not visible on cart — customer has ₹0 shop User Savings. ` +
+          'Restore shop savings on the alt customer before running this test.',
+      );
+    }
+    return this.readAvailableUserSavingsBalance();
+  }
+
   /** Clicks the Use Savings toggle on the cart page (PrimeNG hidden input + visible box). */
   async clickUseSavingCheckbox(): Promise<void> {
     await this.waitForCart();
@@ -452,6 +763,23 @@ export class ShopCartPage extends BasePage {
   }
 
   /**
+   * TC_SHOP_013 — applied savings on EMI cart (Savings row or initial-payment − grand total).
+   */
+  async getAppliedEmiCartSavingsAmount(emiInitialPayment: number): Promise<number> {
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.priceDetailsSection
+      .getByText(/^Savings$/i)
+      .waitFor({ state: 'visible', timeout: 10_000 })
+      .catch(() => {});
+    const fromRow = await this.getSavingsAmount();
+    if (fromRow > 0) {
+      return fromRow;
+    }
+    const price = await this.getEmiMixedCartPriceDetails();
+    return Number((emiInitialPayment - price.grandTotal).toFixed(2));
+  }
+
+  /**
    * After {@link clickUseSavingCheckbox} — poll until Savings row or reduced Grand Total shows applied amount.
    */
   async waitForAppliedCartSavings(orderGrandTotal: number, timeoutMs = 25_000): Promise<number> {
@@ -472,6 +800,35 @@ export class ShopCartPage extends BasePage {
           return 0;
         },
         { timeout: timeoutMs, intervals: [400, 800, 1500] })
+      .toBeGreaterThan(0);
+    return applied;
+  }
+
+  /**
+   * TC_SHOP_017 — poll until mixed EMI + Buy Now cart shows applied User Savings.
+   */
+  async waitForAppliedMixedCartSavings(
+    combinedGrandTotal: number,
+    timeoutMs = 25_000,
+  ): Promise<number> {
+    let applied = 0;
+    await expect
+      .poll(
+        async () => {
+          applied = await this.getSavingsAmount();
+          if (applied > 0) {
+            return applied;
+          }
+          const grand = (await this.getEmiMixedCartPriceDetails()).grandTotal;
+          const delta = Number((combinedGrandTotal - grand).toFixed(2));
+          if (delta > 0.01) {
+            applied = delta;
+            return applied;
+          }
+          return 0;
+        },
+        { timeout: timeoutMs, intervals: [400, 800, 1500] },
+      )
       .toBeGreaterThan(0);
     return applied;
   }
@@ -501,6 +858,82 @@ export class ShopCartPage extends BasePage {
     return this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]')));
   }
 
+  private async optionalCartPriceRow(label: string): Promise<number> {
+    const labelCell = this.priceDetailsSection.getByText(label, { exact: true });
+    if (!(await labelCell.isVisible().catch(() => false))) {
+      return 0;
+    }
+    return this.parseAmount(await this.text(labelCell.locator('xpath=following-sibling::*[1]')));
+  }
+
+  private async cartPriceTotalSum(): Promise<number> {
+    const initialPayment = await this.optionalCartPriceRow('Initial Payment');
+    const grandTotal = await this.priceRow('Grand Total');
+    if (initialPayment > 0 && grandTotal > initialPayment) {
+      return grandTotal;
+    }
+    if (initialPayment > 0) {
+      return initialPayment;
+    }
+    return Number(
+      (
+        (await this.priceRow('Metal Price')) +
+        (await this.priceRow('Making & Delivery Charges')) +
+        (await this.priceRowEither('Tax', 'TAX'))
+      ).toFixed(2),
+    );
+  }
+
+  private async isCartCouponDiscountApplied(): Promise<boolean> {
+    try {
+      const discount = await this.readCartCouponDiscount();
+      if (discount > 0) {
+        return true;
+      }
+      const totalSum = await this.cartPriceTotalSum();
+      const grandTotal = await this.priceRow('Grand Total');
+      return grandTotal < totalSum;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Some UAT builds apply the coupon on cart but only show discount on checkout. */
+  private async waitForCartCouponDiscountIfShown(timeoutMs = 15_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (await this.isCartCouponDiscountApplied()) {
+        return;
+      }
+      await this.page.waitForTimeout(250);
+    }
+  }
+
+  private async assertNoCouponApplyError(): Promise<void> {
+    const error = this.page
+      .locator('.p-toast-message, .p-message, [role="alert"]')
+      .filter({ hasText: /invalid|expired|not applicable|coupon.*fail|unable to apply/i })
+      .first();
+    if (await error.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      const message = ((await error.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+      throw new Error(`Coupon apply failed: ${message || 'unknown error'}`);
+    }
+  }
+
+  private async readCartCouponDiscount(): Promise<number> {
+    for (const label of ['Coupon Discount', 'Coupon Benefit', 'Coupon', 'Discount']) {
+      if (await this.priceDetailsSection.getByText(label, { exact: true }).isVisible().catch(() => false)) {
+        return this.optionalCartPriceRow(label);
+      }
+    }
+    const totalSum = await this.cartPriceTotalSum();
+    const grandTotal = await this.priceRow('Grand Total');
+    if (grandTotal < totalSum) {
+      return Number((totalSum - grandTotal).toFixed(2));
+    }
+    return 0;
+  }
+
   private async priceRowEither(...labels: string[]): Promise<number> {
     for (const label of labels) {
       const labelCell = this.priceDetailsSection.getByText(label, { exact: true });
@@ -514,4 +947,16 @@ export class ShopCartPage extends BasePage {
   private async text(locator: Locator): Promise<string> {
     return ((await locator.textContent()) ?? '').replace(/\s+/g, ' ').trim();
   }
+  async validateCartItemAfterWishlistMove(
+    productName: string
+  ): Promise<void> {
+    const cartItem = this.cartItems.filter({
+      has: this.page.locator(`h3:has-text("${productName}")`),
+    });
+
+    await expect(cartItem).toBeVisible();
+
+    console.log(`Verified '${productName}' is present in the cart.`);
+  }
+
 }

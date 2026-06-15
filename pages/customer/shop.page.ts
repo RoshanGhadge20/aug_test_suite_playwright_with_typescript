@@ -2,6 +2,7 @@ import { expect, Locator, Page } from '@playwright/test';
 import { getShopDataset } from '../../utils/data/customer-excel-data';
 import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
 import type { ShopCartPage } from './shop-cart.page';
+import type { ShopEmiDetails, ShopEmiPage } from './shop-emi.page';
 import { BasePage } from '../shared/base.page';
 
 export const shopWeightGramsFromText = (value: string): number =>
@@ -254,6 +255,26 @@ export class ShopPage extends BasePage {
     await this.page.keyboard.press('Home');
   }
 
+  /** TC_SHOP_014 — Jewellery Type → Silver. */
+  async selectJewelleryTypeSilver(): Promise<void> {
+    await this.scrollPageUp();
+    await this.page.getByRole('heading', { name: 'Jewellery Type', level: 1 }).scrollIntoViewIfNeeded();
+
+    const silverInput = this.page.locator('input#silver[name="jwelleryType"]');
+    await this.page.locator('p-radiobutton:has(input#silver[name="jwelleryType"]) .p-radiobutton-box').click();
+
+    await expect.poll(() => silverInput.isChecked()).toBe(true);
+    await this.waitForShopListingReady();
+  }
+
+  /** TC_SHOP_014 — open listing, select Silver jewellery type, scroll up, open product PDP. */
+  async openSilverJewelleryProduct(productName: string): Promise<void> {
+    await this.openShopListing();
+    await this.selectJewelleryTypeSilver();
+    await this.scrollPageUp();
+    await this.selectProduct(productName);
+  }
+
   async scrollPageDown(): Promise<void> {
     await this.page.keyboard.press('End');
   }
@@ -358,10 +379,145 @@ export class ShopPage extends BasePage {
         'Use a lower-savings customer or set ShopTc011ProductName to a higher-priced coin in Excel.');
   }
 
+  /**
+   * TC_SHOP_016 — scan full shop catalog (no price filters) until one Buy Now product satisfies:
+   * price > User Savings and Razorpay remainder after coupon > 0.
+   */
+  async addBuyNowProductForPartialSavingsWithCoupon(
+    shopCartPage: ShopCartPage,
+    couponAmount: number,
+  ): Promise<{ productName: string; productDetails: ShopProductDetails; availableSavings: number }> {
+    await this.openShopListing();
+    const { names } = await this.scrollDownAndGetProducts();
+    const tryOrder = this.orderCatalogNamesForPartialSavings(names);
+    shopLogGet('TC_SHOP_016 — full catalog products to evaluate', tryOrder);
+
+    for (const productName of tryOrder) {
+      const productDetails = await this.selectProductAndCaptureDetails(productName);
+      const buyNowEligible = await this.buyNowButton.isVisible({ timeout: 2_000 }).catch(() => false);
+      if (!buyNowEligible) {
+        shopLogGet('Skip non–Buy Now product', productName);
+        await this.openShopListing();
+        continue;
+      }
+      await this.clickBuyNowFromPdp(false);
+      const availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+      const cartPrice = await shopCartPage.getCartPriceDetails();
+      const razorpayRemainder = Number(
+        (productDetails.grandTotal - availableSavings - couponAmount).toFixed(2),
+      );
+      const partialWithCouponOk =
+        availableSavings > 0 &&
+        productDetails.grandTotal > availableSavings &&
+        cartPrice.grandTotal === productDetails.grandTotal &&
+        razorpayRemainder > 0;
+      shopLogGet(`TC_SHOP_016 product check (${productName})`, {
+        grandTotal: productDetails.grandTotal,
+        availableSavings,
+        couponAmount,
+        razorpayRemainder,
+        partialWithCouponOk,
+      });
+      if (partialWithCouponOk) {
+        shopLogGet('Selected product for partial savings + coupon', {
+          productName,
+          grandTotal: productDetails.grandTotal,
+          availableSavings,
+          couponAmount,
+          razorpayRemainder,
+        });
+        return { productName, productDetails, availableSavings };
+      }
+      await shopCartPage.clearCartAndExpectEmpty();
+      await this.openShopListing();
+    }
+
+    throw new Error(
+      '[TC_SHOP_016] No Buy Now product in the shop catalog satisfies: ' +
+        'price > User Savings and Razorpay remainder after ₹' +
+        `${couponAmount} coupon > 0. Use a customer with lower User Savings.`,
+    );
+  }
+
+  /**
+   * TC_SHOP_013 — pick an EMI product (6-month) whose down payment is below User Savings
+   * so the initial EMI payment can be fully covered by savings.
+   */
+  async addEmiProductForFullSavingsDownPayment(
+    shopCartPage: ShopCartPage,
+    shopEmiPage: ShopEmiPage,
+    options: { emiPlanTenure: string; preferredProductName?: string },
+  ): Promise<{
+    productName: string;
+    productDetails: ShopProductDetails;
+    emi: ShopEmiDetails;
+    emiLinePrice: number;
+    emiInitialPayment: number;
+  }> {
+    await this.openShopListing();
+    await this.applyGoldCoinPriceFilters();
+    const { names } = await this.scrollDownAndGetProducts();
+    const tryOrder = this.orderCatalogNamesForFullSavingsEmi(names, options.preferredProductName);
+    shopLogGet('Full savings EMI product try order', tryOrder);
+
+    for (const productName of tryOrder) {
+      const productDetails = await this.selectProductAndCaptureDetails(productName);
+      const emiEligible =
+        /EMI/i.test(productDetails.emiText) &&
+        (await this.buyWithEmiButton.isVisible({ timeout: 2_000 }).catch(() => false));
+      if (!emiEligible) {
+        shopLogGet('Skip non-EMI product', productName);
+        await this.openShopListing();
+        await this.applyGoldCoinPriceFilters();
+        continue;
+      }
+      await this.clickBuyWithEmi();
+      const emiResult = await shopEmiPage.addProductViaEmiPlan(options.emiPlanTenure);
+      const availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+      shopLogActualExpected(
+        `${productName} full savings EMI (savings > down payment)`,
+        availableSavings > emiResult.emiInitialPayment,
+        true);
+      if (availableSavings > emiResult.emiInitialPayment) {
+        shopLogGet('Selected product for full savings EMI down payment', {
+          productName,
+          emiInitialPayment: emiResult.emiInitialPayment,
+          availableSavings,
+          emiPlanTenure: options.emiPlanTenure,
+        });
+        return {
+          productName,
+          productDetails,
+          emi: emiResult.emi,
+          emiLinePrice: emiResult.emiLinePrice,
+          emiInitialPayment: emiResult.emiInitialPayment,
+        };
+      }
+      await shopCartPage.clearCartAndExpectEmpty();
+      await this.openShopListing();
+      await this.applyGoldCoinPriceFilters();
+    }
+
+    throw new Error(
+      '[TC_SHOP_013] No shop product found for EMI where User Savings fully cover the down payment. ' +
+        'Down payment must be less than User Savings (product price is less than user saving). ' +
+        'Use a customer with higher savings or a lower-priced EMI product in Excel (ShopTc013ProductName).');
+  }
+
   private orderCatalogNamesForPartialSavings(catalogNames: string[], preferred?: string): string[] {
     const weightFromName = (name: string): number =>
       Number(name.match(/(\d+(?:\.\d+)?)\s*(?:g|gm|grams?)/i)?.[1] ?? 0);
     const sorted = [...catalogNames].sort((a, b) => weightFromName(b) - weightFromName(a));
+    if (preferred && sorted.includes(preferred)) {
+      return [preferred, ...sorted.filter((name) => name !== preferred)];
+    }
+    return sorted;
+  }
+
+  private orderCatalogNamesForFullSavingsEmi(catalogNames: string[], preferred?: string): string[] {
+    const weightFromName = (name: string): number =>
+      Number(name.match(/(\d+(?:\.\d+)?)\s*(?:g|gm|grams?)/i)?.[1] ?? 0);
+    const sorted = [...catalogNames].sort((a, b) => weightFromName(a) - weightFromName(b));
     if (preferred && sorted.includes(preferred)) {
       return [preferred, ...sorted.filter((name) => name !== preferred)];
     }

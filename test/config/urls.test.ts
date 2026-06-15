@@ -68,4 +68,5 @@ describe('urls (env-aware)', () => {
     expect(c).toHaveProperty('mobile');
     expect(c).toHaveProperty('otp');
   });
+
 });
