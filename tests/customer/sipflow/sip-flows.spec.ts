@@ -1,9 +1,9 @@
-import { test } from '../../fixtures/base.fixture';
+import { test } from '../../../fixtures/base.fixture';
 import {
   getSipFlowsDataset,
   parseSipFrequencyType,
   parseSipMetalType,
-} from '../../utils/data/customer-excel-data';
+} from '../../../utils/data/customer-excel-data';
 
 const dataset = getSipFlowsDataset();
 const sipStartAfterDays = Number(dataset.SIPStartAfterDays || 5);
