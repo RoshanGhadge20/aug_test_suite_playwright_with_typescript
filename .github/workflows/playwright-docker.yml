@@ -11,6 +11,18 @@ on:
         options:
           - customer
           - admin
+          - business
+          - new-admin
+
+      folder:
+        description: "Folder (leave blank for all tests)"
+        required: false
+        default: ""
+
+      testcase:
+        description: "Specific test file (optional)"
+        required: false
+        default: ""
 
 jobs:
   playwright:
@@ -18,8 +30,7 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Create .env
         run: |
@@ -27,37 +38,34 @@ jobs:
           ${{ secrets.DOT_ENV }}
           EOF
 
-      - name: Verify .env
-        run: |
-          test -f .env
-          echo ".env created successfully"
-
       - name: Build Docker Image
-        run: |
-          docker build -t augmont-playwright .
+        run: docker build -t augmont-playwright .
 
       - name: Run Playwright Tests
         run: |
+          CMD="npx playwright test --project=${{ github.event.inputs.project }}"
+
+          if [ -n "${{ github.event.inputs.folder }}" ]; then
+            CMD="$CMD tests/${{ github.event.inputs.project }}/${{ github.event.inputs.folder }}"
+          fi
+
+          if [ -n "${{ github.event.inputs.testcase }}" ]; then
+            CMD="$CMD/${{ github.event.inputs.testcase }}"
+          fi
+
+          echo "Executing: $CMD"
+
           docker run --rm \
             --ipc=host \
             --env-file .env \
-            -v "${{ github.workspace }}/playwright-report:/app/playwright-report" \
-            -v "${{ github.workspace }}/test-results:/app/test-results" \
+            -v "${{ github.workspace }}/reports:/app/reports" \
+            -v "${{ github.workspace }}/storage:/app/storage" \
             augmont-playwright \
-            npx playwright test --project=${{ github.event.inputs.project }}
+            bash -c "$CMD"
 
-      - name: Upload Playwright HTML Report
+      - name: Upload Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report
-          retention-days: 30
-
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: test-results
-          retention-days: 30
+          name: reports
+          path: reports
