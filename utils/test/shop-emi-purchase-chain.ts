@@ -2,7 +2,7 @@ import type { ShopEmiPayNowOrderDetails } from '../../pages/customer/shop-emi-fo
 
 /**
  * Worker-scoped state shared between a shop EMI purchase spec and its foreclose spec
- * (TC007 → TC008 → TC009, TC010 → TC011).
+ * (TC007 → TC008 → TC009, TC010 → TC011, TC017 → TC018).
  */
 export interface ShopEmiPurchaseChainState {
   orderId: string;
@@ -10,8 +10,8 @@ export interface ShopEmiPurchaseChainState {
   payNowDetails: ShopEmiPayNowOrderDetails | null;
 }
 
-/** Purchase test id that seeds the chain (`007` = 9-month EMI, `009` = 3-month EMI). */
-export type ShopEmiPurchaseChainId = '007' | '009';
+/** Purchase test id that seeds the chain (`007` = 9-month EMI, `009`/`017` = 3-month EMI). */
+export type ShopEmiPurchaseChainId = '007' | '009' | '017';
 
 export function createEmptyShopEmiPurchaseChainState(): ShopEmiPurchaseChainState {
   return { orderId: '', productName: '', payNowDetails: null };

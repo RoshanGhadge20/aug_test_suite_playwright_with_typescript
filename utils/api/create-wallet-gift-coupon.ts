@@ -21,11 +21,19 @@ export interface WalletGiftCouponResult {
   amount: number;
 }
 
-export function walletGiftCouponPayload(code: string, options: WalletGiftCouponOptions = {}) {
+
+export function walletGiftCouponPayload(
+  code: string,
+  options: WalletGiftCouponOptions = {}
+) {
+  const today = new Date();
+  const expiry = new Date();
+  expiry.setDate(today.getDate() + 7);
+
   const {
     amount = 100,
-    startDate = '2026-06-09T00:00:00+05:30',
-    expiryDate = '2026-06-17T23:59:59+05:30',
+    startDate = `${today.toISOString().split('T')[0]}T00:00:00+05:30`,
+    expiryDate = `${expiry.toISOString().split('T')[0]}T23:59:59+05:30`,
     allowedModules = DEFAULT_ALLOWED_MODULES,
   } = options;
 
@@ -59,6 +67,11 @@ export function walletGiftCouponPayload(code: string, options: WalletGiftCouponO
   };
 }
 
+
+
+
+
+
 /** Admin API: create wallet gift coupon; reusable across shop, SIP, buy-metal specs. */
 export async function createWalletGiftCoupon(
   options: WalletGiftCouponOptions = {},
@@ -80,6 +93,145 @@ export async function createWalletGiftCoupon(
       throw new Error(`POST ${COUPONS_PATH} failed: ${res.status()} ${text}`);
     }
     return { code, amount };
+  } finally {
+    await ctx.dispose();
+  }
+
+
+  
+}
+
+export interface ExpiredCouponResult {
+  code: string;
+  amount: number;
+  expiryDate: string;
+}
+
+/** Get latest expired coupon */
+export async function getExpiredCoupon(): Promise<ExpiredCouponResult> {
+  const token = await getBackendAdminToken();
+  const baseURL = apiUrl('api-backend', getTargetEnv());
+
+  const path = '/api/coupons?search=&from=1&to=200&type=single';
+
+  const ctx = await pwRequest.newContext({ baseURL });
+
+  try {
+    const res = await ctx.get(path, {
+      headers: signedBackendHeaders(token, 'GET', path),
+    });
+
+    const data = await res.json();
+
+    const now = new Date();
+
+    const expiredCoupon = data.couponDetails
+    .filter((coupon: any) => {
+      const expiryDate = new Date(coupon.params.expiry.expiryDate);
+      return expiryDate < now;
+    })
+    .sort((a: any, b: any) => b.id - a.id)[0];
+    
+    return {
+      code: expiredCoupon.code,
+      amount: expiredCoupon.params.benefit.amount,
+      expiryDate: expiredCoupon.params.expiry.expiryDate,
+    };
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+const GENERATE_MULTIPLE_COUPONS_PATH = '/api/coupons/generate-multiple';
+
+export interface MultipleCouponOptions {
+  prefix?: string;
+  amount?: number;
+  noOfCoupons?: number;
+  startDate?: string;
+  expiryDate?: string;
+  allowedModules?: string[];
+}
+
+export interface MultipleCouponResponse {
+  couponCodes: string[];
+  amount: number;
+}
+
+export function multipleWalletGiftCouponPayload(
+  options: MultipleCouponOptions = {},
+) {
+  const today = new Date();
+  const expiry = new Date();
+  expiry.setDate(today.getDate() + 7);
+
+  return {
+    prefix: options.prefix ?? `MUL${Date.now()}`,
+    benefit: {
+      name: 'giftOnWalletAmt',
+      amount: options.amount ?? 100,
+      minAmount: '',
+      maxAmount: '',
+      percentage: '',
+      minOrderAmount: '',
+      allowedModules: options.allowedModules ?? DEFAULT_ALLOWED_MODULES,
+    },
+    noOfCoupons: options.noOfCoupons ?? 2,
+    startDate:
+      options.startDate ??
+      `${today.toISOString().split('T')[0]}T00:00:00+05:30`,
+    expiryDate:
+      options.expiryDate ??
+      `${expiry.toISOString().split('T')[0]}T23:59:59+05:30`,
+    notes: null,
+  };
+}
+
+export async function createMultipleWalletGiftCoupons(
+  options: MultipleCouponOptions = {},
+): Promise<MultipleCouponResponse> {
+  const body = multipleWalletGiftCouponPayload(options);
+
+  const token = await getBackendAdminToken();
+  const baseURL = apiUrl('api-backend', getTargetEnv());
+
+  const ctx = await pwRequest.newContext({ baseURL });
+
+  try {
+    const res = await ctx.post(GENERATE_MULTIPLE_COUPONS_PATH, {
+      headers: signedBackendHeaders(
+        token,
+        'POST',
+        GENERATE_MULTIPLE_COUPONS_PATH,
+        body,
+      ),
+      data: body,
+    });
+
+    const responseText = await res.text();
+
+    console.log('Status:', res.status());
+    console.log('Generate Multiple Coupon Response:');
+    console.log(responseText);
+
+    if (!res.ok()) {
+      throw new Error(
+        `POST ${GENERATE_MULTIPLE_COUPONS_PATH} failed: ${res.status()} ${responseText}`,
+      );
+    }
+
+    const response = JSON.parse(responseText);
+
+    console.log('Success Message:', response.message);
+
+    return {
+      couponCodes:
+        response.couponCodes ??
+        response.data?.couponCodes ??
+        response.result?.couponCodes ??
+        [],
+      amount: body.benefit.amount,
+    };
   } finally {
     await ctx.dispose();
   }

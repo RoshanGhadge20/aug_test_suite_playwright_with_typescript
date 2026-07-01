@@ -64,6 +64,10 @@ export class ShopCartPage extends BasePage {
   private readonly proceedToPayButton: Locator;
   private readonly priceDetailsSection: Locator;
   private readonly cartItems: Locator;
+  private readonly invalidCouponMessage: Locator;
+  private readonly couponErrorMessage: Locator;
+  private readonly quantityDropdown: Locator;
+
 
 
 
@@ -81,10 +85,27 @@ export class ShopCartPage extends BasePage {
       this.cartItems = page.locator(
         'div.bg-sheengold-ochre.rounded-lg.shadow-sm'
       );
+    this.invalidCouponMessage = page.locator('p.text-red-600');
+    this.couponErrorMessage = page.locator('[role="alert"]'); 
+    this.quantityDropdown = page.locator('p-dropdown').first();
+
   }
+
 
   private couponCodeInput(): Locator {
     return this.page.getByPlaceholder('Enter Coupon Code');
+  }
+
+  // 
+  async selectQuantity(quantity: string): Promise<void> {
+    await this.quantityDropdown.click();
+  
+    await this.page.getByRole('option', {
+      name: quantity,
+      exact: true,
+    }).click();
+  
+    await expect(this.quantityDropdown).toContainText(quantity);
   }
 
   async clearCart(): Promise<void> {
@@ -106,6 +127,34 @@ export class ShopCartPage extends BasePage {
     await expect(this.page.locator('.p-blockui')).toBeHidden({ timeout: 15_000 });
     await this.assertNoCouponApplyError();
     await this.waitForCartCouponDiscountIfShown();
+  }
+
+  async applyInvalidCouponCode(couponCode: string): Promise<void> {
+    await this.enterCouponCode(couponCode);
+    await this.page.getByRole('button', { name: /^apply$/i }).first().click();
+  
+    await expect(this.page.locator('.p-blockui')).toBeHidden({
+      timeout: 15_000,
+    });
+  
+   // const message = await this.invalidCouponMessage.textContent();
+   // console.log('[Invalid Coupon Message:]', message?.trim());
+  //  expect(message?.trim()).toBe('THE COUPON CODE YOU ENTERED IS INVALID.');
+  }
+  async validateCouponMessage(expectedMessage: string): Promise<void> {
+    const message = await this.invalidCouponMessage.textContent();
+  
+    console.log('[Coupon Message:]', message?.trim());
+  
+    expect(message?.trim()).toBe(expectedMessage);
+  }  
+  async validateCouponErrorMessage(expectedMessage: string): Promise<void> {
+    const errorMessage = this.page.getByText(expectedMessage, {
+      exact: true,
+    });
+    const message = await errorMessage.textContent();
+    console.log('error message:', message);
+      await expect(errorMessage).toBeVisible({ timeout: 10000 });
   }
 
   /** Cart Price Details — Grand Total. */
@@ -724,6 +773,27 @@ export class ShopCartPage extends BasePage {
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
   }
 
+
+  async waitForUserSavingsToReflect(
+    timeout = 120_000,
+    interval = 5000
+  ): Promise<void> {
+    const savingsLabel = this.page.getByText(/^Use Savings:/i);
+    const endTime = Date.now() + timeout;
+
+    while (Date.now() < endTime) {
+      await this.page.reload({ waitUntil: 'networkidle' });
+      await this.waitForCart();
+
+      if (await savingsLabel.isVisible().catch(() => false)) {
+        return;
+      }
+
+      await this.page.waitForTimeout(interval);
+    }
+
+    throw new Error('Use Savings did not appear within 2 minutes.');
+  }
   /**
    * TC004 — cart payable after Use Saving (metal + charges + tax − savings).
    * Cart has no paid-from-funds row; TC001/002 checkout uses getCalculatedGrandTotal on shop-checkout page.

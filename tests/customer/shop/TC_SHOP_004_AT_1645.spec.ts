@@ -111,6 +111,7 @@ test.describe('TC_SHOP_004 @customer-flows', () => {
         getTotalGoldbeforePurchase,
         getTotalSilverbeforePurchase,
         getcurrentValuebeforePurchase,
+        savingsAmount: cartSavingsAmount,
       });
     });
   });
