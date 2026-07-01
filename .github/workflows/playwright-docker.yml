@@ -15,12 +15,12 @@ on:
           - new-admin
 
       folder:
-        description: "Folder (leave blank for all tests)"
+        description: "Folder (Optional)"
         required: false
         default: ""
 
       testcase:
-        description: "Specific test file (optional)"
+        description: "Test file (Optional)"
         required: false
         default: ""
 
@@ -53,7 +53,7 @@ jobs:
             CMD="$CMD/${{ github.event.inputs.testcase }}"
           fi
 
-          echo "Executing: $CMD"
+          echo "Running: $CMD"
 
           docker run --rm \
             --ipc=host \
@@ -63,9 +63,18 @@ jobs:
             augmont-playwright \
             bash -c "$CMD"
 
-      - name: Upload Reports
+      - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reports
-          path: reports
+          name: playwright-html-report
+          path: reports/html
+          retention-days: 30
+
+      - name: Upload JSON Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: reports/results.json
+          retention-days: 30
