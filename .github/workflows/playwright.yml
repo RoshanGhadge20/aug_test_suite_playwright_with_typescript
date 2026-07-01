@@ -2,6 +2,24 @@ name: Playwright Automation
 
 on:
   workflow_dispatch:
+    inputs:
+      project:
+        description: "Playwright Project"
+        required: true
+        default: "customer"
+        type: choice
+        options:
+          - customer
+          - admin
+          - business
+          - new-admin
+          - api-backend
+          - api-emi
+
+      folder:
+        description: "Folder path (Leave blank to run complete project)"
+        required: false
+        default: ""
 
 jobs:
   playwright:
@@ -27,27 +45,47 @@ jobs:
           ${{ secrets.DOT_ENV }}
           EOF
 
-      - name: Verify .env Created
+      - name: Verify .env
         run: |
-          ls -la
           test -f .env && echo ".env created successfully"
 
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
 
       - name: Run Playwright Tests
-        run: npx playwright test --project=customer
+        env:
+          CI: true
+          HEADLESS: "true"
+        shell: bash
+        run: |
+          CMD="npx playwright test"
 
-      - name: Upload Playwright Report
+          if [ -n "${{ github.event.inputs.folder }}" ]; then
+            CMD="$CMD ${{ github.event.inputs.folder }}"
+          fi
+
+          CMD="$CMD --project=${{ github.event.inputs.project }}"
+
+          echo "Executing: $CMD"
+          eval "$CMD"
+
+      - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
-          path: playwright-report/
+          name: playwright-html-report
+          path: reports/html
 
-      - name: Upload Test Results
+      - name: Upload Test Artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
-          path: test-results/
+          name: playwright-artifacts
+          path: reports/test-artifacts
+
+      - name: Upload JSON Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-json
+          path: reports/results.json
