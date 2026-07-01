@@ -49,11 +49,13 @@ setup('authenticate admin', async ({ browser }) => {
   await ctx.close();
 });
 
+
 setup('authenticate customer', async ({ browser }) => {
   setup.skip(!shouldAuthenticate('customer'), `Skipped customer auth (TARGET_PANEL=${targetPanel ?? 'n/a'})`);
   const { mobile, otp } = panelCreds('customer', targetEnv);
   setup.skip(!mobile || !otp, `No customer credentials configured for ${targetEnv} — skipping`);
   const storagePath = storageStatePath(targetEnv, 'customer');
+ // setup.skip(fs.existsSync(storagePath), `Reusing cached customer storage state (${storagePath}); delete it to force re-login`);
   ensureStorageDir(storagePath);
   const ctx = await browser.newContext({ baseURL: panelUrl('customer', targetEnv) });
   const page = await ctx.newPage();

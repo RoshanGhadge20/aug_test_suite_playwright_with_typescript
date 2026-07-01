@@ -47,6 +47,7 @@ export class ShopPage extends BasePage {
   private static readonly emiBannerProbeMs = 1_500;
   private static readonly skuValuePollMs = 1_500;
   private readonly goldCoinCheckbox: Locator;
+  private readonly uSilverSubcategoryCheckbox: Locator;
   private readonly priceRange100To20000Radio: Locator;
   private readonly resultsText: Locator;
   private readonly goldCoinHeading: Locator;
@@ -72,6 +73,10 @@ export class ShopPage extends BasePage {
     super(page);
     this.goldCoinCheckbox = page
       .getByText('Gold Coin', { exact: true })
+      .locator('xpath=following-sibling::*[1]')
+      .first();
+    this.uSilverSubcategoryCheckbox = page
+      .getByText('USilver', { exact: true })
       .locator('xpath=following-sibling::*[1]')
       .first();
     this.priceRange100To20000Radio = page
@@ -298,6 +303,52 @@ export class ShopPage extends BasePage {
     await this.waitForShopListingReady(30_000);
   }
 
+  /** Read Product Weight (grams) from Product Properties accordion on PDP. */
+  async readProductWeightFromProperties(): Promise<string> {
+    await this.expandProductProperties();
+    return this.readPropertyValue('Product Weight');
+  }
+
+  /** Return from PDP to filtered shop product listing. */
+  async returnToShopListing(): Promise<void> {
+    await this.page.goBack();
+    await this.page.waitForURL(/shop-new\/product/i, { timeout: 15_000 });
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.resultsText.waitFor({ state: 'visible', timeout: 15_000 });
+    await this.page.keyboard.press('Home');
+  }
+
+  /** Subcategory filter — USilver only (uncheck AKAM group if all subcategories selected). */
+  async selectUSilverSubcategory(): Promise<void> {
+    await this.scrollPageUp();
+    await this.page.getByRole('heading', { name: 'Sub Category', level: 1 }).scrollIntoViewIfNeeded();
+
+    const akamGroupToggle = this.page
+      .getByRole('heading', { name: 'Sub Category', level: 1 })
+      .locator('xpath=following::*[normalize-space()="AKAM"][1]')
+      .locator('xpath=following-sibling::*[1]')
+      .first();
+    const akamGroupChecked = await akamGroupToggle
+      .locator('.p-checkbox-checked, input[type="checkbox"]:checked')
+      .isVisible({ timeout: 1_000 })
+      .catch(() => false);
+    if (akamGroupChecked) {
+      await akamGroupToggle.click();
+      await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    }
+
+    await this.uSilverSubcategoryCheckbox.scrollIntoViewIfNeeded();
+    await this.uSilverSubcategoryCheckbox.click();
+    await this.waitForShopListingReady(30_000);
+  }
+
+  /** Silver listing filters — jewellery type Silver, USilver subcategory, ₹100–₹20000. */
+  async applySilverUsilverPriceFilters(): Promise<void> {
+    await this.selectJewelleryTypeSilver();
+    await this.selectUSilverSubcategory();
+    await this.clickPriceRangeRadio();
+  }
+
   /** TC_SHOP_001 — Gold Coin + ₹100–₹20000 filters. */
   async applyGoldCoinPriceFilters(): Promise<void> {
     await this.clickGoldCoinCheckbox();
@@ -436,6 +487,150 @@ export class ShopPage extends BasePage {
       '[TC_SHOP_016] No Buy Now product in the shop catalog satisfies: ' +
         'price > User Savings and Razorpay remainder after ₹' +
         `${couponAmount} coupon > 0. Use a customer with lower User Savings.`,
+    );
+  }
+
+  /**
+   * TC_SHOP_017 — scan catalog for EMI + Buy Now pair where combined cart total exceeds
+   * User Savings + coupon so Razorpay remainder stays positive.
+   */
+  async addMixedEmiBuyNowForPartialSavingsWithCoupon(
+    shopCartPage: ShopCartPage,
+    shopEmiPage: ShopEmiPage,
+    couponAmount: number,
+    options?: {
+      preferredEmiProductName?: string;
+      preferredBuyNowProductName?: string;
+      emiPlanTenure?: string;
+    },
+  ): Promise<{
+    emiProductName: string;
+    buyNowProductName: string;
+    productNames: string[];
+    productDetailsByName: Record<string, ShopProductDetails>;
+    emiResult: { emi: ShopEmiDetails; emiLinePrice: number; emiInitialPayment: number };
+    combinedGrandTotal: number;
+    availableSavings: number;
+    cartSnapshot: Awaited<ReturnType<ShopCartPage['validateMixedCart']>>;
+  }> {
+    const emiPlanTenure = options?.emiPlanTenure ?? '3 Months';
+    await shopCartPage.clearCartAndExpectEmpty();
+    await this.openShopListing();
+    const { names } = await this.scrollDownAndGetProducts();
+    const emiTryOrder = this.orderCatalogNamesForFullSavingsEmi(names, options?.preferredEmiProductName);
+    const buyNowTryOrder = this.orderCatalogNamesForPartialSavings(names, options?.preferredBuyNowProductName);
+    shopLogGet('TC_SHOP_017 — EMI products to evaluate', emiTryOrder);
+    shopLogGet('TC_SHOP_017 — Buy Now products to evaluate', buyNowTryOrder);
+
+    for (const buyNowProductName of buyNowTryOrder) {
+      for (const emiProductName of emiTryOrder) {
+        await shopCartPage.clearCartAndExpectEmpty();
+        await this.openShopListing();
+
+        const emiProductDetails = await this.selectProductAndCaptureDetails(emiProductName);
+        const emiEligible =
+          /EMI/i.test(emiProductDetails.emiText) &&
+          (await this.buyWithEmiButton.isVisible({ timeout: 2_000 }).catch(() => false));
+        if (!emiEligible) {
+          shopLogGet('TC_SHOP_017 skip non-EMI product', emiProductName);
+          continue;
+        }
+        await this.clickBuyWithEmi();
+        let emiResult: { emi: ShopEmiDetails; emiLinePrice: number; emiInitialPayment: number };
+        try {
+          emiResult = await shopEmiPage.addProductViaEmiPlan(emiPlanTenure);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          shopLogGet(`TC_SHOP_017 skip unstable EMI add (${emiProductName})`, {
+            reason: message,
+          });
+          continue;
+        }
+
+        await this.openShopListing();
+        const buyNowProductDetails = await this.selectProductAndCaptureDetails(buyNowProductName);
+        const buyNowEligible = await this.buyNowButton.isVisible({ timeout: 2_000 }).catch(() => false);
+        if (!buyNowEligible) {
+          shopLogGet('TC_SHOP_017 skip non–Buy Now product', buyNowProductName);
+          continue;
+        }
+        await this.clickBuyNowFromPdp(false);
+
+        await shopCartPage.removeDuplicateCartProducts();
+        const productNames = [emiProductName, buyNowProductName];
+        try {
+          await shopCartPage.expectCartHasProducts(productNames);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          shopLogGet(`TC_SHOP_017 skip unstable cart pair (${emiProductName} + ${buyNowProductName})`, {
+            reason: message,
+          });
+          continue;
+        }
+
+        const productDetailsByName: Record<string, ShopProductDetails> = {
+          [emiProductName]: emiProductDetails,
+          [buyNowProductName]: buyNowProductDetails,
+        };
+        const cartSnapshot = await shopCartPage.validateMixedCart({
+          productNames,
+          emiProductName,
+          buyNowProductName,
+          productDetailsByName,
+          emiExpectedNetPayable: shopEmiPage.expectedNetPayableAmount(emiResult.emi),
+          emiInitialPayment: emiResult.emiInitialPayment,
+        });
+        let availableSavings = 0;
+        try {
+          availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          shopLogGet(`TC_SHOP_017 skip cart pair (Use Savings not ready: ${emiProductName} + ${buyNowProductName})`, {
+            reason: message,
+          });
+          continue;
+        }
+        const combinedGrandTotal = cartSnapshot.combinedGrandTotal;
+        const razorpayRemainder = Number(
+          (combinedGrandTotal - availableSavings - couponAmount).toFixed(2),
+        );
+        const partialWithCouponOk =
+          availableSavings > 0 &&
+          combinedGrandTotal > availableSavings + couponAmount &&
+          razorpayRemainder > 0;
+        shopLogGet(`TC_SHOP_017 mixed pair check (${emiProductName} + ${buyNowProductName})`, {
+          combinedGrandTotal,
+          availableSavings,
+          couponAmount,
+          razorpayRemainder,
+          partialWithCouponOk,
+        });
+        if (partialWithCouponOk) {
+          shopLogGet('Selected mixed EMI + Buy Now for partial savings + coupon', {
+            emiProductName,
+            buyNowProductName,
+            combinedGrandTotal,
+            availableSavings,
+            couponAmount,
+            razorpayRemainder,
+          });
+          return {
+            emiProductName,
+            buyNowProductName,
+            productNames,
+            productDetailsByName,
+            emiResult,
+            combinedGrandTotal,
+            availableSavings,
+            cartSnapshot,
+          };
+        }
+      }
+    }
+
+    throw new Error(
+      '[TC_SHOP_017] No EMI + Buy Now pair satisfies: combined cart total > User Savings + ₹' +
+        `${couponAmount} coupon. Try a customer with lower User Savings or higher-priced catalog items.`,
     );
   }
 

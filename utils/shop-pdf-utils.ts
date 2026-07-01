@@ -136,6 +136,35 @@ export function shopPdfContainsProductName(pdfText: string, productName: string)
   return false;
 }
 
+/** Billing / shipping address lines on shop tax invoice PDF. */
+export function shopPdfContainsBillingAddress(
+  pdfText: string,
+  expected: { fullName?: string; mobile?: string; address?: string; pincode?: string }
+): boolean {
+  const compact = compactText(pdfText).toLowerCase();
+  if (expected.fullName) {
+    const tokens = expected.fullName.toLowerCase().split(/\s+/).filter((token) => token.length > 1);
+    if (tokens.length > 0 && !tokens.every((token) => compact.includes(token))) {
+      return false;
+    }
+  }
+  // Mobile is not validated — invoice PDF may show registered account mobile, not edited checkout mobile.
+  if (expected.address) {
+    const parts = expected.address
+      .toLowerCase()
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (parts.length > 0 && !compact.includes(parts[0])) {
+      return false;
+    }
+  }
+  if (expected.pincode && !compact.includes(expected.pincode)) {
+    return false;
+  }
+  return true;
+}
+
 /** TC_SHOP_009 cancel invoice — refund / refundable amount in PDF. */
 export function extractShopCancelRefundAmount(pdfText: string, expectedHint?: number): number {
   const compact = compactText(pdfText);

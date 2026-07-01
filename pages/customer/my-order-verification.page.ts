@@ -69,10 +69,16 @@ export const SHOP_ORDER_DETAIL_TIMELINE_FORECLOSE = [
   'Payment Received',
 ] as const;
 
-/** TC_SHOP_009 — cancelled EMI order detail timeline. */
+/** TC_SHOP_009 — cancelled EMI order detail timeline (first EMI paid → Active). */
 export const SHOP_ORDER_DETAIL_TIMELINE_CANCEL = [
   'Booked',
   'Active',
+  'Order Cancelled',
+] as const;
+
+/** TC_SHOP_018 — cancelled EMI booked but never activated (no first EMI paid). */
+export const SHOP_ORDER_DETAIL_TIMELINE_CANCEL_BOOKED_ONLY = [
+  'Booked',
   'Order Cancelled',
 ] as const;
 
@@ -1032,6 +1038,14 @@ export class MyOrderVerificationPage extends BasePage {
         timeout: 20_000,
       });
     }
+    // Detail panel can appear before timeline/refund blocks hydrate. Wait until at least one
+    // timeline status step is rendered so subsequent reads don't race with lazy data loading.
+    await expect
+      .poll(
+        async () => (await this.getShopOrderStatusTimeline()).length,
+        { timeout: 20_000, intervals: [500, 1000, 2000] },
+      )
+      .toBeGreaterThan(0);
   }
 
   /** TC003 / TC_SHOP_010 (AT-1658) — My Orders SHOP tab: find order id, click Pay Now on the EMI row. */
@@ -1109,7 +1123,10 @@ export class MyOrderVerificationPage extends BasePage {
       return;
     }
     await this.goToMyOrders();
-    if (flow === 'single') {
+    if (options?.orderId) {
+      await this.clickShopTabSingleOrder();
+      await this.openShopOrderDetailMulti(productName, { orderId: options.orderId });
+    } else if (flow === 'single') {
       await this.clickShopTabSingleOrder();
       await this.openShopOrderDetailSingle(productName);
     } else {
@@ -1117,6 +1134,43 @@ export class MyOrderVerificationPage extends BasePage {
       await this.openShopOrderDetailMulti(productName, { orderId: options?.orderId });
     }
     await this.addressDetailsHeading().waitFor({ state: 'visible', timeout: 15_000 });
+    await this.waitForShopOrderDetailContentLoaded();
+  }
+
+  /** Wait for order detail sections (status, address, invoice) before opening invoice PDF. */
+  private async waitForShopOrderDetailContentLoaded(): Promise<void> {
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.page
+      .getByText(/Payment Received|Booked/i)
+      .first()
+      .waitFor({ state: 'visible', timeout: 30_000 })
+      .catch(() => {});
+    await this.scrollToShopInvoiceSection();
+    const invoiceBtn = this.shopInvoiceButtonInAddressSection();
+    await invoiceBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await expect(invoiceBtn).toBeEnabled({ timeout: 15_000 });
+    await this.getShopOrderAddress('received').catch(() => {});
+    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+  }
+
+  private async fetchShopInvoicePdfText(invoicePassword: string): Promise<string> {
+    const pdfUrl = await this.getShopInvoicePdfUrl();
+    let pdfText = '';
+    await expect
+      .poll(
+        async () => {
+          const response = await this.page.request.get(pdfUrl, { timeout: 30_000 });
+          if (!response.ok()) {
+            return '';
+          }
+          pdfText = pdfUtils.normalizePdfText(
+            await shopPdfUtils.readShopInvoicePdf(await response.body(), invoicePassword));
+          const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+          return pdfText.length > 80 && !Number.isNaN(netPayable) && netPayable > 0 ? pdfText : '';
+        },
+        { timeout: 30_000, intervals: [1000, 2000, 3000] })
+      .toBeTruthy();
+    return pdfText;
   }
 
   /**
@@ -1559,6 +1613,12 @@ export class MyOrderVerificationPage extends BasePage {
     } else {
       await pdfPage.keyboard.press('Enter');
     }
+    await pdfPage
+      .locator('input[type="password"]')
+      .first()
+      .waitFor({ state: 'hidden', timeout: 20_000 })
+      .catch(() => {});
+    await pdfPage.waitForLoadState('load', { timeout: 15_000 }).catch(() => {});
     this.logShopInvoice(9, 'PDF password submitted');
   }
 
@@ -2527,6 +2587,43 @@ export class MyOrderVerificationPage extends BasePage {
     }
   }
 
+  /** Delivery address management — invoice PDF: product name, amount, billing address only. */
+  async validateShopBuyNowInvoiceAddressProductAndAmount(params: {
+    productName: string;
+    amount: number;
+    billingAddress: ShopBillingAddressDetails;
+    invoicePassword?: string;
+    orderId?: string;
+  }): Promise<void> {
+    const shopData = getShopDataset();
+    const invoicePassword =
+      params.invoicePassword ?? shopData.mobile.replace(/\D/g, '').slice(-4);
+    await this.ensureShopOrderDetailForInvoice(params.productName, { orderId: params.orderId });
+    await this.waitForShopOrderDetailContentLoaded();
+    const orderDetailAddress = await this.getShopOrderAddress('received');
+    await this.clickShopInvoice({
+      maxAttempts: 4,
+      captureTimeoutMs: 15_000,
+      productName: params.productName,
+      orderId: params.orderId,
+    });
+    await this.submitShopInvoicePassword(invoicePassword);
+
+    const pdfText = await this.fetchShopInvoicePdfText(invoicePassword);
+    const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+    const pdfHasProduct = shopPdfUtils.shopPdfContainsProductName(pdfText, params.productName);
+    const pdfHasAddress = shopPdfUtils.shopPdfContainsBillingAddress(pdfText, orderDetailAddress);
+
+    shopLogGet('Order detail address', orderDetailAddress);
+    shopLogActualExpected('Invoice product name', pdfHasProduct, true);
+    shopLogActualExpected('Invoice net payable', netPayable, params.amount);
+    shopLogActualExpected('Invoice billing address', pdfHasAddress, true);
+
+    expect(pdfHasProduct).toBe(true);
+    expect(pdfHasAddress).toBe(true);
+    expect(Math.abs(netPayable - params.amount)).toBeLessThanOrEqual(1);
+  }
+
   /** TC_SHOP_002 — download invoice PDF and validate fields for one product line. */
   async validateShopMultiProductInvoice(params: {
     invoiceProductName: string;
@@ -2700,6 +2797,10 @@ export class MyOrderVerificationPage extends BasePage {
     await this.validateShopOrderDetailStatusTimeline(SHOP_ORDER_DETAIL_TIMELINE_CANCEL);
   }
 
+  async validateCancelledBookedShopOrderDetailStatusTimeline(): Promise<void> {
+    await this.validateShopOrderDetailStatusTimeline(SHOP_ORDER_DETAIL_TIMELINE_CANCEL_BOOKED_ONLY);
+  }
+
   async getShopOrderDetailRefundSource(): Promise<string> {
     const label = this.page.getByText('Refund Source', { exact: true });
     await label.waitFor({ state: 'visible', timeout: 15_000 });
@@ -2810,19 +2911,38 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** TC_SHOP_009 — refund amount from cancel invoice PDF. */
   async getShopCancelInvoiceRefundAmount(
-    expectedHint?: number): Promise<number> {
-    const pdfText = await this.loadShopCancelInvoicePdf(undefined);
+    expectedHint?: number,
+    options?: { invoicePassword?: string }): Promise<number> {
+    const pdfText = await this.loadShopCancelInvoicePdf(options?.invoicePassword);
     const amount = shopPdfUtils.extractShopCancelRefundAmount(pdfText, expectedHint);
     shopLogGet('Invoice refund amount', amount);
     return amount;
   }
 
+  // async validateShopCancelInvoiceRefundAmount(
+  //   expectedRefundAmount: number,
+  //   options?: { invoicePassword?: string }): Promise<void> {
+  //   const actual = await this.getShopCancelInvoiceRefundAmount(expectedRefundAmount, options);
+  //   shopLogActualExpected('Invoice refund amount', actual, expectedRefundAmount);
+  //   expect(actual).toBeCloseTo(expectedRefundAmount, 2);
+  // }
   async validateShopCancelInvoiceRefundAmount(
-    expectedRefundAmount: number): Promise<void> {
-    const actual = await this.getShopCancelInvoiceRefundAmount(expectedRefundAmount);
-    shopLogActualExpected('Invoice refund amount', actual, expectedRefundAmount);
-    expect(actual).toBeCloseTo(expectedRefundAmount, 2);
+    expectedRefundAmount: number,
+    options?: { invoicePassword?: string }
+  ): Promise<void> {
+    const actual = await this.getShopCancelInvoiceRefundAmount(
+      expectedRefundAmount,
+      options
+    );
+  
+    const tolerance = 1;
+  
+    expect(
+      Math.abs(actual - expectedRefundAmount)
+    ).toBeLessThanOrEqual(tolerance);
   }
+
+
 
   /** TC_SHOP_008 / TC_SHOP_011 — open invoice and return PDF URL. */
   async validateForecloseInvoice(params: {

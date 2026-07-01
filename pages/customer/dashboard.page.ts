@@ -223,6 +223,14 @@ export class DashBoardPage extends BasePage {
     console.log('Dashboard loaded');
   }
 
+  /** TC_SHOP_017 — simple dashboard readiness + Withdraw visibility check. */
+  async isWithdrawVisibleOnDashboard(timeoutMs = 20_000): Promise<boolean> {
+    await this.goto('/dashboard');
+    await this.page.waitForURL(/\/dashboard/i, { timeout: 15_000 });
+    await this.withdrawInvestmentButton.first().waitFor({ state: 'visible', timeout: timeoutMs }).catch(() => {});
+    return this.withdrawInvestmentButton.first().isVisible().catch(() => false);
+  }
+
   async clickMyOrders(): Promise<void> {
     const myOrders = this.page
       .getByRole('link', { name: /my orders/i })
@@ -587,6 +595,74 @@ export class DashBoardPage extends BasePage {
   }
 
   /** TC_SHOP_004 — validate portfolio grams and INR after full-savings shop purchase. */
+  // async validateShopPortfolioAfterFullSavingsPurchase(params: {
+  //   productName: string;
+  //   productDetails: ShopProductDetails;
+  //   cartNetWeight: string;
+  //   getTotalGoldbeforePurchase: number;
+  //   getTotalSilverbeforePurchase: number;
+  //   getcurrentValuebeforePurchase: number;
+  // }): Promise<void> {
+  //   const productWeightGrams = expectedShopProductWeightGrams(
+  //     params.productName,
+  //     params.productDetails,
+  //     params.cartNetWeight,
+  //   );
+
+  //   const expectedGoldGrams = Number((params.getTotalGoldbeforePurchase - productWeightGrams).toFixed(4));
+
+  //   shopLogGet('Expected gold grams after purchase', { expectedGoldGrams, productWeightGrams });
+
+  //   let goldAfter = 0;
+  //   let silverAfter = 0;
+  //   let portfolioAfter = 0;
+  //   let calculatedPortfolioAfter = 0;
+
+  //   for (let attempt = 0; attempt < 6; attempt += 1) {
+  //     await this.gotoDashboard();
+  //     goldAfter = await this.getTotalGold();
+  //     silverAfter = await this.getTotalSilver();
+  //     portfolioAfter = await this.getCurrentValue();
+  //     const spot = await this.fetchDigitalMetalSpotRates();
+  //     calculatedPortfolioAfter = portfolioInrFromGramsAndSellRates(goldAfter, silverAfter, spot);
+
+  //     const goldOk = Math.abs(goldAfter - expectedGoldGrams) <= 0.01;
+  //     const silverOk = Math.abs(silverAfter - params.getTotalSilverbeforePurchase) <= 0.01;
+  //     const portfolioOk = Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2;
+
+  //     if (goldOk && silverOk && portfolioOk) {
+  //       break;
+  //     }
+  //     if (attempt < 5) {
+  //       await this.page.reload({ waitUntil: 'domcontentloaded' });
+  //       await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+  //     }
+  //   }
+
+  //   console.log('[Shop portfolio-after] Total gold (g):', goldAfter);
+  //   console.log('[Shop portfolio-after] Total silver (g):', silverAfter);
+  //   console.log(
+  //     `[Shop portfolio-after] CURRENT VALUE: ₹${portfolioAfter} | calculated: ₹${calculatedPortfolioAfter}`,
+  //   );
+  //   console.log('========================');
+  //   console.log('Gold Before:', params.getTotalGoldbeforePurchase);
+  //   console.log('Product Weight:', productWeightGrams);
+  //   console.log('Expected Gold:', expectedGoldGrams);
+  //   console.log('Actual Gold:', goldAfter);
+  //   console.log(
+  //     'Difference:',
+  //     Math.abs(goldAfter - expectedGoldGrams)
+  //   );
+  //   console.log('========================');
+  //   expect(Math.abs(goldAfter - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
+  //   expect(Math.abs(silverAfter - params.getTotalSilverbeforePurchase)).toBeLessThanOrEqual(0.01);
+  //   shopLogActualExpected(
+  //     'UI portfolio vs formula after purchase',
+  //     Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2,
+  //     true,
+  //   );
+  //   expect(portfolioAfter).toBeCloseTo(calculatedPortfolioAfter, 2);
+  // }
   async validateShopPortfolioAfterFullSavingsPurchase(params: {
     productName: string;
     productDetails: ShopProductDetails;
@@ -594,57 +670,120 @@ export class DashBoardPage extends BasePage {
     getTotalGoldbeforePurchase: number;
     getTotalSilverbeforePurchase: number;
     getcurrentValuebeforePurchase: number;
+    savingsAmount: number;
   }): Promise<void> {
-    const productWeightGrams = expectedShopProductWeightGrams(
-      params.productName,
-      params.productDetails,
-      params.cartNetWeight,
+  
+    const spot = await this.fetchDigitalMetalSpotRates();
+  
+    const deductedGoldGrams =
+      params.savingsAmount / spot.gSell;
+  
+    const expectedGoldGrams = Number(
+      (
+        params.getTotalGoldbeforePurchase -
+        deductedGoldGrams
+      ).toFixed(4)
     );
-    const expectedGoldGrams = Number((params.getTotalGoldbeforePurchase - productWeightGrams).toFixed(4));
-
-    shopLogGet('Expected gold grams after purchase', { expectedGoldGrams, productWeightGrams });
-
+  
+    shopLogGet('Expected gold grams after purchase', {
+      expectedGoldGrams,
+      deductedGoldGrams,
+      goldSellRate: spot.gSell,
+      savingsAmount: params.savingsAmount,
+    });
+  
     let goldAfter = 0;
     let silverAfter = 0;
     let portfolioAfter = 0;
     let calculatedPortfolioAfter = 0;
-
+  
     for (let attempt = 0; attempt < 6; attempt += 1) {
       await this.gotoDashboard();
+  
       goldAfter = await this.getTotalGold();
       silverAfter = await this.getTotalSilver();
       portfolioAfter = await this.getCurrentValue();
-      const spot = await this.fetchDigitalMetalSpotRates();
-      calculatedPortfolioAfter = portfolioInrFromGramsAndSellRates(goldAfter, silverAfter, spot);
-
-      const goldOk = Math.abs(goldAfter - expectedGoldGrams) <= 0.01;
-      const silverOk = Math.abs(silverAfter - params.getTotalSilverbeforePurchase) <= 0.01;
-      const portfolioOk = Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2;
-
+  
+      calculatedPortfolioAfter = portfolioInrFromGramsAndSellRates(
+        goldAfter,
+        silverAfter,
+        spot,
+      );
+  
+      const goldOk =
+        Math.abs(goldAfter - expectedGoldGrams) <= 0.01;
+  
+      const silverOk =
+        Math.abs(
+          silverAfter - params.getTotalSilverbeforePurchase,
+        ) <= 0.01;
+  
+      const portfolioOk =
+        Math.abs(
+          portfolioAfter - calculatedPortfolioAfter,
+        ) <= 2;
+  
       if (goldOk && silverOk && portfolioOk) {
         break;
       }
+  
       if (attempt < 5) {
-        await this.page.reload({ waitUntil: 'domcontentloaded' });
-        await this.waitForDashboardPortfolioSection(12_000).catch(() => {});
+        await this.page.reload({
+          waitUntil: 'domcontentloaded',
+        });
+  
+        await this.waitForDashboardPortfolioSection(
+          12_000,
+        ).catch(() => {});
       }
     }
-
+  
     console.log('[Shop portfolio-after] Total gold (g):', goldAfter);
     console.log('[Shop portfolio-after] Total silver (g):', silverAfter);
     console.log(
       `[Shop portfolio-after] CURRENT VALUE: ₹${portfolioAfter} | calculated: ₹${calculatedPortfolioAfter}`,
     );
-
-    expect(Math.abs(goldAfter - expectedGoldGrams)).toBeLessThanOrEqual(0.01);
-    expect(Math.abs(silverAfter - params.getTotalSilverbeforePurchase)).toBeLessThanOrEqual(0.01);
+  
+    console.log('========================');
+    console.log('Gold Before:', params.getTotalGoldbeforePurchase);
+    console.log('Savings Amount:', params.savingsAmount);
+    console.log('Gold Sell Rate:', spot.gSell);
+    console.log('Deducted Gold Grams:', deductedGoldGrams);
+    console.log('Expected Gold:', expectedGoldGrams);
+    console.log('Actual Gold:', goldAfter);
+    console.log(
+      'Difference:',
+      Math.abs(goldAfter - expectedGoldGrams),
+    );
+    console.log('========================');
+  
+    expect(
+      Math.abs(goldAfter - expectedGoldGrams),
+    ).toBeLessThanOrEqual(0.01);
+  
+    expect(
+      Math.abs(
+        silverAfter - params.getTotalSilverbeforePurchase,
+      ),
+    ).toBeLessThanOrEqual(0.01);
+  
     shopLogActualExpected(
       'UI portfolio vs formula after purchase',
-      Math.abs(portfolioAfter - calculatedPortfolioAfter) <= 2,
+      Math.abs(
+        portfolioAfter - calculatedPortfolioAfter,
+      ) <= 2,
       true,
     );
-    expect(portfolioAfter).toBeCloseTo(calculatedPortfolioAfter, 2);
+  
+    expect(portfolioAfter).toBeCloseTo(
+      calculatedPortfolioAfter,
+      2,
+    );
   }
+
+
+
+
 
   private async captureShopPortfolioBeforePurchaseInternal(
     logLabel: string,

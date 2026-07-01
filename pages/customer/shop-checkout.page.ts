@@ -123,6 +123,11 @@ export class ShopCheckoutPage extends BasePage {
   private readonly payButton: Locator;
   private readonly shippingAddressAccordion: Locator;
   private readonly billingAddressAccordion: Locator;
+  readonly firstName = this.page.getByRole('textbox', { name: 'Enter First Name' });
+  readonly lastName = this.page.getByRole('textbox', { name: 'Enter Last Name' });
+  readonly mobileNumber = this.page.getByRole('textbox', { name: 'Enter Mobile Number' });
+  readonly firstAddressLine = this.page.getByRole('textbox', { name: 'Enter Address Line 1' });
+
 
   constructor(page: Page) {
     super(page);
@@ -435,7 +440,8 @@ export class ShopCheckoutPage extends BasePage {
     await this.verifyOtpButton.click();
   }
 
-  async selectNetbanking(): Promise<void> {
+  async selectNetbanking():
+   Promise<void> {
     const netbankingLabel = this.page.locator('label[for="Netbanking"]');
     if (await netbankingLabel.isVisible().catch(() => false)) {
       await netbankingLabel.click();
@@ -448,21 +454,56 @@ export class ShopCheckoutPage extends BasePage {
     await this.payButton.click();
   }
 
+  // async getOrderPlacedDetails(): Promise<ShopOrderPlacedDetails> {
+  //   const dialog = this.page.getByRole('dialog', { name: /^Order Placed$/i });
+  //   await dialog.waitFor({ state: 'visible', timeout: 30_000 });
+
+  //   const successMessage = await this.text(
+  //     dialog
+  //       .locator('app-dialog .text-16.font-gilroy')
+  //       .filter({ hasText: /booked|placed/i })
+  //       .first());
+  //   const orderIdRaw = await this.text(dialog.locator('.bg-teal-aliceblue').first());
+  //   const orderId = this.parseOrderIds(orderIdRaw).join(',');
+
+  //   return { orderId, successMessage };
+  // }
   async getOrderPlacedDetails(): Promise<ShopOrderPlacedDetails> {
-    const dialog = this.page.getByRole('dialog', { name: /^Order Placed$/i });
-    await dialog.waitFor({ state: 'visible', timeout: 30_000 });
+    const orderPlacedDialog = this.page.getByRole('dialog', {
+      name: /^Order Placed$/i,
+    });
+
+    const errorToast = this.page.getByText('something went wrong', {
+      exact: false,
+    });
+
+    await Promise.race([
+      orderPlacedDialog.waitFor({ state: 'visible', timeout: 30000 }),
+      errorToast.waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+
+    if (await errorToast.isVisible().catch(() => false)) {
+      throw new Error(
+        'Order placement failed. Application displayed: "something went wrong".'
+      );
+    }
 
     const successMessage = await this.text(
-      dialog
+      orderPlacedDialog
         .locator('app-dialog .text-16.font-gilroy')
         .filter({ hasText: /booked|placed/i })
-        .first());
-    const orderIdRaw = await this.text(dialog.locator('.bg-teal-aliceblue').first());
-    const orderId = this.parseOrderIds(orderIdRaw).join(',');
+        .first()
+    );
 
-    return { orderId, successMessage };
+    const orderIdRaw = await this.text(
+      orderPlacedDialog.locator('.bg-teal-aliceblue').first()
+    );
+
+    return {
+      orderId: this.parseOrderIds(orderIdRaw).join(','),
+      successMessage,
+    };
   }
-
   parseOrderIds(rawOrderId: string): string[] {
     return rawOrderId
       .replace(/^Order\s*ID:\s*/i, '')
@@ -530,6 +571,33 @@ export class ShopCheckoutPage extends BasePage {
     }
     await this.page.keyboard.press('Home');
     await this.deliverToThisAddressButton.click();
+  }
+
+  /** Delivery address management — Choose Billing Address step loaded with at least one card. */
+  async validateChooseBillingAddressCheckoutPage(): Promise<void> {
+    await this.waitForCheckoutPage();
+    await expect(this.billingAddressCards().first()).toBeVisible({ timeout: 15_000 });
+    const section = await this.priceSection();
+    await expect(section.getByText('Grand Total', { exact: true })).toBeVisible();
+  }
+
+  /** Delivery address management — select billing address card by index (0 = first). */
+  async selectBillingAddressCardByIndex(cardIndex = 0): Promise<void> {
+    const card = await this.resolveBillingAddressCard(cardIndex);
+    await card.scrollIntoViewIfNeeded();
+    await card.click();
+  }
+
+  /** Delivery address management — click Edit on billing address card. */
+  async clickEditOnBillingAddressCard(cardIndex = 0): Promise<void> {
+    const card = await this.resolveBillingAddressCard(cardIndex);
+    await card.scrollIntoViewIfNeeded();
+    const editButton = card.getByRole('button', { name: /^Edit$/i }).first();
+    await editButton.waitFor({ state: 'visible', timeout: 10_000 });
+    await editButton.click().catch(async () => {
+      await editButton.click({ force: true });
+    });
+    await this.waitForAddressEditFormLoaded();
   }
 
   /** TC_SHOP_001 — checkout prices, billing address, confirm billing + delivery. */
@@ -1523,5 +1591,167 @@ export class ShopCheckoutPage extends BasePage {
     expect(savings, 'AT-1647 requires User Savings on account').toBeGreaterThan(0);
     expect(savings).toBeLessThan(productGrandTotal);
     expect(payable, 'AT-1647 requires Netbanking remainder after savings').toBeGreaterThan(0);
+  }
+
+  async updateCustomerDetails(
+    firstName: string,
+    lastName: string,
+    mobileNumber: string,
+    firstAddressLine: string
+  ): Promise<void> {
+    await this.firstName.waitFor({ state: 'visible', timeout: 10_000 });
+    await this.firstName.fill(firstName);
+    await this.lastName.fill(lastName);
+    await this.mobileNumber.fill(mobileNumber);
+    await this.firstAddressLine.fill(firstAddressLine);
+  }
+
+  /** Delivery address management — Set as default PrimeNG checkbox on address edit form. */
+  // async clickSetAsDefaultCheckbox(): Promise<void> {
+  //   const checkbox = this.page.getByRole('checkbox', { name: /Set this as my default address/i });
+  //   await checkbox.scrollIntoViewIfNeeded();
+  //   if (!(await checkbox.isChecked().catch(() => false))) {
+  //     await checkbox.click();
+  //   }
+  //   await expect(checkbox).toBeChecked({ timeout: 10_000 });
+  // }
+  // async clickSetAsDefaultCheckbox(): Promise<void> {
+  //   const container = this.page
+  //     .locator('div.flex.items-center')
+  //     .filter({
+  //       hasText: 'Set this as my default address',
+  //     });
+
+  //   await expect(container).toBeVisible();
+
+  //   await container.click();
+
+  //   await expect(this.page.locator('#isDefault')).toBeChecked();
+  // }
+  private readonly defaultAddressCheckbox =
+    this.page.locator('p-checkbox:has(#isDefault)');
+
+  async clickSetAsDefaultCheckbox(): Promise<void> {
+    const input = this.defaultAddressCheckbox.locator('#isDefault');
+    const box = this.defaultAddressCheckbox.locator('.p-checkbox-box');
+
+    await expect(box).toBeVisible();
+
+    if (!(await input.isChecked())) {
+      await box.click();
+    }
+
+    await expect(input).toBeChecked();
+  }  /** Delivery address management — Save & Proceed on address edit form. */
+  async clickSaveAndContinue(): Promise<void> {
+    const saveButton = this.page.getByRole('button', { name: /^Save\s*&\s*Proceed$/i });
+    await saveButton.scrollIntoViewIfNeeded();
+    await expect(saveButton).toBeEnabled({ timeout: 10_000 });
+    await saveButton.click();
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.chooseBillingHeading.waitFor({ state: 'visible', timeout: 15_000 });
+    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+  }
+
+  /** Delivery address management — Cancel on address edit form; returns to Choose Billing Address. */
+  async clickCancelOnAddressEditForm(): Promise<void> {
+    await this.waitForAddressEditFormLoaded();
+    const cancelButton = this.page.getByRole('button', { name: /^Cancel$/i });
+    await cancelButton.scrollIntoViewIfNeeded();
+    await expect(cancelButton).toBeVisible({ timeout: 10_000 });
+    await cancelButton.click();
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.chooseBillingHeading.waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  /** Delivery address management — edit form is ready for input/actions. */
+  private async waitForAddressEditFormLoaded(): Promise<void> {
+    await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.firstName.waitFor({ state: 'visible', timeout: 15_000 });
+    await this.page.getByRole('button', { name: /^Cancel$/i }).waitFor({ state: 'visible', timeout: 15_000 });
+  }
+
+  private addNewAddressCard(): Locator {
+    return this.page.getByText(/^Add New Address$/i).first();
+  }
+
+  /** Delivery address management — Add New Address card on Choose Billing Address step. */
+  async expectAddNewAddressButtonVisible(): Promise<void> {
+    const card = this.addNewAddressCard();
+    await expect(card).toBeVisible({ timeout: 15_000 });
+  }
+
+  /** Delivery address management — cancel edit should show Add New Address card. */
+  async verifyCancelEditAddressFormRestoresCardList(): Promise<void> {
+    await this.expectAddNewAddressButtonVisible();
+  }
+
+  /** Delivery address management — edited card shows Default badge and is selected. */
+  async verifyBillingAddressCardIsSelectedDefault(
+    cardIndex = 0,
+    expected?: Pick<ShopBillingAddressDetails, 'fullName' | 'mobile' | 'address'>
+  ): Promise<void> {
+    const card = this.billingAddressCards().nth(cardIndex);
+    await expect(card).toBeVisible({ timeout: 15_000 });
+
+    const defaultBadge = card.locator('div.green-gradient').filter({ hasText: /^Default$/i });
+    await expect(defaultBadge).toBeVisible({ timeout: 15_000 });
+    await expect(defaultBadge.locator('.pi-check')).toBeVisible();
+
+    const isSelected =
+      (await card.locator('input[type="radio"]:checked').count()) > 0 ||
+      (await card.locator('.pi-check').count()) > 0;
+    expect(isSelected, 'Edited billing address card should be selected').toBe(true);
+
+    if (!expected) return;
+
+    const details = await this.readAddressLines(card);
+    if (expected.fullName) {
+      expect(details.fullName.toLowerCase()).toBe(expected.fullName.toLowerCase());
+    }
+    if (expected.mobile) {
+      expect(details.mobile.replace(/\D/g, '')).toBe(expected.mobile.replace(/\D/g, ''));
+    }
+    if (expected.address) {
+      expect(details.address.toLowerCase()).toContain(expected.address.toLowerCase());
+    }
+  }
+
+  /** Delivery address management — Billing to this Address. */
+  async clickBillingToThisAddress(): Promise<void> {
+    await this.billingToThisAddressButton.scrollIntoViewIfNeeded();
+    await expect(this.billingToThisAddressButton).toBeEnabled({ timeout: 10_000 });
+    await this.billingToThisAddressButton.click();
+  }
+
+  /** Delivery address management — Same as billing address checkbox. */
+  async selectSameAsBillingAddress(): Promise<void> {
+    await this.sameAsBillingLabel.scrollIntoViewIfNeeded();
+    const checkbox = this.page.locator('#sameAsBillingAddress');
+    if (!(await checkbox.isChecked().catch(() => false))) {
+      await this.sameAsBillingLabel.click();
+    }
+    await expect(checkbox).toBeChecked({ timeout: 10_000 });
+  }
+
+  /** Delivery address management — Deliver to this Address. */
+  async clickDeliverToThisAddress(): Promise<void> {
+    await this.page.keyboard.press('Home');
+    await this.deliverToThisAddressButton.scrollIntoViewIfNeeded();
+    await expect(this.deliverToThisAddressButton).toBeEnabled({ timeout: 10_000 });
+    await this.deliverToThisAddressButton.click();
+  }
+
+  /** Delivery address management — Address Details on order summary after OTP. */
+  async validateCheckoutAddressDetails(
+    expectedAddress: ShopBillingAddressDetails
+  ): Promise<{ deliveryAddress: ShopBillingAddressDetails; billingAddress: ShopBillingAddressDetails }> {
+    await this.waitForOrderSummary();
+    const deliveryAddress = await this.getDeliveryAddress();
+    const billingAddress = await this.getBilledToAddress();
+    shopLogGet('Delivery address', deliveryAddress);
+    shopLogGet('Billing address', billingAddress);
+    this.assertOrderSummaryAddressesMatchBilling(deliveryAddress, billingAddress, expectedAddress);
+    return { deliveryAddress, billingAddress };
   }
 }

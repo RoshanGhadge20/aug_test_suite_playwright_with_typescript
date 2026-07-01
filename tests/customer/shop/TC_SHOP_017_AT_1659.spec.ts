@@ -1,33 +1,37 @@
 import { test, expect } from '../../../fixtures/base.fixture';
 import { getTargetEnv } from '../../../config/environments';
-import { panelCreds } from '../../../config/urls';
 import { createWalletGiftCoupon } from '../../../utils/api/create-wallet-gift-coupon';
-import { getShopTc003Dataset } from '../../../utils/data/customer-excel-data';
+import { getShopTc003Dataset, getBuyMetalDataset } from '../../../utils/data/customer-excel-data';
 import type { ShopProductDetails } from '../../../pages/customer/shop.page';
+import type { ShopEmiPage } from '../../../pages/customer/shop-emi.page';
 import type { ShopBillingAddressDetails, ShopPlacedOrders } from '../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../pages/customer/my-order-verification.page';
 import {
-  clearCustomerBrowserStorage,
   persistCustomerStorageState,
   resolveAltCustomerMobile,
   resolveAltCustomerOtp,
 } from '../helpers/customer-alt-user.helpers';
 
 const TC017_COUPON_AMOUNT = 100;
+const TC017_GOLD_SETUP_AMOUNT = '500';
 
 test.describe('TC_SHOP_017 @customer-flows', () => {
   test.describe('TC_SHOP_017 alt customer session', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
 
-    test('TC_SHOP_017 - Mixed EMI + Buy Now: coupon ₹100 + partial User Savings, Razorpay remainder > 0', async ({
+    test('TC_SHOP_017|AT-1659 - Mixed EMI + Buy Now: coupon ₹100 + partial User Savings, Razorpay remainder > 0', async ({
       page,
       customerLogin,
+      dashboardPage,
+      buyMetalPage,
+      buySummaryPage,
       shopPage,
       shopCartPage,
       shopCheckoutPage,
       shopEmiPage,
       paymentPage,
       myOrderVerificationPage,
+      shopEmiPurchaseChain017,
     }) => {
       test.setTimeout(480_000);
 
@@ -36,12 +40,17 @@ test.describe('TC_SHOP_017 @customer-flows', () => {
         console.log(`\n[${TC017(n)}] ${title}`);
       };
 
-      const { emiProductName, buyNowProductName } = getShopTc003Dataset();
-      const productNames = [emiProductName, buyNowProductName];
+      const { emiProductName: preferredEmiProductName, buyNowProductName: preferredBuyNowProductName } =
+        getShopTc003Dataset();
+
+      let emiProductName = preferredEmiProductName;
+      let buyNowProductName = preferredBuyNowProductName;
+      let productNames = [emiProductName, buyNowProductName];
 
       let couponCode = '';
       let combinedGrandTotal = 0;
       let emiInitialPayment = 0;
+      let emiResult: Awaited<ReturnType<ShopEmiPage['addProductViaEmiPlan']>>;
       let payableAmount = 0;
       let savedBillingAddress: ShopBillingAddressDetails;
       let placedOrders: ShopPlacedOrders;
@@ -51,9 +60,11 @@ test.describe('TC_SHOP_017 @customer-flows', () => {
       const cartNetWeightByName: Record<string, string> = {};
       const orderIdByProduct: Record<string, string> = {};
       const shopOrdersByName: Record<string, MyOrderShopCardDetails> = {};
+      let availableSavings = 0;
 
       const altCustomerMobile = resolveAltCustomerMobile();
       const altCustomerOtp = resolveAltCustomerOtp();
+      const { netbankingBankName } = getBuyMetalDataset();
 
       await test.step('TC017_0 | Login alt customer', async () => {
         logSub(0, 'Fresh login as alt customer');
@@ -61,47 +72,52 @@ test.describe('TC_SHOP_017 @customer-flows', () => {
           `[${TC017(0)}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
         );
         await customerLogin.login(altCustomerMobile, altCustomerOtp);
-        await page.goto('/dashboard');
+        let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
+        if (!withdrawVisible) {
+          console.log(
+            `[${TC017(0)}] Withdraw not visible — buying ₹${TC017_GOLD_SETUP_AMOUNT} gold via Buy Now.`,
+          );
+          await buyMetalPage.placeOneTimeOrder('gold', TC017_GOLD_SETUP_AMOUNT);
+          await buySummaryPage.clickPayNowButton();
+          await paymentPage.completeNetbankingBuyNowPayment(
+            altCustomerMobile,
+            Number(TC017_GOLD_SETUP_AMOUNT),
+            netbankingBankName,
+          );
+          withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
+        }
+        expect(
+          withdrawVisible,
+          'Withdraw button should be visible on dashboard after netbanking setup in TC017_0',
+        ).toBe(true);
       });
 
       await test.step(
         'TC017_1 | Mixed EMI + Buy Now — cart, coupon, savings, checkout, Razorpay pay',
         async () => {
           logSub(1, 'Mixed EMI + Buy Now — cart, coupon, savings, checkout, Razorpay pay');
-          await shopPage.prepareFilteredListing(shopCartPage);
-          await shopPage.verifyProductsInCatalog(productNames);
-
-          productDetailsByName[emiProductName] =
-            await shopPage.captureEmiProductForMixedCart(emiProductName);
-          await shopPage.clickBuyWithEmi();
-
-          const emiResult = await shopEmiPage.addProductViaEmiPlan('3 Months');
-          productLinePrices[emiProductName] = emiResult.emiLinePrice;
-          emiInitialPayment = emiResult.emiInitialPayment;
-
-          await shopPage.openListingWithFilters();
-          productDetailsByName[buyNowProductName] =
-            await shopPage.captureBuyNowProductForMixedCart(buyNowProductName);
-          await shopPage.clickBuyNow();
-
-          await shopCartPage.removeDuplicateCartProducts();
-          await shopCartPage.expectCartHasProducts(productNames);
-          const cartSnapshot = await shopCartPage.validateMixedCart({
-            productNames,
-            emiProductName,
-            buyNowProductName,
-            productDetailsByName,
-            emiExpectedNetPayable: shopEmiPage.expectedNetPayableAmount(emiResult.emi),
-            emiInitialPayment: emiResult.emiInitialPayment,
-          });
-
-          Object.assign(productLinePrices, cartSnapshot.productLinePrices);
-          Object.assign(cartNetWeightByName, cartSnapshot.cartNetWeightByName);
-          combinedGrandTotal = cartSnapshot.combinedGrandTotal;
-
-          const availableSavings = await shopCartPage.requireShopUserSavingsOnCart('TC_SHOP_017');
+          const selected = await shopPage.addMixedEmiBuyNowForPartialSavingsWithCoupon(
+            shopCartPage,
+            shopEmiPage,
+            TC017_COUPON_AMOUNT,
+            {
+              preferredEmiProductName,
+              preferredBuyNowProductName,
+              emiPlanTenure: '3 Months',
+            },
+          );
+          emiProductName = selected.emiProductName;
+          buyNowProductName = selected.buyNowProductName;
+          productNames = selected.productNames;
+          Object.assign(productDetailsByName, selected.productDetailsByName);
+          emiResult = selected.emiResult;
+          emiInitialPayment = selected.emiResult.emiInitialPayment;
+          Object.assign(productLinePrices, selected.cartSnapshot.productLinePrices);
+          Object.assign(cartNetWeightByName, selected.cartSnapshot.cartNetWeightByName);
+          combinedGrandTotal = selected.combinedGrandTotal;
+          availableSavings = selected.availableSavings;
           shopCartPage.assertTc017MixedCouponPartialSavingsPreconditions(
-            combinedGrandTotal,
+            selected.combinedGrandTotal,
             availableSavings,
             TC017_COUPON_AMOUNT,
           );
@@ -154,6 +170,11 @@ test.describe('TC_SHOP_017 @customer-flows', () => {
         });
         Object.assign(orderIdByProduct, listResult.orderIdByProduct);
         Object.assign(shopOrdersByName, listResult.shopOrdersByName);
+        myOrderVerificationPage.saveShopEmiPurchaseChainOrder(
+          shopEmiPurchaseChain017,
+          listResult.orderIdByProduct[emiProductName] ?? '',
+          emiProductName,
+        );
       });
 
       await test.step('TC017_4 | My Orders — validate mixed order details', async () => {
@@ -186,23 +207,8 @@ test.describe('TC_SHOP_017 @customer-flows', () => {
         });
       });
 
-      await test.step('TC017_6 | Restore default customer session', async () => {
-        logSub(6, 'Persist default customer storage state for following tests');
-        const { mobile: defaultMobile, otp } = panelCreds('customer', getTargetEnv());
-        const altMobile = resolveAltCustomerMobile();
-
-        if (defaultMobile !== altMobile) {
-          console.log(
-            `[${TC017(6)}] Switching from alt ${altMobile} to default ${defaultMobile}.`,
-          );
-          await clearCustomerBrowserStorage(page);
-          await customerLogin.login(defaultMobile, otp);
-          await page.goto('/dashboard');
-        } else {
-          console.log(
-            `[${TC017(6)}] Alt user matches default (${defaultMobile}); skipping re-login.`,
-          );
-        }
+      await test.step('TC017_6 | Persist alt session for TC018', async () => {
+        logSub(6, 'Persisting alt customer storage state for TC018');
         await persistCustomerStorageState(page);
       });
     });

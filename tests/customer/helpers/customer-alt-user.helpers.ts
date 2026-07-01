@@ -13,7 +13,7 @@ import type { MyOrderShopCardDetails } from '../../../pages/customer/my-order-ve
 // Override: ALT_CUSTOMER_MOBILE in .env
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_ALT_CUSTOMER_MOBILE = '8141100000';
+export const DEFAULT_ALT_CUSTOMER_MOBILE = '8141133333';
 
 export function resolveAltCustomerMobile(): string {
   const fromEnv = process.env.ALT_CUSTOMER_MOBILE?.trim();

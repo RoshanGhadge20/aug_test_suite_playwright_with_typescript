@@ -57,9 +57,21 @@ export class WithdrawalPage extends BasePage {
   private readonly totalWithdrawAmount: Locator;
   private readonly proceedToWithdrawBtn: Locator;
   private readonly minimumSellingAmountErrorSection: Locator;
+  private readonly getCashCard: Locator;
+  private readonly goldVaultCard:Locator
+  private readonly silverVaultCard:Locator
+
 
   constructor(page: Page) {
     super(page);
+
+  this.goldVaultCard  =page.locator(
+      'div.rounded-xl:has-text("Gold Vault")'
+    ).first();
+this.silverVaultCard  =page.locator(
+      'div.rounded-xl:has-text("Silver Vault")'
+    ).first();
+
 
     this.cancelButton = page.getByRole('button', { name: 'Cancel' });
     this.proceedButton = page.getByRole('button', { name: 'Proceed' });
@@ -132,6 +144,10 @@ export class WithdrawalPage extends BasePage {
     this.minimumSellingAmountErrorSection = page
       .locator('section.bg-white.rounded-xl')
       .filter({ hasText: /The minimum selling amount is Rs\.?\s*10/i });
+      this.getCashCard = page.locator(
+        'div[role="dialog"] div.group.relative:has(h3:text-is("Get Cash"))'
+      );
+  
   }
 
   private proceedButtonVault(vaultName: string): Locator {
@@ -865,19 +881,7 @@ export class WithdrawalPage extends BasePage {
   }
 
   async clickGetCashOption(): Promise<void> {
-    const withdrawOptionDialog = this.page
-      .locator('div[role="dialog"]')
-      .filter({ has: this.page.getByText(/Choose Withdrawal Option/i) })
-      .first();
-    const getCashCard = withdrawOptionDialog
-      .locator('div.group.relative')
-      .filter({
-        has: withdrawOptionDialog.getByRole('heading', { name: /^Get Cash$/i }),
-      })
-      .first();
-
-    await getCashCard.waitFor({ state: 'visible', timeout: 15_000 });
-    await getCashCard.click({ force: true });
+    await this.getCashCard.click();
   }
 
   async clickProceedGetCash(): Promise<void> {
@@ -2999,4 +3003,92 @@ export class WithdrawalPage extends BasePage {
     return grams;
   }
 
+
+async getVaultDetailsAndClick(
+  metal: 'Gold' | 'Silver',
+): Promise<{
+  withdrawalMetal: number;
+  vaultValue: number;
+}> {
+  const vaultCard = {
+    Gold: this.goldVaultCard,
+    Silver: this.silverVaultCard,
+  }[metal];
+
+  const withdrawalMetalText = await vaultCard
+    .getByText(`Withdrawal ${metal}:`)
+    .textContent();
+
+  const vaultValueText = await vaultCard
+    .locator('p')
+    .last()
+    .textContent();
+
+  await vaultCard.click();
+
+  return {
+    withdrawalMetal: Number(
+      withdrawalMetalText
+        ?.replace(`Withdrawal ${metal}:`, '')
+        .replace('gm', '')
+        .replace(/,/g, '')
+        .trim() ?? '0',
+    ),
+    vaultValue: Number(
+      vaultValueText
+        ?.replace('₹', '')
+        .replace(/,/g, '')
+        .trim() ?? '0',
+    ),
+  };
 }
+
+
+
+  
+    
+    
+
+async getMetalSummary(metalType: 'Gold' | 'Silver') {
+  const totalLocator = this.page
+    .locator(`p:has-text("Total ${metalType}")`)
+    .locator('xpath=following-sibling::p[1]');
+
+  const valueLocator = this.page
+    .locator(`p:has-text("${metalType} Value")`)
+    .locator('xpath=following-sibling::p[1]');
+
+  const livePriceLocator = this.page
+    .locator(`p:has-text("Live ${metalType} Price")`)
+    .locator('xpath=following-sibling::p[1]');
+
+  await expect(totalLocator).not.toHaveText(/^\s*gm\s*$/, {
+    timeout: 15000,
+  });
+
+  await expect(valueLocator).not.toHaveText('₹ 0', {
+    timeout: 15000,
+  });
+
+  const totalText = await totalLocator.textContent();
+  const valueText = await valueLocator.textContent();
+  const livePriceText = await livePriceLocator.textContent();
+
+  return {
+    total: Number(
+      totalText?.replace('gm', '').replace(/,/g, '').trim() ?? '0',
+    ),
+    value: Number(
+      valueText?.replace('₹', '').replace(/,/g, '').trim() ?? '0',
+    ),
+    livePrice: Number(
+      livePriceText
+        ?.replace('₹', '')
+        .replace('/gm', '')
+        .replace(/,/g, '')
+        .trim() ?? '0',
+    ),
+  };
+}}
+
+

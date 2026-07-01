@@ -1,17 +1,30 @@
-import { test } from '../../../fixtures/base.fixture';
-import { getShopTc011Dataset } from '../../../utils/data/customer-excel-data';
+import { test,expect } from '../../../fixtures/base.fixture';
+import { getShopTc011Dataset,getBuyMetalDataset } from '../../../utils/data/customer-excel-data';
 import type { ShopProductDetails } from '../../../pages/customer/shop.page';
 import type { ShopBillingAddressDetails } from '../../../pages/customer/shop-checkout.page';
+import { getTargetEnv } from '../../../config/environments';
+import {
+  persistCustomerStorageState,
+  resolveAltCustomerMobile,
+  resolveAltCustomerOtp,
+} from '../helpers/customer-alt-user.helpers';
 
 test.describe('TC_SHOP_012 @customer-flows', () => {
-  test('TC_SHOP_012|AT-1647 - Verify end-to-end Shop product purchase using User Saving and Net Banking AT-1647', async ({
+  test.use({ storageState: { cookies: [], origins: [] } });
+  test('TC_SHOP_012|AT-1647 - Verify end-to-end Shop product purchase using User Saving and Net Banking(Spot order) AT-1647', async ({
     shopPage,
+    customerLogin,
+    dashboardPage,
     shopCartPage,
     shopCheckoutPage,
+    buyMetalPage,
+    buySummaryPage,
     paymentPage,
     myOrderVerificationPage,
   }) => {
     test.setTimeout(420_000);
+
+    const TC012_GOLD_SETUP_AMOUNT = '500';
 
     const TC012 = (n: number): string => `TC012_${n}`;
     const logSub = (n: number, title: string): void => {
@@ -25,6 +38,39 @@ test.describe('TC_SHOP_012 @customer-flows', () => {
     let placedOrderId = '';
     let cartNetWeight = '';
     let billingAddress: ShopBillingAddressDetails;
+    const altCustomerMobile = resolveAltCustomerMobile();
+    const altCustomerOtp = resolveAltCustomerOtp();
+    const { netbankingBankName } = getBuyMetalDataset();
+
+    
+
+    await test.step('TC012_0 | Login alt customer', async () => {
+      logSub(0, 'Fresh login as alt customer');
+      console.log(
+        `[${TC012(0)}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
+      );
+      await customerLogin.login(altCustomerMobile, altCustomerOtp);
+      let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
+      if (!withdrawVisible) {
+        console.log(
+          `[${TC012(0)}] Withdraw not visible — buying ₹${TC012_GOLD_SETUP_AMOUNT} gold via Buy Now.`,
+        );
+        await buyMetalPage.placeOneTimeOrder('gold', TC012_GOLD_SETUP_AMOUNT);
+        await buySummaryPage.clickPayNowButton();
+        await paymentPage.completeNetbankingBuyNowPayment(
+          altCustomerMobile,
+          Number(TC012_GOLD_SETUP_AMOUNT),
+          netbankingBankName,
+        );
+        withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
+      }
+      expect(
+        withdrawVisible,
+        'Withdraw button should be visible on dashboard after netbanking setup in TC017_0',
+      ).toBe(true);
+    });
+
+
 
     await test.step('TC012_1 | Create partial savings purchase — cart, checkout, pay', async () => {
       logSub(1, 'Create partial savings purchase — cart, checkout, pay');
@@ -45,7 +91,7 @@ test.describe('TC_SHOP_012 @customer-flows', () => {
       });
       billingAddress = await shopCheckoutPage.getBillingAddress();
       await shopCheckoutPage.confirmBillingAndDelivery();
-      await shopCheckoutPage.validateCheckoutOtp();
+      await shopCheckoutPage.validateCheckoutOtp(altCustomerMobile, altCustomerOtp);
       const payableAmount = await shopCheckoutPage.validatePartialSavingsOrderSummary({
         productDetails,
         cartSavingsAmount: partial.cartSavingsAmount,
@@ -87,6 +133,7 @@ test.describe('TC_SHOP_012 @customer-flows', () => {
         productDetails,
         placedOrderId,
         productName,
+        invoicePassword: altCustomerMobile.replace(/\D/g, '').slice(-4),
       });
     });
   });

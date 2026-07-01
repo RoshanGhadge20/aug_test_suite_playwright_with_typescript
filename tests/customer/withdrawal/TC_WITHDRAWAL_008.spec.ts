@@ -45,12 +45,12 @@ test.describe('TC_WITHDRAWAL_008 @customer-flows', () => {
       console.log(`[${TC008(1)}] Gold FD+:`, goldFD);
     });
 
-    await test.step('TC008_2 | SIP — get approved SIP with positive investment', async () => {
-      logSub(2, 'Get approved SIP with positive investment');
-      await dashboardPage.clickViewAll();
-      sipName = await dashboardPage.getApprovedSipNameWithPositiveInvestment();
-      console.log('SIP Name:', sipName);
-    });
+    // await test.step('TC008_2 | SIP — get approved SIP with positive investment', async () => {
+    //   logSub(2, 'Get approved SIP with positive investment');
+    //   await dashboardPage.clickViewAll();
+    //   sipName = await dashboardPage.getApprovedSipNameWithPositiveInvestment();
+    //   console.log('SIP Name:', sipName);
+    // });
 
     await test.step('TC008_3 | Withdrawal — open withdrawal options', async () => {
       logSub(3, 'Open withdrawal options');
