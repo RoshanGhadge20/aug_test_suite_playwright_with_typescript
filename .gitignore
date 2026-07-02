@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+storage/*
+!storage/.gitkeep
+reports/*
+!reports/.gitkeep
+playwright-report/
+test-results/
+*.log
+.DS_Store
+.vscode/
+coverage/
