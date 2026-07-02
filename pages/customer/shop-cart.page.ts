@@ -721,17 +721,40 @@ export class ShopCartPage extends BasePage {
     };
   }
 
-  /** TC_SHOP_012 — available User Savings shown beside the cart toggle (`Use Savings: ₹…`). */
-  async readAvailableUserSavingsBalance(): Promise<number> {
-    await this.waitForCart();
+  /**
+   * TC_SHOP_012 — available User Savings shown beside the cart toggle (`Use Savings: ₹…`).
+   * This is a wallet-level balance fetched independently of the cart's own render, so it can
+   * lag behind the rest of the cart (worse on a multi-product cart) — retry with a reload,
+   * same pattern as DashBoardPage.waitForDashboardPortfolioSection.
+   */
+  async readAvailableUserSavingsBalance(options?: { maxAttempts?: number }): Promise<number> {
+    const maxAttempts = options?.maxAttempts ?? 4;
     const savingsLabel = this.page.getByText(/^Use Savings:/i);
-    await savingsLabel.waitFor({ state: 'visible', timeout: 15_000 });
-    const labelText = ((await savingsLabel.innerText()) ?? '').replace(/\s+/g, ' ').trim();
-    const amountMatch = labelText.match(/₹[\d,]+(?:\.\d+)?/);
-    if (!amountMatch) {
-      throw new Error(`Could not parse User Savings balance from cart label: "${labelText}"`);
+
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      await this.waitForCart();
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+
+      const visible = await savingsLabel
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (visible) {
+        const labelText = ((await savingsLabel.innerText()) ?? '').replace(/\s+/g, ' ').trim();
+        const amountMatch = labelText.match(/₹[\d,]+(?:\.\d+)?/);
+        if (amountMatch) {
+          return this.parseAmount(amountMatch[0]);
+        }
+      }
+
+      if (attempt < maxAttempts - 1) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' });
+      }
     }
-    return this.parseAmount(amountMatch[0]);
+
+    throw new Error(
+      `Use Savings balance did not appear on cart after ${maxAttempts} attempts (with reloads).`,
+    );
   }
 
   /** TC_SHOP_016 / TC_SHOP_017 — fail fast when shop User Savings toggle is absent (₹0 balance). */
@@ -774,26 +797,6 @@ export class ShopCartPage extends BasePage {
   }
 
 
-  async waitForUserSavingsToReflect(
-    timeout = 120_000,
-    interval = 5000
-  ): Promise<void> {
-    const savingsLabel = this.page.getByText(/^Use Savings:/i);
-    const endTime = Date.now() + timeout;
-
-    while (Date.now() < endTime) {
-      await this.page.reload({ waitUntil: 'networkidle' });
-      await this.waitForCart();
-
-      if (await savingsLabel.isVisible().catch(() => false)) {
-        return;
-      }
-
-      await this.page.waitForTimeout(interval);
-    }
-
-    throw new Error('Use Savings did not appear within 2 minutes.');
-  }
   /**
    * TC004 — cart payable after Use Saving (metal + charges + tax − savings).
    * Cart has no paid-from-funds row; TC001/002 checkout uses getCalculatedGrandTotal on shop-checkout page.

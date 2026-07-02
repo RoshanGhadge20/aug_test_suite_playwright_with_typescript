@@ -402,7 +402,7 @@ export class ShopPage extends BasePage {
     for (const productName of tryOrder) {
       const productDetails = await this.selectProductAndCaptureDetails(productName);
       await this.clickBuyNowFromPdp(false);
-      const availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+      const availableSavings = await shopCartPage.requireShopUserSavingsOnCart('AT-1647');
       const cartPrice = await shopCartPage.getCartPriceDetails();
       const partialOk =
         availableSavings > 0 &&
@@ -522,6 +522,10 @@ export class ShopPage extends BasePage {
     shopLogGet('TC_SHOP_017 — EMI products to evaluate', emiTryOrder);
     shopLogGet('TC_SHOP_017 — Buy Now products to evaluate', buyNowTryOrder);
 
+    // User Savings is a wallet-level balance, not tied to cart contents. It's read once per
+    // candidate pair on the EMI-only cart (see TC_SHOP_013, which reads it the same way) —
+    // readAvailableUserSavingsBalance() itself retries with a reload if the balance widget
+    // hasn't rendered yet, so no extra caching/retry wrapper is needed here.
     for (const buyNowProductName of buyNowTryOrder) {
       for (const emiProductName of emiTryOrder) {
         await shopCartPage.clearCartAndExpectEmpty();
@@ -542,6 +546,17 @@ export class ShopPage extends BasePage {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           shopLogGet(`TC_SHOP_017 skip unstable EMI add (${emiProductName})`, {
+            reason: message,
+          });
+          continue;
+        }
+
+        let availableSavings: number;
+        try {
+          availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          shopLogGet(`TC_SHOP_017 skip pair (Use Savings not ready on EMI-only cart: ${emiProductName})`, {
             reason: message,
           });
           continue;
@@ -580,16 +595,6 @@ export class ShopPage extends BasePage {
           emiExpectedNetPayable: shopEmiPage.expectedNetPayableAmount(emiResult.emi),
           emiInitialPayment: emiResult.emiInitialPayment,
         });
-        let availableSavings = 0;
-        try {
-          availableSavings = await shopCartPage.readAvailableUserSavingsBalance();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          shopLogGet(`TC_SHOP_017 skip cart pair (Use Savings not ready: ${emiProductName} + ${buyNowProductName})`, {
-            reason: message,
-          });
-          continue;
-        }
         const combinedGrandTotal = cartSnapshot.combinedGrandTotal;
         const razorpayRemainder = Number(
           (combinedGrandTotal - availableSavings - couponAmount).toFixed(2),

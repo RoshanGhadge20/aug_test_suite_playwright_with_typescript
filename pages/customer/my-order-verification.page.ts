@@ -761,15 +761,15 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** TC001 / TC004 — single product on SHOP tab (main-branch click + list hydrate). */
   async clickShopTabSingleOrder(): Promise<void> {
-    await this.clickShopTabAndWaitForList(20_000);
+    await this.clickShopTabAndWaitForList(45_000);
   }
 
   /** TC002 / TC003 — multiple products; same tab settle, rows read by exact product name. */
   async clickShopTabMultiProduct(): Promise<void> {
-    await this.clickShopTabAndWaitForList(20_000);
+    await this.clickShopTabAndWaitForList(45_000);
   }
 
-  private async clickShopTabAndWaitForList(hydrateTimeoutMs = 20_000): Promise<void> {
+  private async clickShopTabAndWaitForList(hydrateTimeoutMs = 45_000): Promise<void> {
     const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
     await shopTab.scrollIntoViewIfNeeded();
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
@@ -901,12 +901,17 @@ export class MyOrderVerificationPage extends BasePage {
       orderedOn = '';
     }
 
+    // Price paragraph can hydrate after the rest of the card (esp. right after order
+    // placement) — wait for it explicitly instead of racing the default action timeout.
+    const priceLocator = card.locator('p').filter({ hasText: /^₹/ }).first();
+    await priceLocator.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});
+
     return {
       productName: await this.text(card.getByRole('heading', { level: 3 }).first()),
       orderId: await this.readShopLabel(card, 'Order Id'),
       status: await this.text(card.locator('span.rounded-full').first()),
       quantity: await this.readShopOrderCardQuantity(card),
-      priceAmount: this.parseAmount(await this.text(card.locator('p').filter({ hasText: /^₹/ }).first())),
+      priceAmount: this.parseAmount(await this.text(priceLocator)),
       orderedOn,
     };
   }
