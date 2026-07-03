@@ -3,8 +3,13 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             padding: 30px;
@@ -14,11 +19,17 @@
 
         .container {
             max-width: 900px;
+            width: 100%;
             margin: auto;
             background: #ffffff;
             border-radius: 12px;
             overflow: hidden;
             box-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+        }
+
+        .table-scroll {
+            width: 100%;
+            overflow-x: auto;
         }
 
         .header-success {
@@ -115,6 +126,31 @@
             color: #777;
             background: #fafafa;
         }
+
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+
+            .content {
+                padding: 16px;
+            }
+
+            .card {
+                width: 100%;
+            }
+
+            th,
+            td {
+                padding: 8px;
+                font-size: 13px;
+            }
+
+            .button {
+                display: block;
+                text-align: center;
+            }
+        }
     </style>
 
 </head>
@@ -132,6 +168,7 @@
 
             <h2>Execution Details</h2>
 
+            <div class="table-scroll">
             <table>
 
                 <tr>
@@ -190,6 +227,7 @@
                 </tr>
 
             </table>
+            </div>
 
             <h2>Test Summary</h2>
 
@@ -229,7 +267,16 @@
 
             <h2>Failed Test Cases</h2>
 
-            {{FAILED_TESTS}}
+            <div class="table-scroll">
+            <table>
+                <tr>
+                    <th>Title</th>
+                    <th>File</th>
+                    <th>Error</th>
+                </tr>
+                {{FAILED_TESTS}}
+            </table>
+            </div>
 
             <br>
 
