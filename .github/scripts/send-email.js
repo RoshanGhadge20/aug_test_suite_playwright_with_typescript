@@ -2,18 +2,22 @@ const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
 
-// ✅ Load dotenv ONLY in local environment
-if (process.env.NODE_ENV !== "production") {
-    try {
-        require("dotenv").config({ path: ".env.email" });
-        console.log("🟡 Local env loaded from .env.email");
-    } catch (e) {
-        console.log("⚠️ dotenv not loaded");
-    }
-}
+// Safe to call unconditionally: a no-op if .env.email doesn't exist, and dotenv never
+// overwrites variables already present in process.env (e.g. ones GitHub Actions injects).
+require("dotenv").config({ path: ".env.email" });
+
+const REQUIRED_ENV_VARS = ["SMTP_SERVER", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "EMAIL_TO"];
 
 async function sendEmail() {
     try {
+        const missing = REQUIRED_ENV_VARS.filter((key) => !process.env[key]);
+        if (missing.length > 0) {
+            throw new Error(
+                `Missing required email env var(s): ${missing.join(", ")}. ` +
+                    "Check that .env.email was created from the EMAIL_ENV secret before this step ran.",
+            );
+        }
+
         const transporter = nodemailer.createTransport({
             host: process.env.SMTP_SERVER,
             port: Number(process.env.SMTP_PORT),
