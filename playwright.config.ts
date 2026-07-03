@@ -28,14 +28,12 @@ export default defineConfig({
   forbidOnly: isCI,
   retries: isCI ? 1 :0,
   workers: process.env.PW_WORKERS ? Number(process.env.PW_WORKERS) : 1,
-  // reporter: [
-  //   ['html', { outputFolder: 'reports/html', open: 'never' }],
-  //   ['json', { outputFile: 'reports/results.json' }],
-  //   ['list'],
-  // ]
   reporter: [
     ['html', { outputFolder: 'reports/html', open: 'never' }],
+    ['json', { outputFile: 'reports/results.json' }],
+    ['list'],
   ],
+  
   outputDir: 'reports/test-artifacts',
   use: {
     headless,
