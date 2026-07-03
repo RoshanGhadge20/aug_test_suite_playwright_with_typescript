@@ -24,6 +24,15 @@ on:
         required: false
         default: ""
 
+      send_email:
+        description: "Send Email Report?"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
 jobs:
   playwright:
     runs-on: ubuntu-latest
@@ -32,15 +41,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Create runtime .env file
       - name: Create .env
         run: |
           cat << 'EOF' > .env
           ${{ secrets.DOT_ENV }}
           EOF
 
+      # Build Docker image
       - name: Build Docker Image
-        run: docker build -t augmont-playwright .
+        run: docker build -t augmont-playwright . 
 
+      # Run tests
       - name: Run Playwright Tests
         run: |
           CMD="npx playwright test --project=${{ github.event.inputs.project }}"
@@ -63,7 +75,8 @@ jobs:
             augmont-playwright \
             bash -c "$CMD"
 
-            - name: Upload HTML Report
+      # Upload HTML Report
+      - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -71,6 +84,7 @@ jobs:
           path: reports/html
           retention-days: 30
 
+      # Upload JSON Results
       - name: Upload JSON Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -79,12 +93,12 @@ jobs:
           path: reports/results.json
           retention-days: 30
 
-      # Generate summary.json from Playwright results
+      # Generate summary
       - name: Generate Report Summary
         if: always()
         run: node .github/scripts/report-summary.js
 
-      # Generate email.html from the template
+      # Build email HTML
       - name: Build HTML Email
         if: always()
         run: node .github/scripts/build-email.js
@@ -93,7 +107,7 @@ jobs:
           FOLDER: ${{ github.event.inputs.folder }}
           TESTCASE: ${{ github.event.inputs.testcase }}
 
-      # Compress the HTML report
+      # Zip report
       - name: Zip HTML Report
         if: always()
         run: |
@@ -104,3 +118,16 @@ jobs:
           else
             echo "reports/html not found"
           fi
+
+      # Create email env file (ONLY if enabled)
+      - name: Create Email Environment File
+        if: github.event.inputs.send_email == 'true'
+        run: |
+          cat << 'EOF' > .env.email
+          ${{ secrets.EMAIL_ENV }}
+          EOF
+
+      # Send email (ONLY if enabled)
+      - name: Send Email
+        if: github.event.inputs.send_email == 'true'
+        run: node .github/scripts/send-email.js
