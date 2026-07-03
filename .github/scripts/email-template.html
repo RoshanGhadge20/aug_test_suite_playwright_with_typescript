@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 30px;
+            background: #f4f6f9;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, .15);
+        }
+
+        .header-success {
+            background: #28a745;
+            color: #fff;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header-failed {
+            background: #dc3545;
+            color: #fff;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header-success h1,
+        .header-failed h1 {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            background: #0d6efd;
+            color: white;
+            padding: 12px;
+        }
+
+        td {
+            border: 1px solid #ddd;
+            padding: 12px;
+        }
+
+        .summary {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-top: 25px;
+        }
+
+        .card {
+            width: 30%;
+            min-width: 180px;
+            background: #f8f9fa;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        .card h2 {
+            margin: 5px 0;
+            font-size: 30px;
+        }
+
+        .pass {
+            color: #28a745;
+        }
+
+        .fail {
+            color: #dc3545;
+        }
+
+        .skip {
+            color: #ff9800;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 14px 24px;
+            background: #0d6efd;
+            color: #fff !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .footer {
+            padding: 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #777;
+            background: #fafafa;
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div class="{{HEADER_CLASS}}">
+            <h1>{{STATUS}}</h1>
+            <p>Playwright Automation Report</p>
+        </div>
+
+        <div class="content">
+
+            <h2>Execution Details</h2>
+
+            <table>
+
+                <tr>
+                    <th>Item</th>
+                    <th>Value</th>
+                </tr>
+
+                <tr>
+                    <td>Workflow</td>
+                    <td>{{WORKFLOW}}</td>
+                </tr>
+
+                <tr>
+                    <td>Repository</td>
+                    <td>{{REPOSITORY}}</td>
+                </tr>
+
+                <tr>
+                    <td>Branch</td>
+                    <td>{{BRANCH}}</td>
+                </tr>
+
+                <tr>
+                    <td>Project</td>
+                    <td>{{PROJECT}}</td>
+                </tr>
+
+                <tr>
+                    <td>Folder</td>
+                    <td>{{FOLDER}}</td>
+                </tr>
+
+                <tr>
+                    <td>Test Case</td>
+                    <td>{{TESTCASE}}</td>
+                </tr>
+
+                <tr>
+                    <td>Triggered By</td>
+                    <td>{{ACTOR}}</td>
+                </tr>
+
+                <tr>
+                    <td>Commit</td>
+                    <td>{{COMMIT}}</td>
+                </tr>
+
+                <tr>
+                    <td>Duration</td>
+                    <td>{{DURATION}}</td>
+                </tr>
+
+                <tr>
+                    <td>Success Rate</td>
+                    <td>{{SUCCESS_RATE}}</td>
+                </tr>
+
+            </table>
+
+            <h2>Test Summary</h2>
+
+            <div class="summary">
+
+                <div class="card">
+                    <p>Total</p>
+                    <h2>{{TOTAL}}</h2>
+                </div>
+
+                <div class="card">
+                    <p>Passed</p>
+                    <h2 class="pass">{{PASSED}}</h2>
+                </div>
+
+                <div class="card">
+                    <p>Failed</p>
+                    <h2 class="fail">{{FAILED}}</h2>
+                </div>
+
+                <div class="card">
+                    <p>Skipped</p>
+                    <h2 class="skip">{{SKIPPED}}</h2>
+                </div>
+
+                <div class="card">
+                    <p>Timed Out</p>
+                    <h2>{{TIMEDOUT}}</h2>
+                </div>
+
+                <div class="card">
+                    <p>Interrupted</p>
+                    <h2>{{INTERRUPTED}}</h2>
+                </div>
+
+            </div>
+
+            <h2>Failed Test Cases</h2>
+
+            {{FAILED_TESTS}}
+
+            <br>
+
+            <a class="button" href="{{RUN_URL}}">
+                View GitHub Action Run
+            </a>
+
+        </div>
+
+        <div class="footer">
+
+            Generated automatically by GitHub Actions
+
+        </div>
+
+    </div>
+
+</body>
+
+</html>

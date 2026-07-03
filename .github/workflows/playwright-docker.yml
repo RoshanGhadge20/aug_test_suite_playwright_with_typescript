@@ -78,3 +78,29 @@ jobs:
           name: playwright-results
           path: reports/results.json
           retention-days: 30
+
+                # Generate summary.json from Playwright results
+      - name: Generate Report Summary
+        if: always()
+        run: node .github/scripts/report-summary.js
+
+      # Generate email.html from the template
+      - name: Build HTML Email
+        if: always()
+        run: node .github/scripts/build-email.js
+        env:
+          PROJECT: ${{ github.event.inputs.project }}
+          FOLDER: ${{ github.event.inputs.folder }}
+          TESTCASE: ${{ github.event.inputs.testcase }}
+
+      # Compress the HTML report
+      - name: Zip HTML Report
+        if: always()
+        run: |
+          if [ -d reports/html ]; then
+            cd reports
+            zip -r html-report.zip html
+            cd ..
+          else
+            echo "reports/html not found"
+          fi
