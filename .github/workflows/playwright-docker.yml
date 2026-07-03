@@ -33,6 +33,11 @@ on:
           - "true"
           - "false"
 
+      email_to:
+        description: "Email recipient(s), comma-separated (optional, defaults to EMAIL_TO in the EMAIL_ENV secret)"
+        required: false
+        default: ""
+
 jobs:
   playwright:
     runs-on: ubuntu-latest
@@ -142,4 +147,8 @@ jobs:
       # Send email (ONLY if enabled)
       - name: Send Email
         if: github.event.inputs.send_email == 'true'
-        run: node .github/scripts/send-email.js
+        run: |
+          if [ -n "${{ github.event.inputs.email_to }}" ]; then
+            export EMAIL_TO="${{ github.event.inputs.email_to }}"
+          fi
+          node .github/scripts/send-email.js

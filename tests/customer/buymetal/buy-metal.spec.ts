@@ -1,17 +1,17 @@
-import { test, expect } from '../../fixtures/base.fixture';
-import { getTargetEnv } from '../../config/environments';
+import { test, expect } from '../../../fixtures/base.fixture';
+import { getTargetEnv } from '../../../config/environments';
 import {
   getBuyMetalDataset,
   type BuyMetalType,
-} from '../../utils/data/customer-excel-data';
-import type { OneTimeSummaryResult } from '../../pages/customer/buy-summary.page';
+} from '../../../utils/data/customer-excel-data';
+import type { OneTimeSummaryResult } from '../../../pages/customer/buy-summary.page';
 import {
   logValidation,
   persistCustomerStorageState,
   restoreDefaultCustomerSession,
   resolveAltCustomerMobile,
   resolveAltCustomerOtp,
-} from './helpers/customer-alt-user.helpers';
+} from '../helpers/customer-alt-user.helpers';
 
 const dataset = getBuyMetalDataset();
 
