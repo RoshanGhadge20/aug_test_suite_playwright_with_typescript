@@ -1,9 +1,16 @@
 const fs = require("fs");
 const path = require("path");
-const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
 
-dotenv.config({ path: ".env.email" });
+// ✅ Load dotenv ONLY in local environment
+if (process.env.NODE_ENV !== "production") {
+    try {
+        require("dotenv").config({ path: ".env.email" });
+        console.log("🟡 Local env loaded from .env.email");
+    } catch (e) {
+        console.log("⚠️ dotenv not loaded");
+    }
+}
 
 async function sendEmail() {
     try {
@@ -23,9 +30,9 @@ async function sendEmail() {
         const emailHtmlPath = path.join("reports", "email.html");
 
         let emailHtml = `
-      <h2>Playwright Automation</h2>
-      <p>No HTML report was generated.</p>
-    `;
+            <h2>Playwright Automation</h2>
+            <p>No HTML report was generated.</p>
+        `;
 
         if (fs.existsSync(emailHtmlPath)) {
             emailHtml = fs.readFileSync(emailHtmlPath, "utf8");
@@ -45,8 +52,8 @@ async function sendEmail() {
 
         const attachments = [];
 
+        // 📦 ZIP report
         const zipPath = path.join("reports", "html-report.zip");
-
         if (fs.existsSync(zipPath)) {
             attachments.push({
                 filename: "playwright-report.zip",
@@ -54,8 +61,8 @@ async function sendEmail() {
             });
         }
 
+        // 📊 JSON results
         const jsonPath = path.join("reports", "results.json");
-
         if (fs.existsSync(jsonPath)) {
             attachments.push({
                 filename: "results.json",
@@ -63,6 +70,7 @@ async function sendEmail() {
             });
         }
 
+        // 📸 Screenshots
         const screenshotDir = path.join("reports", "test-artifacts");
 
         if (fs.existsSync(screenshotDir)) {
@@ -79,12 +87,15 @@ async function sendEmail() {
                 }
             });
         }
-        const recipients = process.env.EMAIL_TO.split(",")
+
+        // 📧 Recipients
+        const recipients = (process.env.EMAIL_TO || "")
+            .split(",")
             .map((e) => e.trim())
             .filter(Boolean);
 
         const info = await transporter.sendMail({
-            from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.SMTP_USERNAME}>`,
+            from: `"${process.env.EMAIL_FROM_NAME || "Playwright"}" <${process.env.SMTP_USERNAME}>`,
             to: recipients,
             subject,
             html: emailHtml,
@@ -93,8 +104,9 @@ async function sendEmail() {
 
         console.log("====================================");
         console.log("✅ Email sent successfully.");
-        console.log(info.messageId);
+        console.log("Message ID:", info.messageId);
         console.log("====================================");
+
     } catch (err) {
         console.error("❌ Email sending failed.");
         console.error(err);
