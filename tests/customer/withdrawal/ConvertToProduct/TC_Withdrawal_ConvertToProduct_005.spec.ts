@@ -1,7 +1,5 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
 
-const TC_ID = 'TC_Withdrawal_ConvertToProduct_005';
-
 test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
   test('TC_005-Convert to Silver or/Jewellery -Verify No Silver Deduction After Failed Payment During SIP Withdrawal Conversion @customer-flows', async ({
     page,
@@ -15,7 +13,6 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
     const TC005 = (n: number): string => `TC005_${n}`;
     const SILVER_PRODUCT = 'Augmont 1GM Silver Coin 999 Purity';
 
-    let sipName = '';
     let selectedSipName = '';
     let selectedSipMetalValue = '';
     let selectedSipMetalValueNumber = 0;
@@ -24,7 +21,6 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
     let totalGoldBeforePurchase = 0;
     let totalSilverBeforePurchase = 0;
     let goldFD = '';
-    let currentUrl = '';
     let selectedProductDetails: Awaited<ReturnType<typeof withdrawalPage.getAndLogSelectedProductDetails>> | null = null;
     let deliveryInformation: Awaited<ReturnType<typeof withdrawalPage.getAndLogDeliveryInformation>> | null = null;
     let selectedProductGm = 0;
@@ -45,33 +41,27 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       console.log(`[${TC005(1)}] Gold FD+:`, goldFD);
     });
 
-    // await test.step('TC005_2 | SIP — get approved SIP with positive investment', async () => {
-    //   logSub(2, 'Get approved SIP with positive investment');
-    //   await dashboardPage.clickViewAll();
-    //   sipName = await dashboardPage.getApprovedSipNameWithPositiveInvestment();
-    //   console.log('SIP Name:', sipName);
-    // });
 
-    await test.step('TC005_3 | Withdrawal — open withdrawal options', async () => {
-      logSub(3, 'Open withdrawal options');
+    await test.step('TC005_2 | Withdrawal — open withdrawal options', async () => {
+      logSub(2, 'Open withdrawal options');
       await page.goto('/dashboard');
       await dashboardPage.clickWithdrawInvestment();
     });
 
-    await test.step('TC005_4 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
-      logSub(4, 'Withdrawal options');
+    await test.step('TC005_3 | Withdrawal — Get Coins and Bars / Get Cash options visible', async () => {
+      logSub(3, 'Withdrawal options');
       await withdrawalPage.openConvertToCoinsAndBarsProductList();
     });
 
-    await test.step('TC005_5 | Withdrawal — Select Convert to Silver & Jewellery → product list', async () => {
-      logSub(5, 'Convert to Silver & Jewellery');
+    await test.step('TC005_4 | Withdrawal — Select Convert to Silver & Jewellery → product list', async () => {
+      logSub(4, 'Convert to Silver & Jewellery');
       await expect(page).toHaveURL(/\/withdraw\/product-list(?:\/)?(?:\?.*)?$/i);
     });
 
-    await test.step('TC005_6 | Product List — categories, metal path = silver product', async () => {
-      logSub(6, 'Product list');
+    await test.step('TC005_5 | Product List — categories, metal path = silver product', async () => {
+      logSub(5, 'Product list');
       console.log(
-        `[${TC005(6)}] Dashboard snapshot — Total Gold (g):`,
+        `[${TC005(5)}] Dashboard snapshot — Total Gold (g):`,
         totalGoldBeforePurchase,
         'Total Silver (g):',
         totalSilverBeforePurchase,
@@ -82,28 +72,28 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       });
     });
 
-    await test.step('TC005_7 | Product Details — name, weight, charges, delivery date', async () => {
-      logSub(7, 'Product details');
+    await test.step('TC005_6 | Product Details — name, weight, charges, delivery date', async () => {
+      logSub(6, 'Product details');
       selectedProductDetails = await withdrawalPage.getAndLogSelectedProductDetails();
       selectedProductGm = withdrawalPage.assertWithdrawalProductDetailsPopulated(selectedProductDetails);
-      console.log(`[${TC005(7)}] Product details:`, selectedProductDetails);
+      console.log(`[${TC005(6)}] Product details:`, selectedProductDetails);
     });
 
-    await test.step('TC005_8 | Product Details — Request Delivery (add to cart)', async () => {
-      logSub(8, 'Request Delivery');
+    await test.step('TC005_7 | Product Details — Request Delivery (add to cart)', async () => {
+      logSub(7, 'Request Delivery');
       await withdrawalPage.clickRequestDelivery();
     });
 
-    await test.step('TC005_9 | Cart — single line item after Removing another product from cart', async () => {
-      logSub(9, 'Cart details');
+    await test.step('TC005_8 | Cart — single line item after Removing another product from cart', async () => {
+      logSub(8, 'Cart details');
       if (!selectedProductDetails) {
         throw new Error('Selected product details missing before cart.');
       }
       await withdrawalPage.normalizeCartToSingleProduct(selectedProductDetails.productName, 1);
     });
 
-    await test.step('TC005_10 | Cart — quantity & amount payable vs making charges', async () => {
-      logSub(10, 'Cart calculations');
+    await test.step('TC005_9 | Cart — quantity & amount payable vs making charges', async () => {
+      logSub(9, 'Cart calculations');
       if (!selectedProductDetails) {
         throw new Error('Selected product details missing before cart totals.');
       }
@@ -116,13 +106,13 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       );
     });
 
-    await test.step('TC005_11 | Cart — Select Investments → investment screen', async () => {
-      logSub(11, 'Select Investments');
+    await test.step('TC005_10 | Cart — Select Investments → investment screen', async () => {
+      logSub(10, 'Select Investments');
       await withdrawalPage.clickSelectInvestments();
     });
 
-    await test.step('TC005_12 | Investment — capture totals and select SIP', async () => {
-      logSub(12, 'Capture totals and select SIP');
+    await test.step('TC005_11 | Investment — capture totals and select SIP', async () => {
+      logSub(11, 'Capture totals and select SIP');
       await withdrawalPage.getAndLogInvestmentListSummary();
 
       if (!selectedProductDetails) {
@@ -133,7 +123,6 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       }
       console.log(`[TC005_PRODUCT_TOTAL_GM] ${selectedProductGm}`);
       const selectedSipDetails = await dashboardPage.deliveryScrollUpAndClickProceedByMatchingSipMetalValue(
-        sipName,
         selectedProductGm,
         { onlyMetalType: 'Silver' },
       );
@@ -147,8 +136,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       console.log(`[TC005_SIP_CARD_GM] ${selectedSipMetalValueNumber}`);
     });
 
-    await test.step('TC005_13 | Investment — verify withdrawal panel values before withdrawal', async () => {
-      logSub(13, 'Verify withdrawal panel values');
+    await test.step('TC005_12 | Investment — verify withdrawal panel values before withdrawal', async () => {
+      logSub(12, 'Verify withdrawal panel values');
       if (!selectedSipName) {
         throw new Error('Selected SIP name missing before SIP card quantity entry.');
       }
@@ -169,13 +158,13 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       await withdrawalPage.clickDeliveryProceedButton();
     });
 
-    await test.step('TC005_14 | Checkout — same as billing & proceed', async () => {
-      logSub(14, 'Address');
+    await test.step('TC005_13 | Checkout — same as billing & proceed', async () => {
+      logSub(13, 'Address');
       deliveryInformation = await withdrawalPage.proceedThroughDeliveryWithSameBillingAddress();
     });
 
-    await test.step('TC005_15 | Checkout — payment summary (total, paid from funds, net payable)', async () => {
-      logSub(15, 'Payment summary');
+    await test.step('TC005_14 | Checkout — payment summary (total, paid from funds, net payable)', async () => {
+      logSub(14, 'Payment summary');
       if (!selectedProductDetails) {
         throw new Error('Selected product details missing before checkout.');
       }
@@ -184,8 +173,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       });
     });
 
-    await test.step('TC005_16 | Checkout — order details vs product & address', async () => {
-      logSub(16, 'Order details on checkout');
+    await test.step('TC005_15 | Checkout — order details vs product & address, payment method & Proceed to Pay', async () => {
+      logSub(15, 'Order details on checkout');
       if (!selectedProductDetails || !deliveryInformation) {
         throw new Error('Missing product or delivery info for checkout validation.');
       }
@@ -196,13 +185,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       });
     });
 
-    await test.step('TC005_17 | Checkout — payment method & Proceed to Pay', async () => {
-      logSub(17, 'Proceed to payment');
-      // Covered in TC005_16 via completeWithdrawalCheckoutWithNetbanking
-    });
-
-    await test.step('TC005_18 | Payment — netbanking with FAILURE in demo bank popup; capture failure message', async () => {
-      logSub(18, 'Payment FAILURE');
+    await test.step('TC005_16 | Payment — netbanking with FAILURE in demo bank popup; capture failure message', async () => {
+      logSub(16, 'Payment FAILURE');
       if (!selectedProductDetails) {
         throw new Error('Selected product details missing before payment.');
       }
@@ -210,9 +194,9 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       capturedFailureMessage = await paymentPage.validateAndFailWithdrawalNetbankingPayment(
         selectedProductDetails.makingAndDeliveryChargesAmount,
         'HDFC Bank',
-        { logLabel: TC005(18) },
+        { logLabel: TC005(16) },
       );
-      console.log(`[${TC005(18)}] Captured failure message:`, capturedFailureMessage || '(none)');
+      console.log(`[${TC005(16)}] Captured failure message:`, capturedFailureMessage || '(none)');
 
       const failurePatterns =
         /payment\s*(?:was\s*)?(?:failed|unsuccessful|not\s*(?:completed|successful))|payment\s*could\s*not\s*be\s*completed|transaction\s*(?:has\s*)?failed|something\s*went\s*wrong|payment\s*(?:has\s*)?failed/i;
@@ -220,8 +204,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       expect(capturedFailureMessage).toMatch(failurePatterns);
     });
 
-    await test.step('TC005_19 | Dashboard — silver balance UNCHANGED (withdrawal not succeeded)', async () => {
-      logSub(19, 'Dashboard silver unchanged');
+    await test.step('TC005_17 | Dashboard — silver balance UNCHANGED (withdrawal not succeeded)', async () => {
+      logSub(17, 'Dashboard silver unchanged');
       if (selectedProductGm <= 0) {
         throw new Error(`selectedProductGm missing for silver balance check: ${selectedProductGm}`);
       }
@@ -229,7 +213,7 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       await expect(page).toHaveURL(/dashboard/i);
       const totalSilverAfter = await dashboardPage.getTotalSilverValue();
       console.log(
-        `[${TC005(19)}] Total Silver before:`,
+        `[${TC005(17)}] Total Silver before:`,
         totalSilverBeforePurchase,
         'after:',
         totalSilverAfter,
@@ -242,8 +226,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       );
     });
 
-    await test.step('TC005_20 | My orders — no NEW Pending DELIVERY for this product (withdrawal not recorded as success)', async () => {
-      logSub(20, 'My orders — no successful Pending delivery for failed payment');
+    await test.step('TC005_18 | My orders — no NEW Pending DELIVERY for this product (withdrawal not recorded as success)', async () => {
+      logSub(18, 'My orders — no successful Pending delivery for failed payment');
       if (!selectedProductDetails) {
         throw new Error('Selected product details missing before my-orders verification.');
       }
@@ -260,8 +244,8 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
         .catch(() => false);
 
       if (!orderRowsExist) {
-        console.log(`[${TC005(20)}] No order rows present (No Record Found):`, await noRecord.isVisible().catch(() => false));
-        console.log(`[${TC005(20)}] Withdrawal correctly NOT recorded — pass.`);
+        console.log(`[${TC005(18)}] No order rows present (No Record Found):`, await noRecord.isVisible().catch(() => false));
+        console.log(`[${TC005(18)}] Withdrawal correctly NOT recorded — pass.`);
         return;
       }
 
@@ -272,7 +256,7 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
       const deliveryCardVisible = await deliveryCard.isVisible({ timeout: 15_000 }).catch(() => false);
 
       if (!deliveryCardVisible) {
-        console.log(`[${TC005(20)}] No DELIVERY card visible — failed payment did not create a delivery order.`);
+        console.log(`[${TC005(18)}] No DELIVERY card visible — failed payment did not create a delivery order.`);
         return;
       }
 
@@ -283,13 +267,13 @@ test.describe('TC_Withdrawal_ConvertToProduct_005 @customer-flows', () => {
         .first();
       const cardStatus =
         ((await statusBadge.textContent().catch(() => '')) ?? '').replace(/\s+/g, ' ').trim();
-      console.log(`[${TC005(20)}] Latest DELIVERY card status:`, cardStatus || '(unknown)');
+      console.log(`[${TC005(18)}] Latest DELIVERY card status:`, cardStatus || '(unknown)');
 
       const productInLatestCard = cardText
         .toLowerCase()
         .includes(selectedProductDetails.productName.toLowerCase());
       console.log(
-        `[${TC005(20)}] Latest DELIVERY card contains attempted product "${selectedProductDetails.productName}":`,
+        `[${TC005(18)}] Latest DELIVERY card contains attempted product "${selectedProductDetails.productName}":`,
         productInLatestCard,
       );
 

@@ -1,15 +1,13 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
-import { getTargetEnv } from '../../../../config/environments';
 import { createWalletGiftCoupon } from '../../../../utils/api/create-wallet-gift-coupon';
-import { getShopTc003Dataset, getBuyMetalDataset } from '../../../../utils/data/customer-excel-data';
+import { getShopTc003Dataset } from '../../../../utils/data/customer-excel-data';
 import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 import type { ShopEmiPage } from '../../../../pages/customer/shop-emi.page';
 import type { ShopBillingAddressDetails, ShopPlacedOrders } from '../../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../../pages/customer/my-order-verification.page';
 import {
+  loginAltCustomerWithGoldSetup,
   persistCustomerStorageState,
-  resolveAltCustomerMobile,
-  resolveAltCustomerOtp,
 } from '../../helpers/customer-alt-user.helpers';
 
 const TC006_COUPON_AMOUNT = 100;
@@ -62,34 +60,15 @@ test.describe('TC_SHOP_UserSaving_006 @customer-flows', () => {
       const shopOrdersByName: Record<string, MyOrderShopCardDetails> = {};
       let availableSavings = 0;
 
-      const altCustomerMobile = resolveAltCustomerMobile();
-      const altCustomerOtp = resolveAltCustomerOtp();
-      const { netbankingBankName } = getBuyMetalDataset();
+      let altCustomerMobile = '';
+      let altCustomerOtp = '';
 
       await test.step('TC006_0 | Login alt customer', async () => {
         logSub(0, 'Fresh login as alt customer');
-        console.log(
-          `[${TC006(0)}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
-        );
-        await customerLogin.login(altCustomerMobile, altCustomerOtp);
-        let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
-        if (!withdrawVisible) {
-          console.log(
-            `[${TC006(0)}] Withdraw not visible — buying ₹${TC006_GOLD_SETUP_AMOUNT} gold via Buy Now.`,
-          );
-          await buyMetalPage.placeOneTimeOrder('gold', TC006_GOLD_SETUP_AMOUNT);
-          await buySummaryPage.clickPayNowButton();
-          await paymentPage.completeNetbankingBuyNowPayment(
-            altCustomerMobile,
-            Number(TC006_GOLD_SETUP_AMOUNT),
-            netbankingBankName,
-          );
-          withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
-        }
-        expect(
-          withdrawVisible,
-          'Withdraw button should be visible on dashboard after netbanking setup in TC006_0',
-        ).toBe(true);
+        ({ altCustomerMobile, altCustomerOtp } = await loginAltCustomerWithGoldSetup(
+          { customerLogin, dashboardPage, buyMetalPage, buySummaryPage, paymentPage },
+          { goldSetupAmount: TC006_GOLD_SETUP_AMOUNT, logLabel: TC006(0) },
+        ));
       });
 
       await test.step(

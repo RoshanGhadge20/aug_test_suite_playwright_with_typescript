@@ -1,4 +1,7 @@
-import type { APIRequestContext } from '@playwright/test';
+import { type APIRequestContext, request as pwRequest } from '@playwright/test';
+import { apiAuthConfig, apiUrl } from '../../config/urls';
+import { getTargetEnv, type EnvName } from '../../config/environments';
+import type { ApiService } from '../../config/constants';
 
 export function extractToken(body: unknown, dottedPath: string): string {
   const parts = dottedPath.split('.');
@@ -57,4 +60,40 @@ export async function fetchBearerToken(args: FetchTokenArgs): Promise<string> {
   }
   const body = await verifyRes.json();
   return extractToken(body, args.tokenJsonPath);
+}
+
+const FIVE_MINUTES = 5 * 60 * 1000;
+
+/**
+ * Authenticated `APIRequestContext` for `service` — fetches (and caches, 5min/worker) a bearer
+ * token via OTP login, then returns a context with it pre-set. Extracted out of
+ * `fixtures/api.fixture.ts`'s `authedRequest` so it's usable outside the `apiTest` fixture, which
+ * is hard-restricted to the `api-backend`/`api-emi` Playwright projects (no browser). Callers must
+ * `dispose()` the returned context.
+ */
+export async function createAuthedApiContext(
+  service: ApiService,
+  envName: EnvName = getTargetEnv(),
+): Promise<APIRequestContext> {
+  const baseURL = apiUrl(service, envName);
+  const auth = apiAuthConfig(service, envName);
+  const loginCtx = await pwRequest.newContext({ baseURL });
+  const token = await globalTokenCache.get(
+    `${envName}:${service}:${auth.mobile}`,
+    () => fetchBearerToken({
+      request: loginCtx,
+      sendOtpPath: auth.sendOtpPath,
+      verifyOtpPath: auth.verifyOtpPath,
+      mobile: auth.mobile,
+      otp: auth.otp,
+      tokenJsonPath: auth.tokenJsonPath,
+    }),
+    FIVE_MINUTES,
+  );
+  await loginCtx.dispose();
+
+  return pwRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
 }

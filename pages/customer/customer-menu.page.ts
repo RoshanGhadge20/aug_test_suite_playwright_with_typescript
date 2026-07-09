@@ -8,6 +8,7 @@ export class CustomerMenuPage extends BasePage {
     private readonly profileOption: Locator;
     private readonly myOrdersOption: Locator;
     private readonly logoutOption: Locator;
+    private readonly kycOption: Locator;
 
     constructor(page: Page) {
         super(page);
@@ -16,6 +17,7 @@ export class CustomerMenuPage extends BasePage {
         this.profileOption = page.getByText('Profile', { exact: true });
         this.myOrdersOption = page.getByText('My Orders', { exact: true });
         this.logoutOption = page.getByText('Logout', { exact: true });
+        this.kycOption = page.getByText('Kyc', { exact: true });
     }
 
     async openUserMenu(): Promise<void> {
@@ -37,5 +39,14 @@ export class CustomerMenuPage extends BasePage {
         await this.logoutOption.click();
     }
 
+    async openKyc(): Promise<void> {
+        await this.openUserMenu();
+        await this.kycOption.click();
+    }
+
+    /** Header pill showing the account name — "guest user" until profile data is completed. */
+    userMenuButtonLocator(): Locator {
+        return this.userMenuButton;
+    }
 
 }

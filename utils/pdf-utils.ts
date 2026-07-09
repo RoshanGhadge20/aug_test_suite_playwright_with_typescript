@@ -104,7 +104,7 @@ export function extractGoldGrams(pdfText: string): number {
   );
   if (hsnRowMatch?.[1]) {
     const value = Number(hsnRowMatch[1]);
-    if (!Number.isNaN(value) && value > 0.01 && value < 1) {
+    if (!Number.isNaN(value) && value > 0.01 && value <= 1) {
       return value;
     }
   }
@@ -116,7 +116,7 @@ export function extractGoldGrams(pdfText: string): number {
   );
   if (tableRowMatch?.[1]) {
     const value = Number(tableRowMatch[1]);
-    if (!Number.isNaN(value) && value > 0.01 && value < 1) {
+    if (!Number.isNaN(value) && value > 0.01 && value <= 1) {
       return value;
     }
   }
@@ -127,7 +127,7 @@ export function extractGoldGrams(pdfText: string): number {
   );
   if (gramsRateMatch?.[1]) {
     const value = Number(gramsRateMatch[1]);
-    if (!Number.isNaN(value) && value > 0.01 && value < 1) {
+    if (!Number.isNaN(value) && value > 0.01 && value <= 1) {
       return value;
     }
   }
@@ -137,7 +137,7 @@ export function extractGoldGrams(pdfText: string): number {
   );
   if (labelAnchored?.[1]) {
     const value = Number(labelAnchored[1]);
-    if (!Number.isNaN(value) && value > 0.01 && value < 1) {
+    if (!Number.isNaN(value) && value > 0.01 && value <= 1) {
       return value;
     }
   }
@@ -163,7 +163,7 @@ export function extractGoldGrams(pdfText: string): number {
   }
 
   // Filter out tiny noise values (e.g. 0.00054) that often come from OCR/text artifacts.
-  const plausibleUnderOne = candidates.filter((v) => v > 0.01 && v < 1);
+  const plausibleUnderOne = candidates.filter((v) => v > 0.01 && v <= 1);
   if (plausibleUnderOne.length > 0) {
     return Math.max(...plausibleUnderOne);
   }

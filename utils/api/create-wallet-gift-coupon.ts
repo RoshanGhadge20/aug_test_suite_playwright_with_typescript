@@ -96,9 +96,6 @@ export async function createWalletGiftCoupon(
   } finally {
     await ctx.dispose();
   }
-
-
-  
 }
 
 export interface ExpiredCouponResult {

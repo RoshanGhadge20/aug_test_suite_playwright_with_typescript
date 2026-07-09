@@ -3,8 +3,6 @@ import { test, expect } from '../../../../fixtures/base.fixture';
 import { getTargetEnv } from '../../../../config/environments';
 
 import { panelCreds } from '../../../../config/urls';
-import { getBuyMetalDataset } from '../../../../utils/data/customer-excel-data';
-
 
 import { createWalletGiftCoupon } from '../../../../utils/api/create-wallet-gift-coupon';
 
@@ -16,11 +14,11 @@ import {
 
   clearCustomerBrowserStorage,
 
+  loginAltCustomerWithGoldSetup,
+
   persistCustomerStorageState,
 
   resolveAltCustomerMobile,
-
-  resolveAltCustomerOtp,
 
 } from '../../helpers/customer-alt-user.helpers';
 
@@ -81,37 +79,18 @@ test.describe('TC_SHOP_UserSaving_005 @customer-flows', () => {
 
       let billingAddress: ShopBillingAddressDetails;
 
-      const altCustomerMobile = resolveAltCustomerMobile();
+      let altCustomerMobile = '';
 
-      const altCustomerOtp = resolveAltCustomerOtp();
-      const { netbankingBankName } = getBuyMetalDataset();
+      let altCustomerOtp = '';
 
 
 
       await test.step('TC005_0 | Login alt customer', async () => {
         logSub(0, 'Fresh login as alt customer');
-        console.log(
-          `[${TC005(0)}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
-        );
-        await customerLogin.login(altCustomerMobile, altCustomerOtp);
-        let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
-        if (!withdrawVisible) {
-          console.log(
-            `[${TC005(0)}] Withdraw not visible — buying ₹${TC005_GOLD_SETUP_AMOUNT} gold via Buy Now.`,
-          );
-          await buyMetalPage.placeOneTimeOrder('gold', TC005_GOLD_SETUP_AMOUNT);
-          await buySummaryPage.clickPayNowButton();
-          await paymentPage.completeNetbankingBuyNowPayment(
-            altCustomerMobile,
-            Number(TC005_GOLD_SETUP_AMOUNT),
-            netbankingBankName,
-          );
-          withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
-        }
-        expect(
-          withdrawVisible,
-          'Withdraw button should be visible on dashboard after netbanking setup in TC005_0',
-        ).toBe(true);
+        ({ altCustomerMobile, altCustomerOtp } = await loginAltCustomerWithGoldSetup(
+          { customerLogin, dashboardPage, buyMetalPage, buySummaryPage, paymentPage },
+          { goldSetupAmount: TC005_GOLD_SETUP_AMOUNT, logLabel: TC005(0) },
+        ));
       });
 
 

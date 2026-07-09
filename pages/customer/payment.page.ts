@@ -1920,6 +1920,63 @@ export class PaymentPage extends BasePage {
   }
 
   /**
+   * Withdrawal/jewellery — assert Razorpay amount then complete Card payment (card details + OTP).
+   * Reuses the generic card/OTP primitives (also used by {@link completeCardBuyNowPayment}) but
+   * finishes with the withdrawal-specific success detection used by netbanking withdrawal.
+   */
+  async validateAndCompleteWithdrawalCardPayment(
+    expectedAmount: number,
+    card: {
+      cardNumber: string;
+      cardExpiry: string;
+      cardCvv: string;
+      cardHolderName: string;
+      cardOtp: string;
+    },
+    options?: { logLabel?: string },
+  ): Promise<void> {
+    const razorpayAmountRaw = await this.getPriceSummaryAmountFromFrame();
+    const normalized =
+      razorpayAmountRaw > expectedAmount * 10
+        ? Number((razorpayAmountRaw / 100).toFixed(2))
+        : razorpayAmountRaw;
+    const label = options?.logLabel ?? 'Withdrawal card payment';
+    console.log(
+      `[${label}] razorpayAmount raw=${razorpayAmountRaw} normalized=${normalized} expected=${expectedAmount}`,
+    );
+    expect(Math.abs(normalized - expectedAmount)).toBeLessThanOrEqual(1);
+
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+    const dismissOverlay = (): Promise<void> => this.dismissRazorpayFeeOverlayWithdrawal();
+
+    await this.enterCardNumber(card.cardNumber);
+    await this.enterCardExpiry(card.cardExpiry);
+    await this.enterCardCVV(card.cardCvv);
+    await this.enterCardHolderName(card.cardHolderName);
+    await this.clickCardContinue();
+    await this.clickOnMaybeLaterButton();
+
+    // Card payment shows an intermediate Fee Breakup overlay with its own
+    // "Continue & Pay" button before the OTP screen — same as netbanking withdrawal.
+    await this.clickWithdrawalRazorpayContinueAndPayIfVisible(frame, {
+      dismissOverlay,
+      pollMs: 4_000,
+      clickAttempts: 2,
+    });
+
+    await this.enterOtp(card.cardOtp);
+    await this.clickOnOtpContinueButton();
+
+    const source = await this.waitForWithdrawalPaymentSuccessOutcome(30_000);
+    await this.dismissWithdrawalPaymentSuccessChrome(source);
+    await this.page
+      .locator('iframe[src*="razorpay"]')
+      .first()
+      .waitFor({ state: 'hidden', timeout: 8_000 })
+      .catch(() => {});
+  }
+
+  /**
    * Withdrawal failure path — assert Razorpay amount then trigger demo-bank Failure.
    * Returns the captured failure message text.
    */
@@ -2125,6 +2182,59 @@ export class PaymentPage extends BasePage {
     await this.page.waitForLoadState('domcontentloaded').catch(() => {});
 
     return capturedFailureMessage;
+  }
+
+  /**
+   * Withdrawal netbanking ABANDON path — user closes the Razorpay demo-bank popup without
+   * choosing Success or Failure. Same navigation as {@link failNetbankingPaymentWithdrawal}
+   * (bank → Continue & Pay) up to the popup appearing, then closes the popup directly.
+   * Returns true if a popup was found and closed, false if no popup appeared within the deadline.
+   */
+  async abandonWithdrawalPaymentByClosingPopup(bankName: string): Promise<boolean> {
+    const sleepMs = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const POPUP_APPEAR_DEADLINE_MS = 30_000;
+
+    const dismissOverlay = (): Promise<void> => this.dismissRazorpayFeeOverlayWithdrawal();
+    const frame = this.page.frameLocator('iframe[src*="razorpay"]');
+
+    await dismissOverlay();
+    await this.clickRazorpayNetbankingBankWithdrawal(bankName.trim(), frame);
+
+    await this.clickWithdrawalRazorpayContinueAndPayIfVisible(frame, {
+      dismissOverlay,
+      pollMs: 2_500,
+      clickAttempts: 2,
+    });
+
+    const findDemoBankPopup = (): Page | null => {
+      for (const p of this.listWithdrawalRazorpayDemoBankPopups()) {
+        return p;
+      }
+      return null;
+    };
+
+    const start = Date.now();
+    let popup: Page | null = null;
+    while (Date.now() - start < POPUP_APPEAR_DEADLINE_MS) {
+      popup = findDemoBankPopup();
+      if (popup) {
+        break;
+      }
+      await sleepMs(250);
+    }
+
+    if (!popup) {
+      console.log(
+        `[PAYMENT ABANDON] No demo-bank popup appeared within ${POPUP_APPEAR_DEADLINE_MS / 1000}s.`,
+      );
+      return false;
+    }
+
+    console.log('[PAYMENT ABANDON] Closing demo-bank popup without choosing Success/Failure.');
+    await popup.close().catch(() => {});
+    await this.page.waitForLoadState('domcontentloaded').catch(() => {});
+
+    return true;
   }
 
   async selectBank(): Promise<void> {

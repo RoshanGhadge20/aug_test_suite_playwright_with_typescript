@@ -318,6 +318,42 @@ export class BuySummaryPage extends BasePage {
     return { quantity, buyingRate, amount, tax, total, paidFromWallet, payable };
   }
 
+  /**
+   * Like `validateOneTimeSummary`, but for a purchase entered by Grams instead of Amount —
+   * the payable amount is derived from the live rate, so it asserts against the entered
+   * quantity instead of a fixed expected amount.
+   */
+  async validateOneTimeSummaryByQuantity(expectedGrams: number): Promise<OneTimeSummaryResult> {
+    await this.waitForValidForText();
+    const quantity = await this.getQuantity();
+    const buyingRate = await this.getBuyingGoldRate();
+    console.log(`[BUY SUMMARY] buyingRate=${buyingRate}`);
+    console.log(`[BUY SUMMARY] quantity actual=${quantity} expected=${expectedGrams}`);
+    expect(quantity).toBeCloseTo(expectedGrams, 3);
+    expect(await this.isEditVisible()).toBe(true);
+
+    const investingAmount = await this.getInvestingAmount();
+    const amount = await this.getAmount();
+    const tax = await this.getTax();
+    const total = await this.getTotalAmount();
+    const paidFromWallet = await this.getPaidFromWallet();
+    const payable = await this.getAmountPayable();
+    const calculated = calculateOneTimeAmounts(total, buyingRate, paidFromWallet);
+
+    console.log(`[BUY SUMMARY] investingAmount actual=${investingAmount} expected=${amount}`);
+    console.log(`[BUY SUMMARY] taxable amount actual=${amount} expected=${calculated.amount}`);
+    console.log(`[BUY SUMMARY] tax actual=${tax} expected=${calculated.tax}`);
+    console.log(`[BUY SUMMARY] payable actual=${payable} expected=${calculated.payable}`);
+
+    expect(investingAmount).toBeCloseTo(amount, 2);
+    expect(amount).toBeCloseTo(calculated.amount, 2);
+    expect(tax).toBeCloseTo(calculated.tax, 2);
+    expect(payable).toBeCloseTo(calculated.payable, 2);
+    await expect(this.page).toHaveURL(/digital-(?:gold|silver)\/buy\/summary/i);
+
+    return { quantity, buyingRate, amount, tax, total, paidFromWallet, payable };
+  }
+
   async cancelAndStayOnSummary(): Promise<void> {
     await this.clickCancel();
     await expect(this.page.getByText('Yes, Cancel', { exact: true })).toBeVisible();

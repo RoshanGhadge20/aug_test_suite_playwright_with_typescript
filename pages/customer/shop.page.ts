@@ -79,10 +79,12 @@ export class ShopPage extends BasePage {
       .getByText('USilver', { exact: true })
       .locator('xpath=following-sibling::*[1]')
       .first();
+    // Price-range radios are bucketed live from the catalog's min/max price, so the
+    // lowest-bucket label (e.g. "₹100 - ₹20000") drifts as the cheapest product's price
+    // changes. Select by position (first = lowest bucket) instead of matching that text.
     this.priceRange100To20000Radio = page
-      .getByText('₹100 - ₹20000', { exact: true })
-      .locator('xpath=preceding-sibling::*[1]')
-      .first();
+      .getByRole('heading', { name: 'Price Range', exact: true })
+      .locator('xpath=following::*[contains(@class,"p-radiobutton-box")][1]');
     this.resultsText = page.getByText(/\d+\s+results/i).first();
     this.goldCoinHeading = page.getByRole('heading', { name: 'Gold Coin', level: 2, exact: true });
     this.goldCoinProductGrid = this.goldCoinHeading.locator(
@@ -298,7 +300,7 @@ export class ShopPage extends BasePage {
   }
 
   async clickPriceRangeRadio(): Promise<void> {
-    await this.page.getByText('₹100 - ₹20000', { exact: true }).scrollIntoViewIfNeeded();
+    await this.priceRange100To20000Radio.scrollIntoViewIfNeeded();
     await this.priceRange100To20000Radio.click();
     await this.waitForShopListingReady(30_000);
   }

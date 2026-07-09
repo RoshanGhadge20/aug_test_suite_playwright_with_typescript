@@ -22,6 +22,8 @@ import { ShopSortPage } from '../pages/customer/shop-sort.page';
 import { ShopFilterPage } from '../pages/customer/shop-filter.page';
 import { ShopWishlistPage } from '../pages/customer/shop-wishlist.page';
 import { CustomerMenuPage } from '../pages/customer/customer-menu.page';
+import { KycDigiKycPage } from '../pages/customer/kyc-digi-kyc.page';
+import { MyProfilePage } from '../pages/customer/my-profile.page';
 import {
   getWorkerShopEmiPurchaseChainState,
   type ShopEmiPurchaseChainState,
@@ -59,7 +61,9 @@ type PageObjectFixtures = {
   withdrawPamentPage:WithdrawPamentPage;
   withdrawsipPage:Withdrawsip
   customerMenupage:CustomerMenuPage;
-  
+  kycDigiKycPage: KycDigiKycPage;
+  myProfilePage: MyProfilePage;
+
   // customerLogin: CustomerLoginPage;
   // businessLogin: BusinessLoginPage;
   // newAdminLogin: NewAdminLoginPage;
@@ -112,8 +116,10 @@ export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
   withdrawAccountDetailPage: async ({ page }, use) => { await use(new WithdrawAccountDetailPage(page)); },
   withdrawPamentPage: async ({ page }, use) => { await use(new WithdrawPamentPage(page)); },
   customerMenupage: async ({ page }, use) => { await use(new CustomerMenuPage(page)); },
+  kycDigiKycPage: async ({ page }, use) => { await use(new KycDigiKycPage(page)); },
+  myProfilePage: async ({ page }, use) => { await use(new MyProfilePage(page)); },
 
-  
+
   shopEmiPurchaseChain009: async ({}, use) => {
     await use(getWorkerShopEmiPurchaseChainState('009'));
   },

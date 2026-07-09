@@ -1,13 +1,8 @@
-import { test,expect } from '../../../../fixtures/base.fixture';
-import { getShopTc011Dataset,getBuyMetalDataset } from '../../../../utils/data/customer-excel-data';
+import { test } from '../../../../fixtures/base.fixture';
+import { getShopTc011Dataset } from '../../../../utils/data/customer-excel-data';
 import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 import type { ShopBillingAddressDetails } from '../../../../pages/customer/shop-checkout.page';
-import { getTargetEnv } from '../../../../config/environments';
-import {
-  persistCustomerStorageState,
-  resolveAltCustomerMobile,
-  resolveAltCustomerOtp,
-} from '../../helpers/customer-alt-user.helpers';
+import { loginAltCustomerWithGoldSetup } from '../../helpers/customer-alt-user.helpers';
 
 test.describe('TC_SHOP_UserSaving_002 @customer-flows', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -24,8 +19,6 @@ test.describe('TC_SHOP_UserSaving_002 @customer-flows', () => {
   }) => {
     test.setTimeout(420_000);
 
-    const TC002_GOLD_SETUP_AMOUNT = '500';
-
     const TC002 = (n: number): string => `TC002_${n}`;
     const logSub = (n: number, title: string): void => {
       console.log(`\n[${TC002(n)}] ${title}`);
@@ -38,39 +31,16 @@ test.describe('TC_SHOP_UserSaving_002 @customer-flows', () => {
     let placedOrderId = '';
     let cartNetWeight = '';
     let billingAddress: ShopBillingAddressDetails;
-    const altCustomerMobile = resolveAltCustomerMobile();
-    const altCustomerOtp = resolveAltCustomerOtp();
-    const { netbankingBankName } = getBuyMetalDataset();
-
-    
+    let altCustomerMobile = '';
+    let altCustomerOtp = '';
 
     await test.step('TC002_0 | Login alt customer', async () => {
       logSub(0, 'Fresh login as alt customer');
-      console.log(
-        `[${TC002(0)}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
-      );
-      await customerLogin.login(altCustomerMobile, altCustomerOtp);
-      let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
-      if (!withdrawVisible) {
-        console.log(
-          `[${TC002(0)}] Withdraw not visible — buying ₹${TC002_GOLD_SETUP_AMOUNT} gold via Buy Now.`,
-        );
-        await buyMetalPage.placeOneTimeOrder('gold', TC002_GOLD_SETUP_AMOUNT);
-        await buySummaryPage.clickPayNowButton();
-        await paymentPage.completeNetbankingBuyNowPayment(
-          altCustomerMobile,
-          Number(TC002_GOLD_SETUP_AMOUNT),
-          netbankingBankName,
-        );
-        withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
-      }
-      expect(
-        withdrawVisible,
-        'Withdraw button should be visible on dashboard after netbanking setup in TC002_0',
-      ).toBe(true);
+      ({ altCustomerMobile, altCustomerOtp } = await loginAltCustomerWithGoldSetup(
+        { customerLogin, dashboardPage, buyMetalPage, buySummaryPage, paymentPage },
+        { goldSetupAmount: '500', logLabel: TC002(0) },
+      ));
     });
-
-
 
     await test.step('TC002_1 | Create partial savings purchase — cart, checkout, pay', async () => {
       logSub(1, 'Create partial savings purchase — cart, checkout, pay');

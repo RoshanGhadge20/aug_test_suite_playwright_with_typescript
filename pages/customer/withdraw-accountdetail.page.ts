@@ -233,6 +233,15 @@ export class WithdrawAccountDetailPage extends BasePage {
     await this.withdrawButton.click();
     await this.page.waitForTimeout(3000);
   }
+  async cancelButtonClick() {
+    await this.cancelButton.click();
+    await this.page.waitForTimeout(1000);
+  }
+  async isWithdrawalConfirmationDialogVisible(): Promise<boolean> {
+    return this.page
+      .getByRole('dialog', { name: 'Withdrawal Confirmation' })
+      .isVisible();
+  }
   getLivePrice(metal: 'Gold' | 'Silver'): Locator {
     return this.page.locator(
       `span:has-text("Live ${metal} Price") >> span.font-bold`
