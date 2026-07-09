@@ -6,6 +6,7 @@ export class BuyMetalPage extends BasePage {
   private readonly digitalGold: Locator;
   private readonly digitalSilver: Locator;
   private readonly amountInput: Locator;
+  private readonly gramsInput: Locator;
   private readonly oneTimeClick: Locator;
   private readonly createSipClick: Locator;
   private readonly buyGoldBtn: Locator;
@@ -25,6 +26,12 @@ export class BuyMetalPage extends BasePage {
     this.digitalSilver = page.getByRole('link', { name: /Digital Silver Buy and save/i });
     this.amountInput = this.page
       .locator('text=Amount')
+      .locator('..')
+      .locator('input[role="spinbutton"]');
+    // Only rendered in One-Time mode, alongside Amount — the two inputs are linked via a
+    // sync icon; entering a value here drives the purchase quantity instead of the amount.
+    this.gramsInput = this.page
+      .locator('text=Grams')
       .locator('..')
       .locator('input[role="spinbutton"]');
 
@@ -119,6 +126,22 @@ export class BuyMetalPage extends BasePage {
     await this.amountInput.press('Control+A');
     await this.amountInput.fill(amount);
     await this.amountInput.press('Tab');
+    await this.waitForBlockUiHidden(15_000);
+  }
+
+  /**
+   * Enters a value into the Grams field (One-Time mode only). Unlike `enterAmount`, this must
+   * type character-by-character — `.fill()` updates the input's own value but doesn't trigger
+   * the Angular recalculation that syncs the Amount field, so the wrong amount would be charged.
+   */
+  async enterGrams(grams: string): Promise<void> {
+    await this.waitForBuyFormReady();
+    await this.gramsInput.waitFor({ state: 'visible', timeout: 20_000 });
+    await this.gramsInput.click();
+    await this.gramsInput.press('Control+A');
+    await this.gramsInput.press('Backspace');
+    await this.gramsInput.pressSequentially(grams, { delay: 150 });
+    await this.gramsInput.press('Tab');
     await this.waitForBlockUiHidden(15_000);
   }
 
@@ -552,6 +575,36 @@ export class BuyMetalPage extends BasePage {
       await this.waitForBuyFormReady();
       await this.enterAmount(amount);
       await this.clickOnOneTime();
+      await this.waitForOneTimeBuyButtonReady(metal);
+      outcome = await this.confirmOneTimeBuy(metal);
+    }
+    if (outcome === 'kyc') {
+      throw new Error(`Buy flow redirected to KYC: ${this.page.url()}`);
+    }
+  }
+
+  /** Same as `placeOneTimeOrder`, but drives the purchase by Grams instead of Amount. */
+  async placeOneTimeOrderByGrams(metal: 'gold' | 'silver', grams: string): Promise<void> {
+    const buyPagePath = this.buyPagePath(metal);
+    await this.page.goto(metal === 'gold' ? '/digital-gold' : '/digital-silver');
+    await this.page.waitForLoadState('domcontentloaded');
+    await this.skipKycRedirectIfShown(buyPagePath);
+    if (/\/kyc/i.test(this.page.url())) {
+      throw new Error(`Buy page blocked by KYC: ${this.page.url()}`);
+    }
+    await this.waitForBuyFormReady();
+    await this.clickOnOneTime();
+    await this.enterGrams(grams);
+    await this.waitForOneTimeBuyButtonReady(metal);
+    let outcome = await this.confirmOneTimeBuy(metal);
+    if (outcome === 'kyc') {
+      await this.skipKycRedirectIfShown(buyPagePath);
+      if (/\/kyc/i.test(this.page.url())) {
+        throw new Error(`Buy flow redirected to KYC: ${this.page.url()}`);
+      }
+      await this.waitForBuyFormReady();
+      await this.clickOnOneTime();
+      await this.enterGrams(grams);
       await this.waitForOneTimeBuyButtonReady(metal);
       outcome = await this.confirmOneTimeBuy(metal);
     }

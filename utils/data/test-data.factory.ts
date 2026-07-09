@@ -34,6 +34,12 @@ export const TestDataFactory = {
     const digits = String(Math.floor(1000 + Math.random() * 9000));
     return `${letters(5)}${digits}${letters(1)}`;
   },
+  /** Random 12-digit, format-only Aadhaar-shaped number (real Aadhaar never starts with 0 or 1). */
+  aadhaar(): string {
+    let out = String(2 + Math.floor(Math.random() * 8));
+    for (let i = 0; i < 11; i++) out += Math.floor(Math.random() * 10);
+    return out;
+  },
   stamp(): string {
     return `_${randomUUID().slice(0, 8)}`;
   },

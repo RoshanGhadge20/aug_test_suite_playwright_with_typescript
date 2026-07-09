@@ -110,6 +110,11 @@ export class DashBoardPage extends BasePage {
     await this.waitForDashboardPortfolioSection();
   }
 
+  /** Registration flow — decorative, non-interactive pill shown until KYC is completed. */
+  kycPendingBadge(): Locator {
+    return this.page.getByText('KYC Pending', { exact: true });
+  }
+
   async getCurrentValue(): Promise<number> {
     await this.waitForDashboardPortfolioSection(20_000);
     return this.readPortfolioInr();
@@ -999,15 +1004,10 @@ export class DashBoardPage extends BasePage {
   }
 
   async deliveryScrollUpAndClickProceedByMatchingSipMetalValue(
-    sipName: string,
     expectedMetalValueInGm: number,
     options?: { onlyMetalType?: 'Gold' | 'Silver' },
   ): Promise<{ sipName: string; metalValue: number; metalType: 'Gold' | 'Silver' }> {
     const onlyMetalType = options?.onlyMetalType;
-    const normalizedTargetSipName = sipName.trim().toLowerCase();
-    if (!normalizedTargetSipName) {
-      throw new Error('SIP name is required for delivery value matching.');
-    }
     if (!Number.isFinite(expectedMetalValueInGm) || expectedMetalValueInGm <= 0) {
       throw new Error(`Invalid expected SIP metal value "${expectedMetalValueInGm}".`);
     }
@@ -1164,7 +1164,6 @@ export class DashBoardPage extends BasePage {
           continue;
         }
 
-        const sameSip = meta.sipName.trim().toLowerCase() === normalizedTargetSipName;
         const isEligibleByValue = meta.metalValue + 0.0001 >= expectedMetalValueInGm;
         if (!isEligibleByValue) {
           continue;
@@ -1175,21 +1174,11 @@ export class DashBoardPage extends BasePage {
         const resolvedMetalType: 'Gold' | 'Silver' =
           meta.metalType === 'Gold' ? 'Gold' : 'Silver';
 
-        if (sameSip) {
-          console.log(
-            `[DELIVERY SIP MATCH] ${meta.sipName || sipName} -> ${meta.metalType}: ${meta.metalValue} gm (required >= ${expectedMetalValueInGm} gm)`,
-          );
-          return {
-            sipName: meta.sipName || sipName,
-            metalValue: meta.metalValue,
-            metalType: resolvedMetalType,
-          };
-        }
         console.log(
-          `[DELIVERY SIP MATCH] ${meta.sipName || sipName} -> ${meta.metalType}: ${meta.metalValue} gm (required >= ${expectedMetalValueInGm} gm)`,
+          `[DELIVERY SIP MATCH] ${meta.sipName} -> ${meta.metalType}: ${meta.metalValue} gm (required >= ${expectedMetalValueInGm} gm)`,
         );
         return {
-          sipName: meta.sipName || sipName,
+          sipName: meta.sipName,
           metalValue: meta.metalValue,
           metalType: resolvedMetalType,
         };

@@ -5,7 +5,6 @@ import type { ShopPage } from './shop.page';
 import { shopWeightGramsFromText } from './shop.page';
 
 export class ShopFilterPage extends BasePage {
-  static readonly priceRangeLabel = '₹100 - ₹20000';
   static readonly metalWeight6To8Label = '6 - 8 grms';
   static readonly minWeightGrams = 6;
   static readonly maxWeightGrams = 8;
@@ -18,10 +17,12 @@ export class ShopFilterPage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.resultsText = page.getByText(/\d+\s+results/i).first();
+    // Price-range radios are bucketed live from the catalog's min/max price, so the
+    // lowest-bucket label text drifts as the cheapest product's price changes. Select by
+    // position (first = lowest bucket) instead of matching a hardcoded label.
     this.priceRange100To20000Radio = page
-      .getByText(ShopFilterPage.priceRangeLabel, { exact: true })
-      .locator('xpath=preceding-sibling::*[1]')
-      .first();
+      .getByRole('heading', { name: 'Price Range', exact: true })
+      .locator('xpath=following::*[contains(@class,"p-radiobutton-box")][1]');
     this.metalWeight6To8Radio = page
       .getByText(ShopFilterPage.metalWeight6To8Label, { exact: true })
       .locator('xpath=preceding-sibling::*[1]')
@@ -46,7 +47,7 @@ export class ShopFilterPage extends BasePage {
 
   async selectPriceRange100To20000(): Promise<void> {
     await this.scrollUpToFilters();
-    await this.page.getByText(ShopFilterPage.priceRangeLabel, { exact: true }).scrollIntoViewIfNeeded();
+    await this.priceRange100To20000Radio.scrollIntoViewIfNeeded();
     await this.priceRange100To20000Radio.click();
     await this.waitForListingReady();
   }

@@ -319,6 +319,80 @@ test.describe('customer buy metal flows @customer-flows', () => {
   });
   });
 
+  test('TC_006-Buy Gold one-time by Grams using Netbanking', async ({
+    dashboardPage,
+    buyMetalPage,
+    buySummaryPage,
+    paymentPage,
+    myOrderVerificationPage,
+  }) => {
+    test.setTimeout(180_000);
+
+    const tc006Data = {
+      metal: 'gold' as const,
+      grams: 1,
+      metalName: metalName('gold'),
+      orderRowText: buyOrderRowText(dataset.metalGold),
+    };
+
+    let metalBeforeGrams = 0;
+    let summary: OneTimeSummaryResult;
+    let paidAmount = 0;
+    let purchasedQuantity = 0;
+
+    await test.step('captureBuyMetalGramsBeforePurchase', async () => {
+      metalBeforeGrams = await dashboardPage.captureBuyMetalGramsBeforePurchase(tc006Data.metal);
+    });
+
+    await test.step('placeOneTimeOrderByGrams', async () => {
+      await buyMetalPage.placeOneTimeOrderByGrams(tc006Data.metal, String(tc006Data.grams));
+    });
+
+    await test.step('validateOneTimeSummaryByQuantity', async () => {
+      summary = await buySummaryPage.validateOneTimeSummaryByQuantity(tc006Data.grams);
+    });
+
+    await test.step('completeNetbankingBuyNowPayment', async () => {
+      await buySummaryPage.clickPayNowButton();
+      paidAmount = await paymentPage.completeNetbankingBuyNowPayment(
+        paymentConfig.contactNumber,
+        summary!.payable,
+        paymentConfig.netbankingBankName,
+      );
+    });
+
+    await test.step('validateOneTimeBuyOrder', async () => {
+      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
+        orderRowText: tc006Data.orderRowText,
+        narrationMatch: new RegExp(`${tc006Data.metalName} bought`, 'i'),
+        expectedQuantity: summary!.quantity,
+        expectedAmount: paidAmount || summary!.payable,
+      });
+      purchasedQuantity = order.quantity;
+    });
+
+    await test.step('validateBuyMetalInvoice', async () => {
+      await myOrderVerificationPage.validateBuyMetalInvoice({
+        metal: tc006Data.metal,
+        orderRowText: tc006Data.orderRowText,
+        uiQuantity: summary!.quantity,
+        buyingRate: summary!.buyingRate,
+        taxableAmount: summary!.amount,
+        tax: summary!.tax,
+        payable: summary!.payable,
+        paidAmount,
+      });
+    });
+
+    await test.step('validateBuyMetalGramsAfterPurchase', async () => {
+      await dashboardPage.validateBuyMetalGramsAfterPurchase(
+        tc006Data.metal,
+        metalBeforeGrams,
+        purchasedQuantity || summary!.quantity,
+      );
+    });
+  });
+});
+
   test.skip('TC_003-Buy Silver one-time fully Payment using wallet', async () => {});
   test.skip('TC_004-Buy Gold one-time partial Payment using wallet and Netbanking', async () => {});
-});

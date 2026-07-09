@@ -4,7 +4,12 @@ import { expect, type Page } from '@playwright/test';
 import { storageStatePath } from '../../../config/constants';
 import { getTargetEnv } from '../../../config/environments';
 import { panelCreds } from '../../../config/urls';
+import { getBuyMetalDataset } from '../../../utils/data/customer-excel-data';
 import type { CustomerLoginPage } from '../../../pages/customer/login.page';
+import type { DashBoardPage } from '../../../pages/customer/dashboard.page';
+import type { BuyMetalPage } from '../../../pages/customer/buy-metal.page';
+import type { BuySummaryPage } from '../../../pages/customer/buy-summary.page';
+import type { PaymentPage } from '../../../pages/customer/payment.page';
 import type { ShopCheckoutPriceDetailsWithSavings } from '../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../pages/customer/my-order-verification.page';
 
@@ -28,6 +33,62 @@ export function resolveAltCustomerOtp(): string {
     );
   }
   return otp;
+}
+
+export interface AltCustomerGoldSetupPages {
+  customerLogin: CustomerLoginPage;
+  dashboardPage: DashBoardPage;
+  buyMetalPage: BuyMetalPage;
+  buySummaryPage: BuySummaryPage;
+  paymentPage: PaymentPage;
+}
+
+export interface AltCustomerGoldSetupResult {
+  altCustomerMobile: string;
+  altCustomerOtp: string;
+}
+
+/**
+ * "TC00X_0 | Login alt customer" precondition shared by TC_SHOP_UserSaving_002/005/006/007
+ * and TC_Shop_EMI_007: fresh alt-customer login, then a ₹{goldSetupAmount} netbanking Buy Now
+ * only if Withdraw isn't already visible (i.e. the account has no funded balance yet).
+ */
+export async function loginAltCustomerWithGoldSetup(
+  pages: AltCustomerGoldSetupPages,
+  options: { goldSetupAmount?: string; logLabel?: string } = {},
+): Promise<AltCustomerGoldSetupResult> {
+  const { customerLogin, dashboardPage, buyMetalPage, buySummaryPage, paymentPage } = pages;
+  const goldSetupAmount = options.goldSetupAmount ?? '500';
+  const logLabel = options.logLabel ?? 'Login alt customer';
+
+  const altCustomerMobile = resolveAltCustomerMobile();
+  const altCustomerOtp = resolveAltCustomerOtp();
+  const { netbankingBankName } = getBuyMetalDataset();
+
+  console.log(
+    `[${logLabel}] Logging in as ${altCustomerMobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
+  );
+  await customerLogin.login(altCustomerMobile, altCustomerOtp);
+
+  let withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(20_000);
+  if (!withdrawVisible) {
+    console.log(`[${logLabel}] Withdraw not visible — buying ₹${goldSetupAmount} gold via Buy Now.`);
+    await buyMetalPage.placeOneTimeOrder('gold', goldSetupAmount);
+    await buySummaryPage.clickPayNowButton();
+    await paymentPage.completeNetbankingBuyNowPayment(
+      altCustomerMobile,
+      Number(goldSetupAmount),
+      netbankingBankName,
+    );
+    withdrawVisible = await dashboardPage.isWithdrawVisibleOnDashboard(25_000);
+  }
+
+  expect(
+    withdrawVisible,
+    `Withdraw button should be visible on dashboard after netbanking setup in ${logLabel}`,
+  ).toBe(true);
+
+  return { altCustomerMobile, altCustomerOtp };
 }
 
 // ---------------------------------------------------------------------------

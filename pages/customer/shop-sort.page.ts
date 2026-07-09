@@ -63,6 +63,29 @@ export class ShopSortPage extends BasePage {
     return { name, price, priceText: priceText || `₹${price}` };
   }
 
+  /**
+   * Reads one card's price, retrying by re-resolving the locator if the listing re-renders
+   * (e.g. a live rate-ticker update recreating `*ngFor` nodes) and detaches the element mid-read.
+   */
+  private async readListingCardPriceAtIndex(
+    cards: Locator,
+    index: number,
+    attempts = 3,
+  ): Promise<ListingProductPrice> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const card = cards.nth(index);
+        await card.scrollIntoViewIfNeeded();
+        return await this.readListingCardPrice(card);
+      } catch (error) {
+        if (attempt >= attempts) {
+          throw error;
+        }
+        await this.page.waitForTimeout(300);
+      }
+    }
+  }
+
   private async goToNextListingPageIfAvailable(): Promise<boolean> {
     const next = this.page.getByRole('button', { name: /next page/i });
     if (!(await next.isEnabled({ timeout: 500 }).catch(() => false))) {
@@ -118,9 +141,7 @@ export class ShopSortPage extends BasePage {
       const cardCount = await cards.count();
 
       for (let i = products.length; i < cardCount; i++) {
-        const card = cards.nth(i);
-        await card.scrollIntoViewIfNeeded();
-        products.push(await this.readListingCardPrice(card));
+        products.push(await this.readListingCardPriceAtIndex(cards, i));
       }
 
       if (products.length >= expectedCount) {

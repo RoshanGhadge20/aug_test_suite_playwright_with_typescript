@@ -7,6 +7,7 @@ export class WithdrawDetailPage extends BasePage {
   private readonly withdrawButton: Locator;
   private readonly silverTab : Locator;
   private readonly goldTab : Locator;
+  private readonly withdrawFullBalanceCheckboxLabel: Locator;
 
 private readonly withdrawalAmount: Locator;
 
@@ -18,6 +19,7 @@ private readonly withdrawalAmount: Locator;
 this.withdrawButton = page.getByRole('button', {
   name: 'Withdraw',
 });
+this.withdrawFullBalanceCheckboxLabel = page.locator('label[for="full"]');
 this. silverTab = this.page.getByRole('button', { name: 'SILVER' });
   this.withdrawalAmount = page.locator(
     'div[data-pc-name="inputgroupaddon"]'
@@ -93,6 +95,13 @@ async getWithdrawalAmount(): Promise<number> {
 async clickWithdraw(): Promise<void> {
   await this.withdrawButton.click();
 }
+
+  /** Ticks "Withdraw Full Balance from <Metal> Vault" — auto-fills quantity with the full available balance. */
+  async tickWithdrawFullBalanceCheckbox(): Promise<void> {
+    await this.withdrawFullBalanceCheckboxLabel.waitFor({ state: 'visible' });
+    await this.withdrawFullBalanceCheckboxLabel.click();
+    await expect(this.withdrawalQuantityInput).toBeDisabled();
+  }
   async validateWithdrawButtonDisabled(): Promise<void> {
     await expect(this.withdrawButton).toBeDisabled();
     console.log('Withdraw button is disabled');

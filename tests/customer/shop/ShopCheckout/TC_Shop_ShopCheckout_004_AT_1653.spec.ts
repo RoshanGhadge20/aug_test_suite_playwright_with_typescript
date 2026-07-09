@@ -73,20 +73,21 @@ test.describe('TC_Shop_ShopCheckout_004 @customer-flows', () => {
     await test.step('TC004_6|Cancel Order via API',async() =>
     {
       const orderResponse = await getOrderByUniqueId(placedOrderId);
-      const cancelOrderId = orderResponse.data[0].id;    
+      const order = orderResponse.data[0];
+      const cancelOrderId = order.id;
+      const finalOrderPrice = order.orderdetails?.[0]?.finalOrderPrice ?? 1711;
       console.log(`Order Unique Id: ${placedOrderId}`);
       console.log(`Cancel Order Id: ${cancelOrderId}`);
-    
 
       const body: AdminCancelOrderRequest = {
-        storeId: 'M13163373C1D',
+        storeId: order.orderBy?.broker?.store?.storeUniqueId ?? 'M13163373C1D',
         orderId: cancelOrderId,
-        userId: 'MP16IA9K',
-        customerName: 'PRAGNAKUMARI',
-        mobileNumber: '8141122222',
-        bookingPrice: 1711,
-        totalAmt: '1711.00',
-        cancellationPrice: 1711,
+        userId: order.customerDetails?.customerUniqueId ?? 'MP16IA9K',
+        customerName: order.customerDetails?.firstName ?? 'PRAGNAKUMARI',
+        mobileNumber: order.customerDetails?.mobileNumber ?? '8141122222',
+        bookingPrice: finalOrderPrice,
+        totalAmt: finalOrderPrice.toFixed(2),
+        cancellationPrice: finalOrderPrice,
         differenceAmt: 0,
         totalCancellationCharges: 0,
         amtPayable: 0,

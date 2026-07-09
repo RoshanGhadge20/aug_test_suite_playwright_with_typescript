@@ -715,7 +715,7 @@ export class ShopCartPage extends BasePage {
     return {
       metalPrice: await this.priceRow('Metal Price'),
       makingAndDeliveryCharges: await this.priceRow('Making & Delivery Charges'),
-      tax: await this.priceRow('Tax'),
+      tax: await this.priceRowEither('Tax', 'TAX'),
       savings: await this.getSavingsAmount(),
       grandTotal: await this.priceRow('Grand Total'),
     };

@@ -60,6 +60,7 @@ export class WithdrawalPage extends BasePage {
   private readonly getCashCard: Locator;
   private readonly goldVaultCard:Locator
   private readonly silverVaultCard:Locator
+  private readonly errorToast: Locator;
 
 
   constructor(page: Page) {
@@ -147,7 +148,8 @@ this.silverVaultCard  =page.locator(
       this.getCashCard = page.locator(
         'div[role="dialog"] div.group.relative:has(h3:text-is("Get Cash"))'
       );
-  
+      this.errorToast = page.locator('div[data-pc-name="toast"].p-toast-message-error');
+
   }
 
   private proceedButtonVault(vaultName: string): Locator {
@@ -566,6 +568,19 @@ this.silverVaultCard  =page.locator(
     await this.quantityError.waitFor({ state: 'visible' });
     const text = (await this.quantityError.textContent()) ?? '';
     return text.trim();
+  }
+
+  /** Reads the PrimeNG error toast (e.g. "You dont have enough quantity for transaction"). */
+  async getErrorToastMessage(timeoutMs = 10_000): Promise<{ title: string; message: string }> {
+    const toast = this.errorToast.first();
+    await toast.waitFor({ state: 'visible', timeout: timeoutMs });
+
+    const title = ((await toast.locator('p').first().textContent()) ?? '').trim();
+    const message = ((await toast.locator('p').nth(1).textContent()) ?? '').trim();
+
+    console.log(`[Withdrawal] Error toast — title: "${title}", message: "${message}"`);
+
+    return { title, message };
   }
 
   async clickUseTotalInvestmentAmountFromSipCheckbox(): Promise<void> {
@@ -1787,6 +1802,35 @@ this.silverVaultCard  =page.locator(
     }
   }
 
+  async increaseSelectedProductQuantityInCart(productName: string, targetQuantity: number): Promise<void> {
+    if (targetQuantity < 1) {
+      throw new Error(`Target quantity must be at least 1. Received: ${targetQuantity}`);
+    }
+
+    const card = this.cartProductCardByName(productName);
+    await card.waitFor({ state: 'visible' });
+    const incrementButton = card.locator('button[data-pc-section="incrementbutton"]').first();
+    await incrementButton.waitFor({ state: 'visible' });
+
+    let currentQuantity = await this.getSelectedProductQuantityInCart(productName);
+    let safety = 0;
+    while (currentQuantity < targetQuantity) {
+      await incrementButton.click();
+      await this.page.waitForTimeout(150);
+      const updatedQuantity = await this.getSelectedProductQuantityInCart(productName);
+      if (updatedQuantity <= currentQuantity) {
+        throw new Error(`Selected product quantity did not increase for "${productName}".`);
+      }
+      currentQuantity = updatedQuantity;
+      safety += 1;
+      if (safety > 20) {
+        throw new Error('Safety stop while increasing selected product quantity in cart.');
+      }
+    }
+
+    await this.page.waitForTimeout(500);
+  }
+
   async validateSelectedProductCardInCart(productName: string, expectedQuantity: number): Promise<void> {
     const card = this.cartProductCardByName(productName);
     await card.waitFor({ state: 'visible' });
@@ -2241,6 +2285,19 @@ this.silverVaultCard  =page.locator(
       await fallback.first().click({ force: true });
     }
     console.log('[Checkout payment type] Selected: Netbanking');
+  }
+
+  async checkoutPageSelectPaymentTypeCard(): Promise<void> {
+    const grid = this.checkoutPagePaymentTypeGrid();
+    await grid.waitFor({ state: 'visible' });
+    const label = grid.locator('label[for="Card"]');
+    const fallback = this.page.locator('input#Card[name="paymentType"]');
+    if (await label.isVisible().catch(() => false)) {
+      await label.click();
+    } else {
+      await fallback.first().click({ force: true });
+    }
+    console.log('[Checkout payment type] Selected: Card');
   }
 
   async checkoutPageGetAndLogPaymentTypes(): Promise<string[]> {

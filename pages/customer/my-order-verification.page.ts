@@ -3232,6 +3232,29 @@ export class MyOrderVerificationPage extends BasePage {
     return this.selectedOrderRow ?? this.orderRows.first();
   }
 
+  /** Count of order rows currently rendered on the active My Orders tab (0 when "No Record Found"). */
+  async getOrderRowCount(): Promise<number> {
+    const noRecordVisible = await this.noRecordLabel.isVisible().catch(() => false);
+    if (noRecordVisible) {
+      return 0;
+    }
+    return this.orderRows.count();
+  }
+
+  /** True if any rendered order row contains both the given product name and a "Pending" status. */
+  async hasPendingOrderRowForProduct(productName: string): Promise<boolean> {
+    const noRecordVisible = await this.noRecordLabel.isVisible().catch(() => false);
+    if (noRecordVisible) {
+      return false;
+    }
+
+    const matchingRow = this.orderRows
+      .filter({ hasText: new RegExp(productName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') })
+      .filter({ hasText: /Pending/i });
+
+    return (await matchingRow.count()) > 0;
+  }
+
   private static isPreCompletionDeliveryStatus(status: string): boolean {
     const s = status.trim();
     if (!s) return false;
