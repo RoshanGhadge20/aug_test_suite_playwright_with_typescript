@@ -6,7 +6,6 @@ import {
   REGISTRATION_OTP,
   DEFAULT_TEST_PIN,
 } from '../test-data/registration-data';
-import { TestDataFactory } from '../../../utils/data/test-data.factory';
 import { removeEkycRecord } from '../../../utils/api/ekyc-api';
 import { logValidation } from '../helpers/customer-alt-user.helpers';
 
@@ -35,9 +34,6 @@ test.describe('TC_Kyc_004 @regression @customer @kyc', () => {
 
     await kycDigiKycPage.enterPan(ALREADY_REGISTERED_PAN);
     await kycDigiKycPage.setDateOfBirth(ALREADY_REGISTERED_PAN_DOB);
-    await kycDigiKycPage.selectState('Maharashtra');
-    await kycDigiKycPage.selectFirstAvailableCity();
-    await kycDigiKycPage.enterEmail(TestDataFactory.email());
 
     await kycDigiKycPage.clickVerify();
     await expect(kycDigiKycPage.karzaModalHeadingLocator()).toBeVisible({ timeout: 10_000 });

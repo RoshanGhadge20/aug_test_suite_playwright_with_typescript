@@ -8,8 +8,8 @@ import {
   ALREADY_REGISTERED_PAN,
   ALREADY_REGISTERED_PAN_DOB,
 } from '../test-data/registration-data';
-import { TestDataFactory } from '../../../utils/data/test-data.factory';
 import { logValidation } from '../helpers/customer-alt-user.helpers';
+import { removeEkycRecord } from '../../../utils/api/ekyc-api';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -20,14 +20,6 @@ test.describe('TC_Kyc_002 @regression @customer @kyc', () => {
     await kycDigiKycPage.open();
     await kycDigiKycPage.enterPan(generateValidFormatPan());
     await kycDigiKycPage.setDateOfBirth(adultDobYearsAgo(25));
-
-    // State, City/District, and Email are also mandatory on this form (confirmed live
-    // 2026-07-06 — not documented in the original exploration, which only found PAN + DOB here).
-    // Without these, Verify just re-validates and shows "Select a State" etc. instead of ever
-    // opening the KARZA modal — see New Signup Window Test Plan.md §26 for the full writeup.
-    await kycDigiKycPage.selectState('Maharashtra');
-    await kycDigiKycPage.selectFirstAvailableCity();
-    await kycDigiKycPage.enterEmail(TestDataFactory.email());
   });
 
   test('TC_Kyc_002_001 | Verify with valid data opens the KARZA hand-off modal without firing a network call', async ({
@@ -85,6 +77,36 @@ test.describe('TC_Kyc_002 @regression @customer @kyc', () => {
 // error specifically goes through the menu, not a direct URL.
 test.describe('TC_Kyc_002 @regression @customer @kyc', () => {
   test.beforeEach(async ({ page, customerLogin, customerMenupage, kycDigiKycPage }) => {
+    test.setTimeout(120_000);
+
+    // ALREADY_REGISTERED_PAN only triggers the duplicate-PAN error if it's genuinely linked to
+    // some account. Rather than assume that pre-exists in this shared UAT environment — fragile,
+    // since e.g. TC_Kyc_004 explicitly frees it via removeEkycRecord() — (re-)establish it here:
+    // free the record, then complete a full KARZA verification against a disposable customer so
+    // the PAN is guaranteed to be "already registered" again before the real test customer tries it.
+    console.log('[TC_Kyc_002_004 setup] Ensuring ALREADY_REGISTERED_PAN is linked to an account...');
+    await removeEkycRecord({ identityProofNumber: null, panCardNumber: ALREADY_REGISTERED_PAN });
+
+    const setupMobile = generateUnregisteredMobile();
+    await customerLogin.registerOrLoginCustomer(setupMobile, REGISTRATION_OTP, DEFAULT_TEST_PIN);
+    await kycDigiKycPage.open();
+    await kycDigiKycPage.enterPan(ALREADY_REGISTERED_PAN);
+    await kycDigiKycPage.setDateOfBirth(ALREADY_REGISTERED_PAN_DOB);
+    await kycDigiKycPage.clickVerify();
+    await expect(kycDigiKycPage.karzaModalHeadingLocator()).toBeVisible({ timeout: 10_000 });
+    await kycDigiKycPage.clickProceedForPanVerification();
+    await expect(kycDigiKycPage.verifiedModalHeadingLocator()).toBeVisible({ timeout: 20_000 });
+    await kycDigiKycPage.acknowledgeVerifiedModal();
+    await expect(page).toHaveURL(/\/digital-gold\/buy/i, { timeout: 10_000 });
+    console.log('[TC_Kyc_002_004 setup] ALREADY_REGISTERED_PAN linked. Switching to the real test customer...');
+
+    // Now the actual test customer, navigated to the KYC form via the dashboard user-menu (guest-
+    // user icon -> Kyc) rather than a direct goto — the reported repro for the duplicate-PAN error
+    // specifically goes through the menu, not a direct URL.
+    // logoutAndReturnToMobileEntry (not a plain storage clear) — right after the setup account's
+    // registerOrLoginCustomer() above, /login has been confirmed live to bounce straight back to
+    // /dashboard on a clear majority of attempts; this retries against a deadline instead.
+    await customerLogin.logoutAndReturnToMobileEntry();
     const mobile = generateUnregisteredMobile();
     await customerLogin.registerOrLoginCustomer(mobile, REGISTRATION_OTP, DEFAULT_TEST_PIN);
 
@@ -99,10 +121,6 @@ test.describe('TC_Kyc_002 @regression @customer @kyc', () => {
     }
     await expect(page).toHaveURL(/\/kyc\/digi-kyc/i, { timeout: 5_000 });
     await expect(kycDigiKycPage.panNumberField()).toBeVisible();
-
-    await kycDigiKycPage.selectState('Maharashtra');
-    await kycDigiKycPage.selectFirstAvailableCity();
-    await kycDigiKycPage.enterEmail(TestDataFactory.email());
   });
 
   test('TC_Kyc_002_004 | Already-registered PAN shows "PAN Card already exists!" after Proceed on the KARZA modal', async ({
@@ -117,9 +135,9 @@ test.describe('TC_Kyc_002 @regression @customer @kyc', () => {
     logValidation('TC_Kyc_002 KARZA modal heading visible', await kycDigiKycPage.karzaModalHeadingLocator().isVisible(), true);
 
     // Confirmed live (2026-07-06): the duplicate-PAN check only fires after Proceed, not at
-    // Verify. For an ALREADY-REGISTERED PAN specifically (and not reset via removeEkycRecord()
-    // first), this short-circuits with an inline error and never leaves the app — safe to click
-    // here only because of that (see KycDigiKycPage.clickProceedForPanVerification()).
+    // Verify. The beforeEach above just (re-)linked this PAN to a disposable account, so it
+    // short-circuits with an inline error and never leaves the app — safe to click here only
+    // because of that (see KycDigiKycPage.clickProceedForPanVerification()).
     await kycDigiKycPage.clickProceedForPanVerification();
 
     await expect(kycDigiKycPage.panAlreadyExistsErrorLocator()).toBeVisible({ timeout: 10_000 });
