@@ -2,6 +2,11 @@ import { WithdrawalPage } from '@pages/customer/withdrawal.page';
 import { test, expect } from '../../../../fixtures/base.fixture';
 
 const withdrawalQuantityInput = 0.1;
+const BANK_NAME = 'ICICI BANK LIMITED';
+// Real, verified ICICI account confirmed to complete a withdrawal in this UAT environment —
+// used as a fallback when BANK_NAME isn't already linked to the account.
+const ICICI_ACCOUNT_NUMBER = '624401537051';
+const ICICI_IFSC_CODE = 'ICIC0006244';
 
 test.describe('TC_Withdrawal_GetCash_001 @customer-flows', () => {
     test(
@@ -13,6 +18,7 @@ test.describe('TC_Withdrawal_GetCash_001 @customer-flows', () => {
             withdrawDetailPage,
             withdrawAccountDetailPage,
             withdrawPamentPage,
+            addNewBankWithdrawalPage,
         }) => {
             const TC_001 = (n: number): string => `TC001_${n}`;
 
@@ -180,13 +186,22 @@ test.describe('TC_Withdrawal_GetCash_001 @customer-flows', () => {
 
                     await withdrawAccountDetailPage.clickBankAccount();
 
-                    await withdrawAccountDetailPage.selectBank(
-                        'ICICI BANK LIMITED'
-                    );
+                    const bankAvailable =
+                        await withdrawAccountDetailPage.isBankAvailable(BANK_NAME);
 
-                    await withdrawAccountDetailPage.getBankDetails(
-                        'ICICI BANK LIMITED'
-                    );
+                    if (bankAvailable) {
+                        console.log(`[${TC_001(6)}] ${BANK_NAME} found in linked accounts — selecting it.`);
+                        await withdrawAccountDetailPage.selectBank(BANK_NAME);
+                        await withdrawAccountDetailPage.getBankDetails(BANK_NAME);
+                    } else {
+                        console.log(`[${TC_001(6)}] ${BANK_NAME} not linked yet — adding a new bank account.`);
+                        await addNewBankWithdrawalPage.addBankDetails(
+                            ICICI_ACCOUNT_NUMBER,
+                            ICICI_IFSC_CODE,
+                        );
+                        await addNewBankWithdrawalPage.clickSaveBank();
+                        await withdrawAccountDetailPage.selectBank(BANK_NAME);
+                    }
 
                     await withdrawAccountDetailPage.validateCounter();
 
