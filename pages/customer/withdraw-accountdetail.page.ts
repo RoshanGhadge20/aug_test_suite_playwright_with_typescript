@@ -166,8 +166,8 @@ export class WithdrawAccountDetailPage extends BasePage {
     );
   }
 
-  async selectBank(bankName: string): Promise<void> {
-    const bankCard = this.page.locator(
+  private bankCardByName(bankName: string): Locator {
+    return this.page.locator(
       'div.border.cursor-pointer.rounded-lg',
       {
         has: this.page.locator('p.font-gilroysemibold', {
@@ -175,6 +175,15 @@ export class WithdrawAccountDetailPage extends BasePage {
         }),
       }
     );
+  }
+
+  /** True if `bankName` already appears among the customer's linked bank accounts. */
+  async isBankAvailable(bankName: string): Promise<boolean> {
+    return this.bankCardByName(bankName).isVisible().catch(() => false);
+  }
+
+  async selectBank(bankName: string): Promise<void> {
+    const bankCard = this.bankCardByName(bankName);
 
     await bankCard.click();
 
@@ -192,20 +201,15 @@ export class WithdrawAccountDetailPage extends BasePage {
     }
 
     await firstBank.click();
-  }  async getBankDetails(bankName: string): Promise<{
+  }
+
+  async getBankDetails(bankName: string): Promise<{
     bankName: string;
     accountHolderName: string;
     accountNumber: string;
     ifscCode: string;
   }> {
-    const bankCard = this.page.locator(
-      'div.border.cursor-pointer.rounded-lg',
-      {
-        has: this.page.locator('p.font-gilroysemibold', {
-          hasText: bankName,
-        }),
-      }
-    );
+    const bankCard = this.bankCardByName(bankName);
 
     const details = await bankCard.locator('p').allTextContents();
 
