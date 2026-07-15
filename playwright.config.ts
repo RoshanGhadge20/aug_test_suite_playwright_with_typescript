@@ -59,6 +59,9 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], baseURL: panelUrl('customer', targetEnv), storageState: storageStateIfExists(targetEnv, 'customer') },
       dependencies: ['auth-setup'],
       testMatch: /tests\/customer\/.*\.spec\.ts/,
+      // CustomerSavings (TC_SHOP_UserSaving_*) excluded from normal customer/shop runs — run it
+      // explicitly via its own file path/glob when needed.
+      testIgnore: /tests\/customer\/shop\/CustomerSavings\/.*\.spec\.ts/,
     },
     {
       name: 'business',
