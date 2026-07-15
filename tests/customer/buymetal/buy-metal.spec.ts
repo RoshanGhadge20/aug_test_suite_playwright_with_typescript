@@ -211,114 +211,6 @@ test.describe('customer buy metal flows @customer-flows', () => {
     });
   });
 
-  test.describe('TC_005 fresh session', () => {
-    test.use({ storageState: { cookies: [], origins: [] } });
-
-    test('TC_005-Buy Gold one-time — capture portfolio, purchase, validate portfolio', async ({
-    page,
-    customerLogin,
-    dashboardPage,
-    buyMetalPage,
-    buySummaryPage,
-    paymentPage,
-    myOrderVerificationPage,
-  }) => {
-    test.setTimeout(180_000);
-
-    const tc005Data = {
-      metal: 'gold' as const,
-      amount: metalAmount('gold'),
-      metalName: metalName('gold'),
-      orderRowText: buyOrderRowText(dataset.metalGold),
-    };
-
-    let totalGoldBeforePurchase = 0;
-    let summary: OneTimeSummaryResult;
-    let purchasedQuantity = 0;
-    let paidAmount = 0;
-    let gBuyFromRatesApi = 0;
-
-    const TC005 = (n: number): string => `TC005_${n}`;
-    const logSub = (n: number, title: string): void => {
-      console.log(`\n[${TC005(n)}] ${title}`);
-    };
-
-    try {
-    await test.step('clearStorageAndLogin', async () => {
-      logSub(1, 'Fresh login (no preloaded storage state)');
-      const mobile = resolveAltCustomerMobile();
-      const otp = resolveAltCustomerOtp();
-      console.log(
-        `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
-      );
-      await customerLogin.login(mobile, otp);
-      await page.waitForLoadState('domcontentloaded');
-      await persistCustomerStorageState(page);
-    });
-
-    await test.step('validateBuyMetalPortfolioBeforePurchase', async () => {
-      logSub(2, 'Grams + digital-gold rates; UI vs calculated portfolio (before)');
-      const snapshot = await dashboardPage.validateBuyMetalPortfolioBeforePurchase(TC005(2));
-      totalGoldBeforePurchase = snapshot.totalGoldGrams;
-    });
-
-    await test.step('placeOneTimeOrder', async () => {
-      logSub(3, 'Navigate to buy, rates API, open buy summary');
-      await buyMetalPage.prepareOneTimeOrder(tc005Data.metal, tc005Data.amount);
-      const spot = await dashboardPage.fetchDigitalMetalSpotRates();
-      gBuyFromRatesApi = spot.gBuy;
-      const outcome = await buyMetalPage.confirmOneTimeBuy(tc005Data.metal);
-      if (outcome === 'kyc') {
-        throw new Error(`[${TC005(3)}] Buy flow redirected to KYC: ${page.url()}`);
-      }
-      await buySummaryPage.waitForValidForText();
-    });
-
-    await test.step('validateOneTimeSummary', async () => {
-      logSub(4, 'Verify summary lines, capture taxable amount');
-      summary = await buySummaryPage.validateOneTimeSummary(tc005Data.amount);
-      logValidation(`${TC005(4)} Summary API gBuy vs UI buying rate`, gBuyFromRatesApi, summary.buyingRate);
-      expect(Math.abs(gBuyFromRatesApi - summary.buyingRate)).toBeLessThanOrEqual(3);
-    });
-
-    await test.step('completeNetbankingBuyNowPayment', async () => {
-      logSub(5, 'Complete payment via netbanking');
-      await buySummaryPage.clickPayNowButton();
-      paidAmount = await paymentPage.completeNetbankingBuyNowPayment(
-        paymentConfig.contactNumber,
-        Number(tc005Data.amount),
-        paymentConfig.netbankingBankName,
-      );
-    });
-
-    await test.step('validateOneTimeBuyOrder', async () => {
-      logSub(6, 'Read purchased quantity from My Orders');
-      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
-        orderRowText: tc005Data.orderRowText,
-        narrationMatch: new RegExp(`${tc005Data.metalName} bought`, 'i'),
-        expectedQuantity: summary!.quantity,
-        expectedAmount: paidAmount || Number(tc005Data.amount),
-      });
-      purchasedQuantity = order.quantity;
-    });
-
-    await test.step('validateBuyMetalPortfolioAfterPurchase', async () => {
-      logSub(7, 'Dashboard: UI portfolio vs formula (after) + total gold grams');
-      const goldQty = purchasedQuantity || summary!.quantity;
-      const expectedGold = Number((totalGoldBeforePurchase + goldQty).toFixed(4));
-      await dashboardPage.validateBuyMetalPortfolioAfterPurchase(TC005(7), expectedGold, {
-        minimumGoldGrams: totalGoldBeforePurchase === 0 ? goldQty : undefined,
-      });
-    });
-    } finally {
-      await test.step('restoreDefaultCustomerSession', async () => {
-        logSub(8, 'Persist customer storage state for following tests');
-        await restoreDefaultCustomerSession(page, customerLogin, TC005(8));
-      });
-    }
-  });
-  });
-
   test('TC_006-Buy Gold one-time by Grams using Netbanking', async ({
     dashboardPage,
     buyMetalPage,
@@ -391,6 +283,147 @@ test.describe('customer buy metal flows @customer-flows', () => {
         purchasedQuantity || summary!.quantity,
       );
     });
+  });
+
+  // TC_005 must run last: it swaps to a fresh session/different user for the duration of the test.
+  test.describe('TC_005 fresh session', () => {
+    test.use({ storageState: { cookies: [], origins: [] } });
+
+    test('TC_005-Buy Gold one-time — capture portfolio, purchase, validate portfolio', async ({
+    page,
+    customerLogin,
+    dashboardPage,
+    buyMetalPage,
+    buySummaryPage,
+    paymentPage,
+    myOrderVerificationPage,
+  }) => {
+    test.setTimeout(180_000);
+
+    const tc005Data = {
+      metal: 'gold' as const,
+      amount: metalAmount('gold'),
+      metalName: metalName('gold'),
+      orderRowText: buyOrderRowText(dataset.metalGold),
+    };
+
+    let totalGoldBeforePurchase = 0;
+    let summary: OneTimeSummaryResult;
+    let purchasedQuantity = 0;
+    let paidAmount = 0;
+    let gBuyFromRatesApi = 0;
+
+    const TC005 = (n: number): string => `TC005_${n}`;
+    const logSub = (n: number, title: string): void => {
+      console.log(`\n[${TC005(n)}] ${title}`);
+    };
+
+    try {
+    await test.step('clearStorageAndLogin', async () => {
+      logSub(1, 'Fresh login (no preloaded storage state)');
+      const mobile = resolveAltCustomerMobile();
+      const otp = resolveAltCustomerOtp();
+      console.log(
+        `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP.`,
+      );
+      await customerLogin.login(mobile, otp);
+      await page.waitForLoadState('domcontentloaded');
+      await persistCustomerStorageState(page);
+    });
+
+    await test.step('validateAndClearWalletBalance', async () => {
+      logSub(2, 'Wallet balance must be 0 before the main purchase flow starts');
+      await page.goto('/my-profile');
+      const walletBalance = await dashboardPage.getWalletBalance();
+      console.log(`[${TC005(2)}] wallet balance actual=${walletBalance}`);
+
+      if (walletBalance > 0) {
+        console.log(
+          `[${TC005(2)}] Wallet has a leftover balance — buying gold worth it before continuing.`,
+        );
+        const clearAmount = String(Math.max(1, Math.floor(walletBalance)));
+
+        await buyMetalPage.placeOneTimeOrder(tc005Data.metal, clearAmount);
+        await buySummaryPage.waitForValidForText();
+        const clearPayable = await buySummaryPage.getAmountPayable();
+        console.log(`[${TC005(2)}] amount payable for the clearing purchase=${clearPayable}`);
+        await buySummaryPage.clickPayNowButton();
+
+        if (clearPayable > 0) {
+          await paymentPage.completeNetbankingBuyNowPayment(
+            paymentConfig.contactNumber,
+            clearPayable,
+            paymentConfig.netbankingBankName,
+          );
+        } else {
+          await paymentPage.continueClickForFullyWalletPayment();
+        }
+
+        await dashboardPage.validateWalletBalanceOnProfile(0);
+      }
+    });
+
+    await test.step('validateBuyMetalPortfolioBeforePurchase', async () => {
+      logSub(3, 'Grams + digital-gold rates; UI vs calculated portfolio (before)');
+      const snapshot = await dashboardPage.validateBuyMetalPortfolioBeforePurchase(TC005(3));
+      totalGoldBeforePurchase = snapshot.totalGoldGrams;
+    });
+
+    await test.step('placeOneTimeOrder', async () => {
+      logSub(4, 'Navigate to buy, rates API, open buy summary');
+      await buyMetalPage.prepareOneTimeOrder(tc005Data.metal, tc005Data.amount);
+      const spot = await dashboardPage.fetchDigitalMetalSpotRates();
+      gBuyFromRatesApi = spot.gBuy;
+      const outcome = await buyMetalPage.confirmOneTimeBuy(tc005Data.metal);
+      if (outcome === 'kyc') {
+        throw new Error(`[${TC005(4)}] Buy flow redirected to KYC: ${page.url()}`);
+      }
+      await buySummaryPage.waitForValidForText();
+    });
+
+    await test.step('validateOneTimeSummary', async () => {
+      logSub(5, 'Verify summary lines, capture taxable amount');
+      summary = await buySummaryPage.validateOneTimeSummary(tc005Data.amount);
+      logValidation(`${TC005(5)} Summary API gBuy vs UI buying rate`, gBuyFromRatesApi, summary.buyingRate);
+      expect(Math.abs(gBuyFromRatesApi - summary.buyingRate)).toBeLessThanOrEqual(3);
+    });
+
+    await test.step('completeNetbankingBuyNowPayment', async () => {
+      logSub(6, 'Complete payment via netbanking');
+      await buySummaryPage.clickPayNowButton();
+      paidAmount = await paymentPage.completeNetbankingBuyNowPayment(
+        paymentConfig.contactNumber,
+        Number(tc005Data.amount),
+        paymentConfig.netbankingBankName,
+      );
+    });
+
+    await test.step('validateOneTimeBuyOrder', async () => {
+      logSub(7, 'Read purchased quantity from My Orders');
+      const order = await myOrderVerificationPage.validateOneTimeBuyOrder({
+        orderRowText: tc005Data.orderRowText,
+        narrationMatch: new RegExp(`${tc005Data.metalName} bought`, 'i'),
+        expectedQuantity: summary!.quantity,
+        expectedAmount: paidAmount || Number(tc005Data.amount),
+      });
+      purchasedQuantity = order.quantity;
+    });
+
+    await test.step('validateBuyMetalPortfolioAfterPurchase', async () => {
+      logSub(8, 'Dashboard: UI portfolio vs formula (after) + total gold grams');
+      const goldQty = purchasedQuantity || summary!.quantity;
+      const expectedGold = Number((totalGoldBeforePurchase + goldQty).toFixed(4));
+      await dashboardPage.validateBuyMetalPortfolioAfterPurchase(TC005(8), expectedGold, {
+        minimumGoldGrams: totalGoldBeforePurchase === 0 ? goldQty : undefined,
+      });
+    });
+    } finally {
+      await test.step('restoreDefaultCustomerSession', async () => {
+        logSub(9, 'Persist customer storage state for following tests');
+        await restoreDefaultCustomerSession(page, customerLogin, TC005(9));
+      });
+    }
+  });
   });
 });
 
