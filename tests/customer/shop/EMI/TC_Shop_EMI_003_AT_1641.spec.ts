@@ -2,7 +2,7 @@ import { test } from '../../../../fixtures/base.fixture';
 import { getShopDataset } from '../../../../utils/data/customer-excel-data';
 
 test.describe('TC_Shop_EMI_003 @customer-flows', () => {
-  test('TC_Shop_EMI_003|AT-1641 - My Orders: Pay Now and pay first EMI installment (9 Months, from TC007)', async ({
+  test('TC_Shop_EMI_003|AT-1641 - My Orders: Pay Now and pay first EMI installment (9 Months, from TC_Shop_EMI_002)', async ({
     shopEmiPurchaseChain007,
     shopEmiForeclosePage,
     myOrderVerificationPage,
@@ -21,12 +21,12 @@ test.describe('TC_Shop_EMI_003 @customer-flows', () => {
     let productName = '';
     let emiTenure = '';
 
-    await test.step('TC003_1 | Load EMI order from TC007', async () => {
-      logSub(1, 'Load EMI order from TC007');
+    await test.step('TC003_1 | Load EMI order from TC_Shop_EMI_002', async () => {
+      logSub(1, 'Load EMI order from TC_Shop_EMI_002');
       ({ orderId: emiOrderId, productName } = myOrderVerificationPage.requireShopEmiPurchaseChain(
         shopEmiPurchaseChain007,
         {
-          missingMessage: 'Run TC_SHOP_007 first or set SHOP_EMI_ORDER_ID_007',
+          missingMessage: 'Run TC_Shop_EMI_002 first or set SHOP_EMI_ORDER_ID_007',
           orderIdEnvKey: 'SHOP_EMI_ORDER_ID_007',
           productNameEnvKey: 'SHOP_EMI_PRODUCT_NAME_007',
         },

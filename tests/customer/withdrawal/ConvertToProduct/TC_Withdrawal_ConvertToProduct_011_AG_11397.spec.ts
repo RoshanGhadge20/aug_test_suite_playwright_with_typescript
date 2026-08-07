@@ -181,13 +181,13 @@ test.describe('TC_Withdrawal_ConvertToProduct_011 @customer-flows', () => {
           await myOrderVerificationPage.waitForOrderRow();
           await myOrderVerificationPage.clickOnDelivery();
           await myOrderVerificationPage.waitForProductOrderCard();
-          // The delivery order card shows the per-unit making/delivery charge, not the
-          // cart total — compare against the single-unit amount instead of quantity x charges.
+          // The delivery order card shows the making/delivery charge x quantity (same total
+          // already validated against the checkout summary and payment amount above).
           await myOrderVerificationPage.validateProductOrderCardAgainstExpected({
             productName: selectedProductDetails.productName,
             productWeight: selectedProductDetails.productWeight,
             quantity: ORDER_QUANTITY,
-            expectedAmount: selectedProductDetails.makingAndDeliveryChargesAmount,
+            expectedAmount: expectedTotalCharges,
           });
         },
       );

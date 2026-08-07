@@ -21,12 +21,12 @@ test.describe('TC_Shop_EMI_004 @customer-flows', () => {
     let productName = '';
     let cancellationSummary: CancellationRefundableBreakdown;
 
-    await test.step('TC004_1 | Load EMI order from TC008', async () => {
-      logSub(1, 'Load EMI order from TC008');
+    await test.step('TC004_1 | Load EMI order from TC_Shop_EMI_003', async () => {
+      logSub(1, 'Load EMI order from TC_Shop_EMI_003');
       ({ orderId: emiOrderId, productName } = myOrderVerificationPage.requireShopEmiPurchaseChain(
         shopEmiPurchaseChain007,
         {
-          missingMessage: 'Run TC_SHOP_008 first or set SHOP_EMI_ORDER_ID_007',
+          missingMessage: 'Run TC_Shop_EMI_003 first or set SHOP_EMI_ORDER_ID_007',
           orderIdEnvKey: 'SHOP_EMI_ORDER_ID_007',
           productNameEnvKey: 'SHOP_EMI_PRODUCT_NAME_007',
           requireFirstEmiPaid: true,

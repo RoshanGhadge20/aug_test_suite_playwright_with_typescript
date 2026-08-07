@@ -24,6 +24,8 @@ import { ShopWishlistPage } from '../pages/customer/shop-wishlist.page';
 import { CustomerMenuPage } from '../pages/customer/customer-menu.page';
 import { KycDigiKycPage } from '../pages/customer/kyc-digi-kyc.page';
 import { MyProfilePage } from '../pages/customer/my-profile.page';
+import { GoldLoanInquiryPage } from '../pages/customer/gold-loan-inquiry.page';
+import { SellOldGoldInquiryPage } from '../pages/customer/sell-old-gold-inquiry.page';
 import {
   getWorkerShopEmiPurchaseChainState,
   type ShopEmiPurchaseChainState,
@@ -63,6 +65,8 @@ type PageObjectFixtures = {
   customerMenupage:CustomerMenuPage;
   kycDigiKycPage: KycDigiKycPage;
   myProfilePage: MyProfilePage;
+  goldLoanInquiryPage: GoldLoanInquiryPage;
+  sellOldGoldInquiryPage: SellOldGoldInquiryPage;
 
   // customerLogin: CustomerLoginPage;
   // businessLogin: BusinessLoginPage;
@@ -118,6 +122,8 @@ export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
   customerMenupage: async ({ page }, use) => { await use(new CustomerMenuPage(page)); },
   kycDigiKycPage: async ({ page }, use) => { await use(new KycDigiKycPage(page)); },
   myProfilePage: async ({ page }, use) => { await use(new MyProfilePage(page)); },
+  goldLoanInquiryPage: async ({ page }, use) => { await use(new GoldLoanInquiryPage(page)); },
+  sellOldGoldInquiryPage: async ({ page }, use) => { await use(new SellOldGoldInquiryPage(page)); },
 
 
   shopEmiPurchaseChain009: async ({}, use) => {

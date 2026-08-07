@@ -2731,7 +2731,7 @@ export class MyOrderVerificationPage extends BasePage {
     shopLogActualExpected('Order id is numeric', this.isNumericId(orderId), true);
     expect(this.isNumericId(orderId), params.missingMessage).toBe(true);
     if (params.requireFirstEmiPaid) {
-      expect(chain.payNowDetails, 'Run TC_SHOP_008 first').not.toBeNull();
+      expect(chain.payNowDetails, 'Run TC_Shop_EMI_003 first').not.toBeNull();
     }
     return { orderId, productName };
   }

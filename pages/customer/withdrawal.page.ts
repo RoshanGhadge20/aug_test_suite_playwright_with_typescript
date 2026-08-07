@@ -1559,7 +1559,18 @@ this.silverVaultCard  =page.locator(
     productWeight: string;
     quantity: number;
   }): Promise<void> {
-    const cart = await this.getAndLogCartItemDetails();
+    // Total Weight/Quantity recompute asynchronously after a quantity change (e.g. the
+    // normalizeCartToSingleProduct decrement just before this call), so an immediate read can
+    // still show the pre-decrement total. Poll until quantity settles to the expected value.
+    let cart = await this.getAndLogCartItemDetails();
+    for (
+      let attempt = 0;
+      selected.quantity > 0 && cart.quantity !== selected.quantity && attempt < 10;
+      attempt += 1
+    ) {
+      await this.page.waitForTimeout(300);
+      cart = await this.getAndLogCartItemDetails();
+    }
     const normalize = (value: string): string => value.replace(/\s+/g, ' ').trim().toLowerCase();
     console.log('[TC018 VALIDATION] Cart product name | expected contains:', selected.productName);
     console.log('[TC018 VALIDATION] Cart product name | actual:', cart.productName);

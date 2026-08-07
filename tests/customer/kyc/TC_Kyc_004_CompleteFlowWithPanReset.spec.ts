@@ -8,6 +8,7 @@ import {
 } from '../test-data/registration-data';
 import { removeEkycRecord } from '../../../utils/api/ekyc-api';
 import { logValidation } from '../helpers/customer-alt-user.helpers';
+import { TestDataFactory } from '../../../utils/data/test-data.factory';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -34,6 +35,9 @@ test.describe('TC_Kyc_004 @regression @customer @kyc', () => {
 
     await kycDigiKycPage.enterPan(ALREADY_REGISTERED_PAN);
     await kycDigiKycPage.setDateOfBirth(ALREADY_REGISTERED_PAN_DOB);
+    // Confirmed live 2026-08-07: Email is now a required field on this form — Verify silently
+    // fails inline validation (never opens the KARZA modal) if it's left blank.
+    await kycDigiKycPage.enterEmail(TestDataFactory.email('kyc004'));
 
     await kycDigiKycPage.clickVerify();
     await expect(kycDigiKycPage.karzaModalHeadingLocator()).toBeVisible({ timeout: 10_000 });

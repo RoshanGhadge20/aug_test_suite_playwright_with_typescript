@@ -1,5 +1,11 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
 
+const BANK_NAME = 'ICICI BANK LIMITED';
+// Real, verified ICICI account confirmed to complete a withdrawal in this UAT environment —
+// used as a fallback when no bank account is linked yet.
+const ICICI_ACCOUNT_NUMBER = '624401537051';
+const ICICI_IFSC_CODE = 'ICIC0006244';
+
 test.describe('TC_Withdrawal_GetCash_014 @customer-flows', () => {
   test(
     'TC_014-withdraw full available silver amount from vault and amount transfer to bank account',
@@ -10,6 +16,7 @@ test.describe('TC_Withdrawal_GetCash_014 @customer-flows', () => {
       withdrawDetailPage,
       withdrawAccountDetailPage,
       withdrawPamentPage,
+      addNewBankWithdrawalPage,
     }) => {
       const TC_014 = (n: number): string => `TC014_${n}`;
       const logSub = (n: number, title: string): void => {
@@ -120,9 +127,22 @@ test.describe('TC_Withdrawal_GetCash_014 @customer-flows', () => {
 
           await withdrawAccountDetailPage.validateTransferOptions();
           await withdrawAccountDetailPage.clickBankAccount();
-          await withdrawAccountDetailPage.selectBank('ICICI BANK LIMITED');
 
-          const bankDetails = await withdrawAccountDetailPage.getBankDetails('ICICI BANK LIMITED');
+          const bankAvailable = await withdrawAccountDetailPage.isBankAvailable(BANK_NAME);
+          if (!bankAvailable) {
+            console.log(`[${TC_014(5)}] ${BANK_NAME} not linked yet — adding a new bank account.`);
+            await addNewBankWithdrawalPage.addBankDetails(ICICI_ACCOUNT_NUMBER, ICICI_IFSC_CODE);
+            await addNewBankWithdrawalPage.clickSaveBank();
+            // Dismiss the "Bank added successfully" toast so it isn't mistaken later for the
+            // withdrawal-success toast.
+            await addNewBankWithdrawalPage.getSuccessToastTitle();
+            await addNewBankWithdrawalPage.closeToast();
+            await withdrawAccountDetailPage.clickBankAccount();
+          }
+
+          await withdrawAccountDetailPage.selectBank(BANK_NAME);
+
+          const bankDetails = await withdrawAccountDetailPage.getBankDetails(BANK_NAME);
           console.log('Bank Details:', bankDetails);
 
           await withdrawAccountDetailPage.validateCounter();

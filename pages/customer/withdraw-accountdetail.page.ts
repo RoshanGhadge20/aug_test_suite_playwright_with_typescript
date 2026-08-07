@@ -182,6 +182,11 @@ export class WithdrawAccountDetailPage extends BasePage {
     return this.bankCardByName(bankName).isVisible().catch(() => false);
   }
 
+  /** True if the customer has any linked bank account at all. */
+  async hasAnyBank(): Promise<boolean> {
+    return this.bankCards.first().isVisible().catch(() => false);
+  }
+
   async selectBank(bankName: string): Promise<void> {
     const bankCard = this.bankCardByName(bankName);
 

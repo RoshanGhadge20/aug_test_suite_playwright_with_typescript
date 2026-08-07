@@ -1,6 +1,11 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
 
 const withdrawalQuantityInput = 0.1;
+const BANK_NAME = 'ICICI BANK LIMITED';
+// Real, verified ICICI account confirmed to complete a withdrawal in this UAT environment —
+// used as a fallback when no bank account is linked yet.
+const ICICI_ACCOUNT_NUMBER = '624401537051';
+const ICICI_IFSC_CODE = 'ICIC0006244';
 
 test.describe('TC_Withdrawal_GetCash_005 @customer-flows', () => {
     test(
@@ -106,6 +111,22 @@ test.describe('TC_Withdrawal_GetCash_005 @customer-flows', () => {
                     console.log('account details', accountDetails);
 
                     await withdrawAccountDetailPage.clickBankAccount();
+
+                    const hasAnyBank = await withdrawAccountDetailPage.hasAnyBank();
+                    if (!hasAnyBank) {
+                        console.log(`[${TC_005(5)}] No bank linked yet — adding a new bank account.`);
+                        await addNewBankWithdrawalPage.addBankDetails(
+                            ICICI_ACCOUNT_NUMBER,
+                            ICICI_IFSC_CODE,
+                        );
+                        await addNewBankWithdrawalPage.clickSaveBank();
+                        // Dismiss the "Bank added successfully" toast so TC005_6 doesn't read
+                        // this stale toast instead of the fresh one from the delete action.
+                        await addNewBankWithdrawalPage.getSuccessToastTitle();
+                        await addNewBankWithdrawalPage.closeToast();
+                        await withdrawAccountDetailPage.clickBankAccount();
+                    }
+
                     await withdrawAccountDetailPage.selectFirstBank();
 
                     bankDetails = await withdrawAccountDetailPage.getSelectedBankDetails();

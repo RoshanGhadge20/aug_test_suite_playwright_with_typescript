@@ -68,12 +68,28 @@ export class ShopFilterPage extends BasePage {
     return count;
   }
 
-  private async openProductCardAtIndex(index: number): Promise<void> {
+  /**
+   * Opens the card at `index`, retrying by re-resolving the locator if the listing re-renders
+   * (e.g. a live rate-ticker update recreating `*ngFor` nodes) and detaches the element mid-action.
+   */
+  private async openProductCardAtIndex(index: number, attempts = 3): Promise<void> {
     await this.scrollUpToFilters();
     await this.waitForListingReady();
-    const card = this.listingProductCards().nth(index);
-    await card.scrollIntoViewIfNeeded();
-    await card.click();
+
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        const card = this.listingProductCards().nth(index);
+        await card.scrollIntoViewIfNeeded();
+        await card.click();
+        break;
+      } catch (error) {
+        if (attempt >= attempts) {
+          throw error;
+        }
+        await this.page.waitForTimeout(300);
+      }
+    }
+
     await this.page.locator('h2.line-clamp-2').first().waitFor({ state: 'visible', timeout: 15_000 });
     console.log(`[Shop] Opened product card at index: ${index}`);
   }

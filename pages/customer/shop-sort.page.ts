@@ -136,7 +136,7 @@ export class ShopSortPage extends BasePage {
     await section.scrollIntoViewIfNeeded();
 
     let stagnant = 0;
-    while (products.length < expectedCount && stagnant < 10) {
+    while (products.length < expectedCount && stagnant < 20) {
       const before = products.length;
       const cardCount = await cards.count();
 
@@ -151,8 +151,13 @@ export class ShopSortPage extends BasePage {
       stagnant = products.length === before ? stagnant + 1 : 0;
       const advanced = await this.goToNextListingPageIfAvailable();
       if (!advanced) {
+        const lastCardIndex = (await cards.count()) - 1;
+        if (lastCardIndex >= 0) {
+          await cards.nth(lastCardIndex).scrollIntoViewIfNeeded().catch(() => {});
+        }
         await this.page.mouse.wheel(0, 1_000);
         await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => {});
+        await this.page.waitForLoadState('networkidle', { timeout: 3_000 }).catch(() => {});
       }
     }
 

@@ -15,7 +15,7 @@ test.describe('TC_Shop_EMI_007 @customer-flows', () => {
   // test looking for the order in the wrong account.
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('TC_Shop_EMI_007|1660 - Cancel EMI booking (from TC017) and verify invoice', async ({
+  test('TC_Shop_EMI_007|1660 - Cancel EMI booking (from TC_SHOP_UserSaving_006) and verify invoice', async ({
     page,
     customerLogin,
     shopEmiPurchaseChain017,
@@ -24,6 +24,10 @@ test.describe('TC_Shop_EMI_007 @customer-flows', () => {
     shopCancelBookingPage,
     myOrderVerificationPage,
   }) => {
+    test.skip(
+      true,
+      'Disabled: depends on TC_SHOP_UserSaving_006, which is excluded from customer project runs (User Savings feature disabled).',
+    );
     test.setTimeout(360_000);
 
     const TC007 = (n: number): string => `TC007_${n}`;
@@ -46,12 +50,12 @@ test.describe('TC_Shop_EMI_007 @customer-flows', () => {
       await customerLogin.login(altCustomerMobile, altCustomerOtp);
     });
 
-    await test.step('TC007_1 | Load EMI order from TC017', async () => {
-      logSub(1, 'Load EMI order from TC017');
+    await test.step('TC007_1 | Load EMI order from TC_SHOP_UserSaving_006', async () => {
+      logSub(1, 'Load EMI order from TC_SHOP_UserSaving_006');
       ({ orderId: emiOrderId, productName } = myOrderVerificationPage.requireShopEmiPurchaseChain(
         shopEmiPurchaseChain017,
         {
-          missingMessage: 'Run TC_SHOP_017 first or set SHOP_EMI_ORDER_ID_017',
+          missingMessage: 'Run TC_SHOP_UserSaving_006 first or set SHOP_EMI_ORDER_ID_017',
           orderIdEnvKey: 'SHOP_EMI_ORDER_ID_017',
           productNameEnvKey: 'SHOP_EMI_PRODUCT_NAME_017',
         },

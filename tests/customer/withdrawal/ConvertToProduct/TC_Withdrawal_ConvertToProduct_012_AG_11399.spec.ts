@@ -52,6 +52,7 @@ test.describe('TC_Withdrawal_ConvertToProduct_012 @customer-flows', () => {
           await withdrawalPage.selectCoinCategoryIfNotSelected();
           await withdrawalPage.browseAndSelectCoinProduct(SILVER_PRODUCT_NAME, {
             requireSilverInCatalog: true,
+            maxAttempts: 3,
           });
 
           selectedProductDetails = await withdrawalPage.getAndLogSelectedProductDetails();
