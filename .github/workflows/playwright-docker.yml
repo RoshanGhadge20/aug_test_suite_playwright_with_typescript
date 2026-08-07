@@ -33,6 +33,11 @@ on:
           - "true"
           - "false"
 
+      email_to:
+        description: "Email recipient(s), comma-separated (optional, defaults to EMAIL_TO in the EMAIL_ENV secret)"
+        required: false
+        default: ""
+
 jobs:
   playwright:
     runs-on: ubuntu-latest
@@ -40,6 +45,18 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      # Node deps for the host-side report/email scripts below (report-summary.js,
+      # build-email.js, send-email.js run directly on this runner, NOT inside Docker —
+      # the Dockerfile's `npm ci` only installs into the container's own filesystem).
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install host dependencies
+        run: npm ci --omit=dev
 
       # Create runtime .env file
       - name: Create .env
@@ -50,7 +67,7 @@ jobs:
 
       # Build Docker image
       - name: Build Docker Image
-        run: docker build -t augmont-playwright . 
+        run: docker build -t augmont-playwright .
 
       # Run tests
       - name: Run Playwright Tests
@@ -130,4 +147,8 @@ jobs:
       # Send email (ONLY if enabled)
       - name: Send Email
         if: github.event.inputs.send_email == 'true'
-        run: node .github/scripts/send-email.js
+        run: |
+          if [ -n "${{ github.event.inputs.email_to }}" ]; then
+            export EMAIL_TO="${{ github.event.inputs.email_to }}"
+          fi
+          node .github/scripts/send-email.js
