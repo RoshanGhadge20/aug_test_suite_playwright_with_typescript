@@ -12,6 +12,9 @@ export class MyProfilePage extends BasePage {
   private readonly dobInput: Locator;
   private readonly updateProfileButton: Locator;
   private readonly verifiedEmailBadge: Locator;
+  private readonly referralCodeCopyButton: Locator;
+  private readonly referralCopySuccessMessage: Locator;
+  private readonly referralCodeValue: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -23,6 +26,16 @@ export class MyProfilePage extends BasePage {
     this.dobInput = page.locator('#dateOfBirth');
     this.updateProfileButton = page.getByRole('button', { name: 'Update Profile' });
     this.verifiedEmailBadge = page.getByText('Verified', { exact: true });
+    this.referralCodeCopyButton = page
+      .getByRole('button', { name: /copy referral code|copy code|copy/i })
+      .or(page.locator('[data-testid="copy-referral-code"], .referral-copy, .pi-copy'))
+      .first();
+    this.referralCopySuccessMessage = page
+      .getByText(/referral code copied|code copied successfully|copied to clipboard/i)
+      .first();
+    this.referralCodeValue = page
+      .locator('[data-testid="referral-code"], .referral-code-value, .referral-code')
+      .first();
   }
 
   async open(): Promise<void> {
@@ -74,5 +87,25 @@ export class MyProfilePage extends BasePage {
 
   async setDateOfBirth(date: CalendarDate): Promise<void> {
     await setPrimeCalendarDate(this.page, this.dobInput, date);
+  }
+
+  /** The referral code section sits above the fold; scroll back up to reach it after any in-page navigation. */
+  async scrollToTop(): Promise<void> {
+    await this.page.mouse.wheel(0, -10_000);
+  }
+
+  async copyReferralCode(): Promise<void> {
+    await this.referralCodeCopyButton.scrollIntoViewIfNeeded();
+    await this.referralCodeCopyButton.click();
+  }
+
+  referralCopySuccessMessageLocator(): Locator {
+    return this.referralCopySuccessMessage;
+  }
+
+  /** Reads the referral code text shown on the page (for logging/assertion, not for clicking). */
+  async getReferralCode(): Promise<string> {
+    const text = await this.referralCodeValue.textContent();
+    return (text ?? '').trim();
   }
 }
