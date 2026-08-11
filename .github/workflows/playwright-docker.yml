@@ -15,7 +15,7 @@ on:
           - new-admin
 
       folder:
-        description: "Folder (Optional)"
+        description: "Folder (Optional — leave blank to auto-run every folder under tests/<project>, one after another)"
         required: false
         default: ""
 
@@ -39,7 +39,56 @@ on:
         default: ""
 
 jobs:
+  # Builds the Docker image once and hands it to every per-folder job below as an artifact —
+  # avoids rebuilding the same image once per folder when looping.
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t augmont-playwright .
+
+      - name: Save Docker Image
+        run: docker save augmont-playwright -o augmont-playwright.tar
+
+      - name: Upload Docker Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: augmont-playwright.tar
+          retention-days: 1
+
+  # Resolves the list of folders this run should loop over: just the one requested via the
+  # `folder` input, or (if left blank) every folder under tests/<project> — auto-discovered so
+  # a single trigger fans out into one start-to-end cycle per folder without manual re-runs.
+  discover-folders:
+    runs-on: ubuntu-latest
+    outputs:
+      folders: ${{ steps.list.outputs.folders }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: list
+        run: |
+          if [ -n "${{ github.event.inputs.folder }}" ]; then
+            FOLDERS=$(printf '["%s"]' "${{ github.event.inputs.folder }}")
+          else
+            FOLDERS=$(ls tests/${{ github.event.inputs.project }} | jq -R -s -c 'split("\n")[:-1]')
+          fi
+          echo "folders=$FOLDERS" >> "$GITHUB_OUTPUT"
+          echo "Discovered folders: $FOLDERS"
+
   playwright:
+    needs: [build-image, discover-folders]
+    strategy:
+      fail-fast: false
+      # Sequential — each folder's run visibly starts and ends before the next one begins,
+      # same as triggering the workflow manually once per folder. Raise this (or drop it) to
+      # run folders concurrently instead.
+      max-parallel: 1
+      matrix:
+        folder: ${{ fromJson(needs.discover-folders.outputs.folders) }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -65,18 +114,20 @@ jobs:
           ${{ secrets.DOT_ENV }}
           EOF
 
-      # Build Docker image
-      - name: Build Docker Image
-        run: docker build -t augmont-playwright .
+      # Load the Docker image built once in build-image, instead of rebuilding per folder.
+      - name: Download Docker Image Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
 
-      # Run tests
+      - name: Load Docker Image
+        run: docker load -i augmont-playwright.tar
+
+      # Run tests for this matrix folder
       - name: Run Playwright Tests
         run: |
           CMD="npx playwright test --project=${{ github.event.inputs.project }}"
-
-          if [ -n "${{ github.event.inputs.folder }}" ]; then
-            CMD="$CMD tests/${{ github.event.inputs.project }}/${{ github.event.inputs.folder }}"
-          fi
+          CMD="$CMD tests/${{ github.event.inputs.project }}/${{ matrix.folder }}"
 
           if [ -n "${{ github.event.inputs.testcase }}" ]; then
             CMD="$CMD/${{ github.event.inputs.testcase }}"
@@ -92,12 +143,12 @@ jobs:
             augmont-playwright \
             bash -c "$CMD"
 
-      # Upload HTML Report
+      # Upload HTML Report (per-folder name — artifact names must be unique within a run)
       - name: Upload HTML Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-html-report
+          name: playwright-html-report-${{ matrix.folder }}
           path: reports/html
           retention-days: 30
 
@@ -106,7 +157,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.folder }}
           path: reports/results.json
           retention-days: 30
 
@@ -121,7 +172,7 @@ jobs:
         run: node .github/scripts/build-email.js
         env:
           PROJECT: ${{ github.event.inputs.project }}
-          FOLDER: ${{ github.event.inputs.folder }}
+          FOLDER: ${{ matrix.folder }}
           TESTCASE: ${{ github.event.inputs.testcase }}
 
       # Zip report
@@ -144,7 +195,7 @@ jobs:
           ${{ secrets.EMAIL_ENV }}
           EOF
 
-      # Send email (ONLY if enabled)
+      # Send email (ONLY if enabled) — one email per folder, matching this folder's summary/report.
       - name: Send Email
         if: github.event.inputs.send_email == 'true'
         run: |
