@@ -7,6 +7,7 @@ storage/*
 !storage/.gitkeep
 reports/*
 !reports/.gitkeep
+testdata/customer/goalwisesip-results.xlsx
 playwright-report/
 test-results/
 *.log

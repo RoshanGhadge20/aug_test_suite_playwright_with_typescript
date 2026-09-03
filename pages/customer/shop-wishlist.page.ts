@@ -24,7 +24,10 @@ export class ShopWishlistPage extends BasePage {
   }
 
   private catalogAppProductCards(): Locator {
-    return this.page.locator('app-product-new:not([ng-reflect-is-wishlist-context="true"])');
+    // `ng-reflect-*` attributes only exist in Angular dev builds — this UAT env runs a
+    // production build, so they're never present. Called only on the shop catalog page,
+    // where every `app-product-new` card is a catalog card anyway.
+    return this.page.locator('app-product-new');
   }
 
   /** Shop home landing tiles (New Arrivals / Recently Viewed) — no app-product-new wrapper. */
@@ -57,12 +60,20 @@ export class ShopWishlistPage extends BasePage {
     await image.scrollIntoViewIfNeeded();
     return {
       productName: (await image.getAttribute('alt'))?.trim() ?? '',
-      wishlistControl: card.locator('figure').locator('xpath=preceding-sibling::*[1]'),
+      // The `preceding-sibling` div is a flex wrapper Playwright treats as zero-size —
+      // the actual clickable heart icon is the svg inside it.
+      wishlistControl: card
+        .locator('figure')
+        .locator('xpath=preceding-sibling::*[1]')
+        .locator('svg')
+        .first(),
     };
   }
 
   private wishlistPageCards(): Locator {
-    return this.page.locator('app-product-new[ng-reflect-is-wishlist-context="true"]');
+    // Same `ng-reflect-*` issue as catalogAppProductCards — called only on the /wishlist
+    // page, where every `app-product-new` card is a wishlist card.
+    return this.page.locator('app-product-new');
   }
 
   private wishlistProductCard(productName: string): Locator {

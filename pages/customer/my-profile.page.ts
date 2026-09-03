@@ -12,9 +12,12 @@ export class MyProfilePage extends BasePage {
   private readonly dobInput: Locator;
   private readonly updateProfileButton: Locator;
   private readonly verifiedEmailBadge: Locator;
-  private readonly referralCodeCopyButton: Locator;
+  private readonly referralCodeChip: Locator;
+  private readonly referralCodeCopyIcon: Locator;
   private readonly referralCopySuccessMessage: Locator;
-  private readonly referralCodeValue: Locator;
+  private readonly totalReferralsLabel: Locator;
+  private readonly pendingLabel: Locator;
+  private readonly totalEarnedLabel: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -26,16 +29,19 @@ export class MyProfilePage extends BasePage {
     this.dobInput = page.locator('#dateOfBirth');
     this.updateProfileButton = page.getByRole('button', { name: 'Update Profile' });
     this.verifiedEmailBadge = page.getByText('Verified', { exact: true });
-    this.referralCodeCopyButton = page
-      .getByRole('button', { name: /copy referral code|copy code|copy/i })
-      .or(page.locator('[data-testid="copy-referral-code"], .referral-copy, .pi-copy'))
-      .first();
-    this.referralCopySuccessMessage = page
-      .getByText(/referral code copied|code copied successfully|copied to clipboard/i)
-      .first();
-    this.referralCodeValue = page
-      .locator('[data-testid="referral-code"], .referral-code-value, .referral-code')
-      .first();
+    // Live DOM (confirmed against /my-profile): the "Refer and Earn" card renders the truncated
+    // code as a pill — `<button>Ref: H38TF8... <i class="pi pi-copy"></i></button>`. The copy
+    // action is wired to the `.pi-copy` icon specifically, NOT the button wrapper — clicking
+    // elsewhere on the pill (e.g. its text/center) is a no-op, confirmed live via a click-capture
+    // probe showing the event landing on the button with no resulting clipboard write or toast.
+    this.referralCodeChip = page.getByRole('button', { name: /^Ref:/i });
+    this.referralCodeCopyIcon = this.referralCodeChip.locator('.pi-copy');
+    // Live toast markup (confirmed): a two-line message — "Success" heading + "Text Copied to
+    // Clipboard!" body — with no role/toast-library class to key off, so match on the body text.
+    this.referralCopySuccessMessage = page.getByText('Text Copied to Clipboard!', { exact: true });
+    this.totalReferralsLabel = page.getByText('Total Referrals', { exact: true });
+    this.pendingLabel = page.getByText('Pending', { exact: true });
+    this.totalEarnedLabel = page.getByText('Total Earned', { exact: true });
   }
 
   async open(): Promise<void> {
@@ -95,17 +101,38 @@ export class MyProfilePage extends BasePage {
   }
 
   async copyReferralCode(): Promise<void> {
-    await this.referralCodeCopyButton.scrollIntoViewIfNeeded();
-    await this.referralCodeCopyButton.click();
+    await this.referralCodeChip.scrollIntoViewIfNeeded();
+    await this.referralCodeCopyIcon.click();
   }
 
   referralCopySuccessMessageLocator(): Locator {
     return this.referralCopySuccessMessage;
   }
 
-  /** Reads the referral code text shown on the page (for logging/assertion, not for clicking). */
+  /** Reads the referral code chip's text (for logging/assertion, not for clicking). */
   async getReferralCode(): Promise<string> {
-    const text = await this.referralCodeValue.textContent();
+    const text = await this.referralCodeChip.textContent();
     return (text ?? '').trim();
+  }
+
+  /** The "Refer and Earn" card renders the count as a sibling `<p>` immediately before the "Total Referrals" label. */
+  async getTotalReferralCount(): Promise<number> {
+    const countLocator = this.totalReferralsLabel.locator('xpath=preceding-sibling::*[1]');
+    const text = await countLocator.textContent();
+    return Number((text ?? '').trim());
+  }
+
+  /** Same "Refer and Earn" card layout as `getTotalReferralCount` — the ₹ amount is the sibling `<p>` immediately before the "Pending" label. */
+  async getPendingReferralAmount(): Promise<number> {
+    const amountLocator = this.pendingLabel.locator('xpath=preceding-sibling::*[1]');
+    const text = await amountLocator.textContent();
+    return this.parseAmount(text ?? '');
+  }
+
+  /** Same "Refer and Earn" card layout — the ₹ amount is the sibling `<p>` immediately before the "Total Earned" label. */
+  async getTotalEarnedAmount(): Promise<number> {
+    const amountLocator = this.totalEarnedLabel.locator('xpath=preceding-sibling::*[1]');
+    const text = await amountLocator.textContent();
+    return this.parseAmount(text ?? '');
   }
 }

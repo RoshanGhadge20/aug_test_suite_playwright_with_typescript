@@ -7,7 +7,6 @@ test.describe('TC_Referral_001 @regression @customer @referral', () => {
   test('Copying the referral code from My Profile shows a copy-success message', async ({
     page,
     customerLogin,
-    customerMenupage,
     myProfilePage,
   }) => {
     const { mobile, pin } = existingKycVerifiedCustomerCreds();
@@ -18,8 +17,7 @@ test.describe('TC_Referral_001 @regression @customer @referral', () => {
     });
 
     await test.step('TC_Referral_001_2 | Navigate to My Profile', async () => {
-      await customerMenupage.openProfile();
-      await page.waitForURL(/\/my-profile/i, { timeout: 15_000 });
+      await myProfilePage.open();
     });
 
     await test.step('TC_Referral_001_3 | Scroll up to reveal the referral code section', async () => {
@@ -27,13 +25,17 @@ test.describe('TC_Referral_001 @regression @customer @referral', () => {
     });
 
     await test.step('TC_Referral_001_4 | Copy the referral code', async () => {
+      // navigator.clipboard.writeText() requires this permission to be granted explicitly in Chromium.
+      await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
       const referralCode = await myProfilePage.getReferralCode();
       console.log(`[TC_Referral_001_4] Referral code: ${referralCode}`);
       await myProfilePage.copyReferralCode();
     });
 
     await test.step('TC_Referral_001_5 | Validate the copy-success message is shown', async () => {
-      await expect(myProfilePage.referralCopySuccessMessageLocator()).toBeVisible({ timeout: 10_000 });
+      const successMessage = myProfilePage.referralCopySuccessMessageLocator();
+      await expect(successMessage).toBeVisible({ timeout: 10_000 });
+      console.log(`[TC_Referral_001_5] Success message: ${await successMessage.textContent()}`);
     });
   });
 });

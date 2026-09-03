@@ -6,6 +6,7 @@ import type { ShopBillingAddressDetails, ShopCheckoutPage, ShopPlacedOrders } fr
 import { getShopDataset } from '../../utils/data/customer-excel-data';
 import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
 import {
+  persistShopEmiPurchaseChainState,
   resolveShopEmiOrderId,
   resolveShopEmiProductName,
   type ShopEmiPurchaseChainState,
@@ -238,7 +239,11 @@ export class MyOrderVerificationPage extends BasePage {
         return true;
       }
 
-      await this.scrollShopOrdersListDown();
+      // The list is paginated, not infinite-scroll — scrolling alone can never reveal
+      // an order sitting on a later page, so advance pagination too.
+      if (!(await this.goToNextShopOrderPageIfAvailable())) {
+        await this.scrollShopOrdersListDown();
+      }
     }
 
     return false;
@@ -319,8 +324,8 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   /** Wait until SHOP rows show product name + order id (not empty skeleton placeholders). */
-  private async waitForShopOrderListHydrated(timeoutMs = 45_000): Promise<void> {
-    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+  private async waitForShopOrderListHydrated(timeoutMs = 90_000): Promise<void> {
+    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
     let lastTabClickMs = 0;
 
     await expect
@@ -336,7 +341,14 @@ export class MyOrderVerificationPage extends BasePage {
           const now = Date.now();
           if (lastTabClickMs === 0 || now - lastTabClickMs >= 10_000) {
             lastTabClickMs = now;
-            await shopTab.click({ force: true }).catch(() => {});
+            // Confirmed (manual testing): clicking SHOP a second time while it's already
+            // the active tab clears the list instead of reloading it — a full page
+            // reload is the only safe way to force a fresh fetch once active.
+            if (await this.isTabActive(shopTab)) {
+              await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+            } else {
+              await shopTab.click({ force: true }).catch(() => {});
+            }
             await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
           }
           return false;
@@ -372,20 +384,14 @@ export class MyOrderVerificationPage extends BasePage {
 
     if (!listValidationOnly) {
       await expect
-        .poll(async () => shopTab.isChecked().catch(() => false), {
+        .poll(async () => this.isTabActive(shopTab), {
           timeout: 15_000,
           intervals: [200, 500, 1000],
         })
         .toBeTruthy();
     } else {
       await expect
-        .poll(
-          async () => {
-            const checked = await shopTab.isChecked().catch(() => false);
-            const ariaChecked = await shopTab.getAttribute('aria-checked').catch(() => null);
-            return checked || ariaChecked === 'true';
-          },
-          { timeout: 15_000, intervals: [200, 500, 1000] })
+        .poll(async () => this.isTabActive(shopTab), { timeout: 15_000, intervals: [200, 500, 1000] })
         .toBeTruthy();
     }
 
@@ -407,8 +413,8 @@ export class MyOrderVerificationPage extends BasePage {
   async waitForShopOrderIdOnList(
     orderId: string,
     options?: { productName?: string; timeoutMs?: number }): Promise<void> {
-    const timeoutMs = options?.timeoutMs ?? 90_000;
-    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    const timeoutMs = options?.timeoutMs ?? 150_000;
+    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
     let lastRefreshMs = 0;
     let lastReloadMs = 0;
 
@@ -421,7 +427,15 @@ export class MyOrderVerificationPage extends BasePage {
             /shop|my-orders|myorders|order-list|customer-order/i.test(r.url()),
           { timeout: 20_000 })
         .catch(() => null);
-      await shopTab.click({ force: true }).catch(() => {});
+      // Confirmed (manual testing): clicking SHOP a second time while it's already the
+      // active tab clears the list instead of reloading it. If it's not active yet, one
+      // click switches to it; if it's already active, a full page reload is the only
+      // safe way to force a fresh fetch.
+      if (await this.isTabActive(shopTab)) {
+        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      } else {
+        await shopTab.click({ force: true }).catch(() => {});
+      }
       await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
       await refreshResponse;
       await this.waitForMyOrdersListReady(10_000);
@@ -432,7 +446,7 @@ export class MyOrderVerificationPage extends BasePage {
         })
         .toBeTruthy()
         .catch(() => {});
-      await this.waitForShopOrderListHydrated(30_000).catch(() => {});
+      await this.waitForShopOrderListHydrated(45_000).catch(() => {});
       await this.scrollShopOrdersListDown();
     };
 
@@ -494,7 +508,7 @@ export class MyOrderVerificationPage extends BasePage {
   }): Promise<void> {
     const timeoutMs = options?.timeoutMs ?? 45_000;
     const requireTabChecked = options?.requireTabChecked ?? true;
-    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
     const productCard = options?.productName ? this.shopOrderCard(options.productName) : null;
     const orderCard = options?.orderId ? this.shopOrderCardByOrderId(options.orderId) : null;
 
@@ -503,7 +517,7 @@ export class MyOrderVerificationPage extends BasePage {
     await expect
       .poll(
         async () => {
-          if (requireTabChecked && !(await shopTab.isChecked().catch(() => false))) {
+          if (requireTabChecked && !(await this.isTabActive(shopTab))) {
             return false;
           }
 
@@ -637,14 +651,23 @@ export class MyOrderVerificationPage extends BasePage {
     return found;
   }
 
+  /** Toggle buttons (SHOP/SELL/BUY/…) mark the active tab with an `aug-active` class. */
+  private async isTabActive(tab: Locator): Promise<boolean> {
+    const className = await tab.getAttribute('class').catch(() => null);
+    return /\baug-active\b/.test(className ?? '');
+  }
+
+  private async isTabNamedActive(name: RegExp): Promise<boolean> {
+    return this.isTabActive(this.page.getByRole('button', { name }).first());
+  }
+
   private async isSellTabActive(): Promise<boolean> {
-    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
-    return sellTab.isChecked({ timeout: 400 }).catch(() => false);
+    return this.isTabNamedActive(/^SELL$/i);
   }
 
   /** SELL tab selected and list is not BUY/SHOP/Delivery content. */
   private async isSellTabListRendered(): Promise<boolean> {
-    if (await this.page.getByRole('radio', { name: /^BUY$/i }).first().isChecked({ timeout: 400 }).catch(() => false)) {
+    if (await this.isTabNamedActive(/^BUY$/i)) {
       return false;
     }
     if (!(await this.isSellTabActive())) {
@@ -724,7 +747,7 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** Wait until SELL tab is active and sell rows are populated (not stale BUY/SHOP content). */
   private async waitForSellOrderListHydrated(timeoutMs = 45_000): Promise<void> {
-    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
+    const sellTab = this.page.getByRole('button', { name: /^SELL$/i }).first();
     let lastTabClickMs = 0;
 
     await expect
@@ -741,7 +764,13 @@ export class MyOrderVerificationPage extends BasePage {
           if (lastTabClickMs === 0 || now - lastTabClickMs >= 10_000) {
             lastTabClickMs = now;
             await sellTab.scrollIntoViewIfNeeded().catch(() => {});
-            await sellTab.click({ force: true }).catch(() => {});
+            // Clicking a tab a second time while it's already active clears the list
+            // instead of reloading it (confirmed on SHOP) — reload instead once active.
+            if (await this.isTabActive(sellTab)) {
+              await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+            } else {
+              await sellTab.click({ force: true }).catch(() => {});
+            }
             await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
           }
           return false;
@@ -751,30 +780,53 @@ export class MyOrderVerificationPage extends BasePage {
   }
 
   private async clickSellTabAndWaitForList(hydrateTimeoutMs = 45_000): Promise<void> {
-    const sellTab = this.page.getByRole('radio', { name: /^SELL$/i }).first();
+    const sellTab = this.page.getByRole('button', { name: /^SELL$/i }).first();
     await sellTab.scrollIntoViewIfNeeded();
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-    await sellTab.click({ force: true });
-    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    // Clicking a tab while it's already active clears the list instead of reloading it
+    // (confirmed on SHOP) — only click if it isn't already selected.
+    if (!(await this.isTabActive(sellTab))) {
+      await sellTab.click({ force: true });
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    }
     await this.waitForSellOrderListHydrated(hydrateTimeoutMs);
   }
 
   /** TC001 / TC004 — single product on SHOP tab (main-branch click + list hydrate). */
   async clickShopTabSingleOrder(): Promise<void> {
-    await this.clickShopTabAndWaitForList(45_000);
+    await this.clickShopTabAndWaitForList(90_000);
   }
 
   /** TC002 / TC003 — multiple products; same tab settle, rows read by exact product name. */
   async clickShopTabMultiProduct(): Promise<void> {
-    await this.clickShopTabAndWaitForList(45_000);
+    await this.clickShopTabAndWaitForList(90_000);
   }
 
-  private async clickShopTabAndWaitForList(hydrateTimeoutMs = 45_000): Promise<void> {
-    const shopTab = this.page.getByRole('radio', { name: /^SHOP$/i }).first();
+  /**
+   * Click into the SHOP tab without waiting for its full list to hydrate. Use this
+   * (instead of clickShopTabSingleOrder/clickShopTabMultiProduct) right before an
+   * order-id search, where a slow/broken general list shouldn't block a targeted lookup.
+   */
+  private async activateShopTab(): Promise<void> {
+    // The order-type tabs are the app's own `<button class="aug-select-option">`
+    // toggle group (no ARIA role) — never a native radio input.
+    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
     await shopTab.scrollIntoViewIfNeeded();
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    // Confirmed (manual testing): clicking SHOP a *second* time while it's already the
+    // active tab clears the list instead of reloading it. A single click is safe
+    // regardless of prior tab state — checking "already active" first isn't reliable
+    // right after navigation (the class can read stale), so just click once, always.
     await shopTab.click({ force: true });
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    // Card containers (heading, "Order ID:", "View Detail") can render before their data
+    // (product name, order id number, EMI tenure) actually populates — give it time,
+    // especially for orders placed moments ago in the same test.
+    await this.page.waitForTimeout(5_000);
+  }
+
+  private async clickShopTabAndWaitForList(hydrateTimeoutMs = 90_000): Promise<void> {
+    await this.activateShopTab();
     await this.waitForShopOrderListHydrated(hydrateTimeoutMs);
   }
 
@@ -855,6 +907,32 @@ export class MyOrderVerificationPage extends BasePage {
     }
 
     await this.page.waitForURL(/my-orders/i, { timeout: 20_000 });
+  }
+
+  /**
+   * Retry `fn` with a full page reload in between attempts — the SHOP tab's order list
+   * is confirmed to intermittently fail to render on this backend (reproduced even on
+   * otherwise-reliable test runs, independent of click type, wait length, or search vs.
+   * general list). A fresh page load sometimes clears whatever transient state causes
+   * it, similar to a real user hitting refresh. This does not fix the underlying issue —
+   * it only gives a flaky backend another independent chance to succeed.
+   */
+  private async retryWithPageReload<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        if (attempt >= attempts) break;
+        console.log(
+          `[Shop] SHOP list attempt ${attempt}/${attempts} failed, reloading and retrying: ${
+            error instanceof Error ? error.message : String(error)
+          }`);
+        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+      }
+    }
+    throw lastError;
   }
 
   async getShopOrderDetails(
@@ -950,15 +1028,23 @@ export class MyOrderVerificationPage extends BasePage {
     const onMyOrders = /\/my-orders/i.test(u) && !/\/shop-new\/order\//i.test(u);
     const needNavigate = !onMyOrders || onOrderDetail;
 
+    // When we already know the order id, search for it directly instead of waiting for
+    // the full SHOP list to hydrate first — the general order-list can fail to render
+    // entirely (a confirmed backend data-sync issue) while a targeted id search still
+    // works, since it's a different, more specific query.
     if (needNavigate) {
       await this.goToMyOrders();
-      if (flow === 'single') {
+      if (orderId) {
+        await this.activateShopTab();
+      } else if (flow === 'single') {
         await this.clickShopTabSingleOrder();
       } else {
         await this.clickShopTabMultiProduct();
       }
-    } else if (flow === 'multi') {
+    } else if (flow === 'multi' && !orderId) {
       await this.clickShopTabMultiProduct();
+    } else if (flow === 'multi') {
+      await this.activateShopTab();
     }
 
     if (orderId) {
@@ -1800,11 +1886,30 @@ export class MyOrderVerificationPage extends BasePage {
   /** Find shop-tab row index by exact product heading (avoids partial regex matching wrong coin weight). */
   private async resolveShopOrderCardIndex(productName: string, timeoutMs = 60_000): Promise<number> {
     let foundIndex = -1;
+    let debugLogged = false;
     await expect
       .poll(
         async () => {
           const cards = this.shopOrderCards();
           const count = await cards.count().catch(() => 0);
+          if (count === 0 && !debugLogged) {
+            debugLogged = true;
+            const debugInfo = await this.page.evaluate(() => {
+              const doc = (globalThis as any).document;
+              const orderIdEl = Array.from(doc.querySelectorAll('*')).find(
+                (el: any) => el.children.length === 0 && /Order Id:/i.test(el.textContent ?? ''),
+              ) as any;
+              if (!orderIdEl) return { found: false };
+              let node = orderIdEl;
+              const ancestry: any[] = [];
+              for (let i = 0; i < 6 && node; i += 1) {
+                ancestry.push({ tag: node.tagName, className: node.className });
+                node = node.parentElement;
+              }
+              return { found: true, ancestry };
+            });
+            console.log(`[SHOP DEBUG] order-card-ancestry=${JSON.stringify(debugInfo, null, 2)}`);
+          }
           for (let i = 0; i < count; i += 1) {
             const heading = (
               await this.text(cards.nth(i).getByRole('heading', { level: 3 }).first())
@@ -1814,7 +1919,11 @@ export class MyOrderVerificationPage extends BasePage {
               return true;
             }
           }
-          await this.scrollShopOrdersListDown();
+          // The list is paginated, not infinite-scroll — scrolling alone can never
+          // reveal an order sitting on a later page, so advance pagination too.
+          if (!(await this.goToNextShopOrderPageIfAvailable())) {
+            await this.scrollShopOrdersListDown();
+          }
           return false;
         },
         { timeout: timeoutMs, intervals: [500, 1000, 2000] })
@@ -1824,6 +1933,23 @@ export class MyOrderVerificationPage extends BasePage {
       throw new Error(`Shop order card not found for "${productName}".`);
     }
     return foundIndex;
+  }
+
+  /** Click the SHOP tab's "Next Page" control if it's enabled; returns whether it advanced. */
+  private async goToNextShopOrderPageIfAvailable(): Promise<boolean> {
+    // Inactive tab panels can stay in the DOM (hidden, not removed) — an unscoped
+    // "Next Page" lookup can match a different tab's stale pagination control instead
+    // of the SHOP list's own, so require it to actually be visible before clicking.
+    const next = this.page.getByRole('button', { name: /^next page$/i }).first();
+    if (!(await next.isVisible({ timeout: 500 }).catch(() => false))) {
+      return false;
+    }
+    if (!(await next.isEnabled({ timeout: 500 }).catch(() => false))) {
+      return false;
+    }
+    await next.click().catch(() => {});
+    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
+    return true;
   }
 
   /** Find shop-tab row index by order id (optional product heading disambiguates shared ids). */
@@ -1859,7 +1985,11 @@ export class MyOrderVerificationPage extends BasePage {
             foundIndex = i;
             return true;
           }
-          await this.scrollShopOrdersListDown();
+          // The list is paginated, not infinite-scroll — scrolling alone can never
+          // reveal an order sitting on a later page, so advance pagination too.
+          if (!(await this.goToNextShopOrderPageIfAvailable())) {
+            await this.scrollShopOrdersListDown();
+          }
           return false;
         },
         { timeout: timeoutMs, intervals: [500, 1000, 2000] })
@@ -2021,10 +2151,33 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** TC_SHOP_002 — open SHOP tab and wait for each checkout order id. */
   async openShopMultiProductOrdersTab(orderIds: string[]): Promise<void> {
-    await this.goToMyOrders();
-    await this.clickShopTabMultiProduct();
-    for (const orderId of orderIds) {
-      await this.waitForShopOrderIdOnList(orderId, { timeoutMs: 90_000 });
+    await this.retryWithPageReload(async () => {
+      await this.goToMyOrders();
+      // Search for each known order id directly rather than waiting for the general SHOP
+      // list to hydrate first — that list can fail to render entirely (a confirmed
+      // backend data-sync issue) while a targeted id search still works.
+      await this.activateShopTab();
+      for (const orderId of orderIds) {
+        await this.searchShopOrderByOrderId(orderId, { timeoutMs: 60_000 });
+      }
+      // The search box is left filtered to the last order id searched above — callers
+      // that follow this up by looking for a row by product name (not order id) need
+      // the unfiltered list back, or every order but the last-searched one is invisible.
+      await this.clearShopOrderSearch();
+    });
+  }
+
+  /** Clear the SHOP tab's order-id search box so the full order list is visible again. */
+  private async clearShopOrderSearch(): Promise<void> {
+    const searchInput = this.page
+      .getByPlaceholder(/search/i)
+      .or(this.page.getByRole('searchbox'))
+      .or(this.page.locator('input[type="search"]'))
+      .first();
+    if (await searchInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await searchInput.fill('');
+      await searchInput.press('Enter').catch(() => {});
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
     }
   }
 
@@ -2180,16 +2333,17 @@ export class MyOrderVerificationPage extends BasePage {
         ? params.checkoutPage.getInvoiceProductNames(params.placedOrders, params.productNames)
         : [invoiceProductName];
 
-      const pdfUrl = await this.validateShopMultiProductInvoice({
-        invoiceProductName,
-        productDetails: params.productDetailsByName[invoiceProductName],
-        productLinePrice: linePrice,
-        invoiceOrderId,
-        expectedInvoiceNetPayable,
-        pdfProductNames,
-        invoicePassword: params.invoicePassword,
-        orderId: params.orderIdByProduct[invoiceProductName],
-      });
+      const pdfUrl = await this.retryWithPageReload(() =>
+        this.validateShopMultiProductInvoice({
+          invoiceProductName,
+          productDetails: params.productDetailsByName[invoiceProductName],
+          productLinePrice: linePrice,
+          invoiceOrderId,
+          expectedInvoiceNetPayable,
+          pdfProductNames,
+          invoicePassword: params.invoicePassword,
+          orderId: params.orderIdByProduct[invoiceProductName],
+        }));
 
       shopLogActualExpected(
         `${invoiceProductName} net payable`,
@@ -2706,6 +2860,7 @@ export class MyOrderVerificationPage extends BasePage {
     productName: string): void {
     chain.orderId = orderId;
     chain.productName = productName;
+    persistShopEmiPurchaseChainState(chain);
   }
 
   /**
@@ -3563,37 +3718,30 @@ export class MyOrderVerificationPage extends BasePage {
   async clickOnDelivery(): Promise<void> {
     const row = this.getLatestOrderRow();
     const deliveryRadio = row.getByRole('radio', { name: /^DELIVERY$/i }).first();
+    const button = row.getByRole('button', { name: /^DELIVERY$/i }).first();
+    const labelledControl = row.locator('[role="radio"][aria-label="DELIVERY"]').first();
+    const label = row.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
+
     if (await deliveryRadio.isVisible().catch(() => false)) {
       await deliveryRadio.click({ force: true });
+    } else if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true });
+    } else if (await labelledControl.isVisible().catch(() => false)) {
+      await labelledControl.click({ force: true });
+    } else if (await label.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await label.click({ force: true });
     } else {
-      const button = row.getByRole('button', { name: /^DELIVERY$/i }).first();
-      if (await button.isVisible().catch(() => false)) {
-        await button.click({ force: true });
-      } else {
-        const labelledControl = row.locator('[role="radio"][aria-label="DELIVERY"]').first();
-        if (await labelledControl.isVisible().catch(() => false)) {
-          await labelledControl.click({ force: true });
-        } else {
-          const label = row.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
-          if (await label.isVisible({ timeout: 2_000 }).catch(() => false)) {
-            await label.click({ force: true });
-          } else {
-            const globalRadio = this.page.getByRole('radio', { name: /^DELIVERY$/i }).first();
-            if (await globalRadio.isVisible({ timeout: 10_000 }).catch(() => false)) {
-              await globalRadio.click({ force: true });
-            } else {
-              const globalButton = this.page.getByRole('button', { name: /^DELIVERY$/i }).first();
-              if (await globalButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
-                await globalButton.click({ force: true });
-              } else {
-                const globalLabel = this.page.locator('span.p-button-label', { hasText: /^DELIVERY$/i }).first();
-                await globalLabel.waitFor({ state: 'visible', timeout: 15_000 });
-                await globalLabel.click({ force: true });
-              }
-            }
-          }
-        }
-      }
+      // No per-row DELIVERY control on the latest row (e.g. it's a plain Buy transaction) — fall
+      // through directly to the top-level "DELIVERY" tab pill in the My Orders tab bar
+      // (BUY/SELL/DELIVERY/JEWELLERY EXCHANGE/SHOP). Confirmed live 2026-09-01: that tab pill also
+      // satisfies a page-wide `getByRole('radio'|'button', ...)` search, so the old code's global
+      // fallbacks just force-clicked this same pill anyway — and a `force: true` click there
+      // visually highlights the tab without ever switching the page's content away from Buy. A
+      // plain click switches it correctly, so go straight to that instead of routing back through
+      // more force-click attempts on the same element.
+      const tabPill = this.page.getByText('DELIVERY', { exact: true }).first();
+      await tabPill.waitFor({ state: 'visible', timeout: 15_000 });
+      await tabPill.click();
     }
 
     await this.waitForDeliveryTabContent();

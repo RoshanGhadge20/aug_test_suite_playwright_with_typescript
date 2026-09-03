@@ -1,7 +1,10 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { ShopEmiPage } from './shop-emi.page';
 import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
-import type { ShopEmiPurchaseChainState } from '../../utils/test/shop-emi-purchase-chain';
+import {
+  persistShopEmiPurchaseChainState,
+  type ShopEmiPurchaseChainState,
+} from '../../utils/test/shop-emi-purchase-chain';
 import { PaymentPage } from './payment.page';
 import type { MyOrderVerificationPage } from './my-order-verification.page';
 import { BasePage } from '../shared/base.page';
@@ -355,19 +358,19 @@ export class ShopEmiForeclosePage extends BasePage {
   private async checkForecloseInstallmentRow(row: Locator): Promise<void> {
     await row.scrollIntoViewIfNeeded();
     const hiddenInput = row.locator('input[type="checkbox"]').first();
-    const isChecked =
-      (await hiddenInput.getAttribute('aria-checked')) === 'true' ||
-      (await hiddenInput.isChecked().catch(() => false));
-    if (isChecked) {
+    // This PrimeNG version doesn't expose `aria-checked` on the input — the native
+    // `checked` property (what `.check()`/`.isChecked()` use) is the real signal.
+    if (await hiddenInput.isChecked().catch(() => false)) {
       return;
     }
-    const visibleBox = row.locator('.p-checkbox-box, p-checkbox .p-checkbox-box').first();
-    if (await visibleBox.isVisible({ timeout: 2_000 }).catch(() => false)) {
-      await visibleBox.click();
+    // The visible `.p-checkbox-box` div sits underneath its own native checkbox
+    // `<input>`, which intercepts pointer events — target the input directly.
+    if (await hiddenInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await hiddenInput.check();
     } else {
       await row.getByText(/EMI Amount ₹/i).click();
+      await expect(hiddenInput).toBeChecked({ timeout: 8_000 });
     }
-    await expect(hiddenInput).toHaveAttribute('aria-checked', 'true', { timeout: 8_000 });
   }
 
   /**
@@ -628,6 +631,7 @@ export class ShopEmiForeclosePage extends BasePage {
     chain: ShopEmiPurchaseChainState,
     payNowDetails: ShopEmiPayNowOrderDetails): void {
     chain.payNowDetails = payNowDetails;
+    persistShopEmiPurchaseChainState(chain);
   }
 
   /** TC_SHOP_008 / TC_SHOP_011 — Installment Paid dialog validation. */

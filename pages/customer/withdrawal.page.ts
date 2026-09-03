@@ -148,7 +148,11 @@ this.silverVaultCard  =page.locator(
       this.getCashCard = page.locator(
         'div[role="dialog"] div.group.relative:has(h3:text-is("Get Cash"))'
       );
-      this.errorToast = page.locator('div[data-pc-name="toast"].p-toast-message-error');
+      // `data-pc-name="toast"` lives on the outer `<p-toast>` host; `.p-toast-message-error` is on
+      // a `<div>` nested two levels inside it (`<p-toast><p-toastitem><div class="...error">`) —
+      // confirmed live 2026-09-01. The old compound selector required both on one element, which
+      // this PrimeNG version never produces, so it silently matched nothing.
+      this.errorToast = page.locator('.p-toast-message-error');
 
   }
 
@@ -938,7 +942,9 @@ this.silverVaultCard  =page.locator(
   }
 
   private categoryRadio(category: string): Locator {
-    return this.page.getByRole('radio', { name: new RegExp(`^${category}$`, 'i') }).first();
+    return this.productCategorySelectGroup()
+      .getByRole('button', { name: new RegExp(`^${category}$`, 'i') })
+      .first();
   }
 
   private productNameRegex(productName: string): RegExp {
@@ -981,14 +987,28 @@ this.silverVaultCard  =page.locator(
   }
 
   /**
+   * The delivery/billing step's teal Proceed button, inside a custom `<app-button>` wrapper.
+   * `ng-reflect-*` attributes (Angular's dev-mode binding-reflection debug attributes, which the
+   * old selector relied on to scope by the wrapper's `label` input) are no longer present on the
+   * live app at all — confirmed live 2026-09-01, zero elements anywhere carry any `ng-reflect-*`
+   * attribute, so this is a build-mode change, not a one-off. Scope by the wrapper's visible text
+   * instead, which doesn't depend on dev-mode-only output.
+   */
+  private deliveryProceedButton(): Locator {
+    return this.page
+      .locator('app-button')
+      .filter({ hasText: /^Proceed$/ })
+      .locator('button[data-pc-name="button"]')
+      .first();
+  }
+
+  /**
    * Clicks the teal **Proceed** on the withdraw delivery/billing step. Polls until enabled — the button stays
    * disabled until delivery + billing validation passes.
    */
   async clickDeliveryProceedButton(options?: { timeoutMs?: number }): Promise<void> {
     const timeoutMs = options?.timeoutMs ?? 60_000;
-    const proceedButton = this.page
-      .locator('app-button[ng-reflect-label="Proceed"] button[data-pc-name="button"]')
-      .first();
+    const proceedButton = this.deliveryProceedButton();
     await proceedButton.waitFor({ state: 'visible' });
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -1009,9 +1029,7 @@ this.silverVaultCard  =page.locator(
 
   /** Clicks Proceed only if enabled; returns whether a click was performed (false = stayed disabled, e.g. validation). */
   async clickDeliveryProceedButtonIfEnabled(): Promise<boolean> {
-    const proceedButton = this.page
-      .locator('app-button[ng-reflect-label="Proceed"] button[data-pc-name="button"]')
-      .first();
+    const proceedButton = this.deliveryProceedButton();
     await proceedButton.waitFor({ state: 'visible' });
     if (await proceedButton.isEnabled()) {
       await proceedButton.click();
@@ -1269,18 +1287,14 @@ this.silverVaultCard  =page.locator(
     await this.requestDeliveryButton().click();
   }
 
-  /** PrimeNG select-button group: primary attribute or fallback when markup/version differs. */
+  /**
+   * The Jewellery/Coin/Bar category picker is a custom `<app-select-button>` component — a
+   * `div[role="group"][aria-label="jewelleryType"]` of plain `<button>`s — confirmed live
+   * 2026-09-01. It's not PrimeNG's SelectButton (no `data-pc-name="selectbutton"`, no radio
+   * semantics/`aria-checked`); the old selector matched nothing after this redesign.
+   */
   private productCategorySelectGroup(): Locator {
-    const primary = this.page.locator('div[role="group"][data-pc-name="selectbutton"]').first();
-    const fallback = this.page
-      .locator('div[role="group"]')
-      .filter({
-        has: this.page
-          .locator('div[role="radio"]')
-          .filter({ has: this.page.locator('span.p-button-label', { hasText: /^Coin$/i }) }),
-      })
-      .first();
-    return primary.or(fallback);
+    return this.page.locator('div[role="group"][aria-label="jewelleryType"]').first();
   }
 
   async getAndLogProductCategoryNames(): Promise<string[]> {
@@ -1288,16 +1302,15 @@ this.silverVaultCard  =page.locator(
     const categoryGroup = this.productCategorySelectGroup();
     await categoryGroup.waitFor({ state: 'visible', timeout: 45_000 });
 
-    const categoryButtons = categoryGroup.locator('div[role="radio"]');
+    const categoryButtons = categoryGroup.getByRole('button');
     const count = await categoryButtons.count();
     const categories: string[] = [];
 
     for (let index = 0; index < count; index += 1) {
-      const button = categoryButtons.nth(index);
-      const ariaLabel = (await button.getAttribute('aria-label'))?.trim();
-      const labelText = (await button.locator('span.p-button-label').first().textContent())?.trim();
-      const name = ariaLabel || labelText || `Category-${index + 1}`;
-      categories.push(name);
+      const name = ((await categoryButtons.nth(index).textContent()) ?? '').trim();
+      if (name) {
+        categories.push(name);
+      }
     }
 
     console.log(`Product Category Count: ${categories.length}`);
@@ -1317,10 +1330,11 @@ this.silverVaultCard  =page.locator(
     await this.ensureProductListPage();
     const categoryOption = this.categoryRadio(category);
     await categoryOption.waitFor({ state: 'visible', timeout: 15_000 });
-    if ((await categoryOption.getAttribute('aria-checked')) !== 'true') {
-      await categoryOption.click();
-      await this.page.waitForTimeout(400);
-    }
+    // These are plain tab buttons, not PrimeNG radios — no `aria-checked` to read the current
+    // selection from (confirmed live 2026-09-01). Clicking an already-active tab is a harmless
+    // no-op, so just always click rather than trying to detect the current state first.
+    await categoryOption.click();
+    await this.page.waitForTimeout(400);
   }
 
   async getAndLogProductCountAndNames(): Promise<{ count: number; names: string[] }> {
@@ -2343,15 +2357,19 @@ this.silverVaultCard  =page.locator(
   }
 
   /**
-   * Clicks the checkout **Proceed to Pay** action (PrimeNG `p-button`, `ng-reflect-label="Proceed to Pay"`).
-   * Often disabled until payment type is chosen; polls until enabled then clicks.
+   * Clicks the checkout **Proceed to Pay** action. Often disabled until payment type is chosen;
+   * polls until enabled then clicks.
+   *
+   * Confirmed live 2026-09-01: the button carries a leading icon whose flattened accessible name
+   * contributes a leading space/whitespace character (`" Proceed to Pay"`, per an accessibility
+   * snapshot), so the old anchored `/^Proceed to Pay$/i` regex never matched — dropped the
+   * anchors for a substring match instead. The `ng-reflect-label` fallback is also gone (see
+   * `deliveryProceedButton()` above — this PrimeNG build no longer emits any `ng-reflect-*`
+   * attribute), so it's removed rather than kept as dead weight.
    */
   async checkoutPageClickProceedToPay(options?: { timeoutMs?: number }): Promise<void> {
     const timeoutMs = options?.timeoutMs ?? 60_000;
-    const button = this.page
-      .getByRole('button', { name: /^Proceed to Pay$/i })
-      .or(this.page.locator('p-button[ng-reflect-label="Proceed to Pay"] button[data-pc-section="root"]'))
-      .first();
+    const button = this.page.getByRole('button', { name: /Proceed to Pay/i }).first();
 
     await button.waitFor({ state: 'visible', timeout: timeoutMs });
 
@@ -2413,7 +2431,15 @@ this.silverVaultCard  =page.locator(
    */
   async checkoutPageClickEditDeliveryAddress(): Promise<void> {
     await this.page.waitForURL(/\/checkout/i, { timeout: 30_000 });
-    const panel = this.page.getByRole('tabpanel').first();
+    // The checkout page now renders both the "Delivery Information" and "Summary" tabs' panels
+    // in the DOM at once (a PrimeNG Stepper — `p-step-panel`) rather than only the active one;
+    // `.first()` picked up the hidden, empty Delivery Information panel and hung waiting for it
+    // to become visible — confirmed live 2026-09-01. Filter by the Edit button it actually
+    // contains instead of relying on DOM order or PrimeNG-internal `data-p-active`.
+    const panel = this.page
+      .getByRole('tabpanel')
+      .filter({ has: this.page.getByRole('button', { name: /^Edit$/i }) })
+      .first();
     await panel.waitFor({ state: 'visible', timeout: 15_000 });
     const edit = panel.getByRole('button', { name: /^Edit$/i }).first();
     await edit.waitFor({ state: 'visible', timeout: 15_000 });
@@ -2657,13 +2683,21 @@ this.silverVaultCard  =page.locator(
     return rows;
   }
 
-  /** Skips profile-locked delivery inputs; avoids racing `isEnabled()` before Angular disables the field. */
+  /**
+   * Skips profile-locked delivery inputs; avoids racing `isEnabled()` before Angular disables the field.
+   * Confirmed live 2026-09-01: once the account has a previously-saved delivery address (e.g. from an
+   * earlier successful checkout in the same suite run), this form now pre-fills from it and can disable
+   * a field (`#firstName` seen live) *after* the `isEditable()` check above already passed — Angular's
+   * profile-lock kicks in asynchronously. `.fill()` then hangs on "element is not enabled" for the full
+   * timeout instead of the intended graceful skip. Bound the fill with its own short timeout and treat
+   * that outcome the same as an upfront-disabled field.
+   */
   private async fillDeliveryInputWhenEditable(input: Locator, value: string): Promise<void> {
     await input.waitFor({ state: 'visible' });
     if (!(await input.isEditable().catch(() => false))) {
       return;
     }
-    await input.fill(value);
+    await input.fill(value, { timeout: 5_000 }).catch(() => {});
   }
 
   /**

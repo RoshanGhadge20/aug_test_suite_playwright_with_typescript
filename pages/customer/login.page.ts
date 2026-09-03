@@ -32,6 +32,17 @@ export class CustomerLoginPage extends BasePage {
   private readonly pinMismatchError = () =>
     this.page.getByText('PINs do not match. Please try again').first();
 
+  // Referral entry (confirmed live on the OTP-verification screen for a brand-new mobile number):
+  // a collapsed "Have a referral code? Get exclusive benefits" banner that expands into a text
+  // input on click. A valid code is validated inline ("Referral Code Applied 🎉" in green, no
+  // separate Apply button — filling the field is enough). After OTP verify, a "Referral Success!"
+  // modal appears ("You were referred by <name>") with its own "Proceed" button (same text/role
+  // as the PIN-setup Proceed button, reused via `proceedButtonLocator()`).
+  private readonly referralCodeBanner = () => this.page.getByText('Have a referral code?', { exact: true });
+  private readonly referralCodeInput = () => this.page.getByPlaceholder('Enter your Referral Code');
+  private readonly referralCodeAppliedMessage = () => this.page.getByText('Referral Code Applied', { exact: false });
+  private readonly referralSuccessModalHeading = () => this.page.getByText('Referral Success!', { exact: true });
+
   async open(): Promise<void> {
     await this.goto('/login');
     await this.waitForLoginForm();
@@ -79,6 +90,23 @@ export class CustomerLoginPage extends BasePage {
 
   pinMismatchErrorMessage(): Locator {
     return this.pinMismatchError();
+  }
+
+  referralCodeAppliedMessageLocator(): Locator {
+    return this.referralCodeAppliedMessage();
+  }
+
+  referralSuccessModalHeadingLocator(): Locator {
+    return this.referralSuccessModalHeading();
+  }
+
+  async openReferralCodeEntry(): Promise<void> {
+    await this.referralCodeBanner().click();
+    await this.referralCodeInput().waitFor({ state: 'visible' });
+  }
+
+  async enterReferralCode(code: string): Promise<void> {
+    await this.referralCodeInput().fill(code);
   }
 
   async enterMobileNumber(mobile: string): Promise<void> {

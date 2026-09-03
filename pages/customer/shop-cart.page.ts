@@ -87,7 +87,8 @@ export class ShopCartPage extends BasePage {
       );
     this.invalidCouponMessage = page.locator('p.text-red-600');
     this.couponErrorMessage = page.locator('[role="alert"]'); 
-    this.quantityDropdown = page.locator('p-dropdown').first();
+    // PrimeNG renamed its Dropdown component (and classes) from `p-dropdown*` to `p-select*`.
+    this.quantityDropdown = page.locator('p-select').first();
 
   }
 
@@ -322,17 +323,22 @@ export class ShopCartPage extends BasePage {
     await this.page.goto('/shop-new/cart');
     const removed = await this.removeAllCartItems();
 
-    await expect
-      .poll(
-        async () => {
-          await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
-          if (await this.isCartEmptyStateVisible()) {
-            return 0;
-          }
-          return this.cartProductCards.count();
-        },
-        { timeout: 20_000 })
-      .toBe(0);
+    const cartEmpty = async (): Promise<number> => {
+      await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+      if (await this.isCartEmptyStateVisible()) {
+        return 0;
+      }
+      return this.cartProductCards.count();
+    };
+
+    try {
+      await expect.poll(cartEmpty, { timeout: 20_000 }).toBe(0);
+    } catch {
+      // Leftover items sometimes survive a first pass (e.g. a stale count read
+      // right as the last removal lands) — one more full pass clears them.
+      removed.push(...(await this.removeAllCartItems()));
+      await expect.poll(cartEmpty, { timeout: 20_000 }).toBe(0);
+    }
 
     shopLogActualExpected('Cart item count', 0, 0);
     return removed;
@@ -628,7 +634,7 @@ export class ShopCartPage extends BasePage {
   async removeAllCartItems(): Promise<string[]> {
     await this.waitForCart();
     const removed: string[] = [];
-    const maxRemovals = 10;
+    const maxRemovals = 20;
 
     for (let attempt = 0; attempt < maxRemovals; attempt++) {
       if (await this.isCartEmptyStateVisible()) {
@@ -652,6 +658,8 @@ export class ShopCartPage extends BasePage {
       await this.clickRemove();
       removed.push(name);
 
+      // Wait for a strict decrease (not just "changed") — a transient re-add or a stale
+      // count read could otherwise satisfy a plain "not equal" check without real progress.
       await expect
         .poll(async () => {
           await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
@@ -659,8 +667,8 @@ export class ShopCartPage extends BasePage {
             return 0;
           }
           return this.cartProductCards.count();
-        }, { timeout: 15_000 })
-        .not.toBe(countBefore);
+        }, { timeout: 20_000 })
+        .toBeLessThan(countBefore);
     }
 
     return removed;
@@ -679,7 +687,7 @@ export class ShopCartPage extends BasePage {
     return {
       productName: await this.text(item.getByRole('heading', { level: 3 })),
       netWeight: await this.text(item.getByText(/Net weight:/i)),
-      quantity: await this.text(item.locator('.p-dropdown .p-dropdown-label').first()),
+      quantity: await this.text(item.locator('.p-select .p-select-label').first()),
       itemPrice: this.parseAmount(
         await this.text(item.locator('p.font-bold').filter({ hasText: /^₹/ }))),
     };
@@ -780,19 +788,18 @@ export class ShopCartPage extends BasePage {
       'input[type="checkbox"][data-pc-section="hiddenInput"], input.p-element[type="checkbox"]').first();
     await hiddenInput.waitFor({ state: 'attached', timeout: 15_000 });
 
-    const isChecked = async (): Promise<boolean> =>
-      (await hiddenInput.getAttribute('aria-checked')) === 'true' ||
-      (await hiddenInput.isChecked().catch(() => false));
-
-    if (!(await isChecked())) {
-      const visibleToggle = savingsRow.locator('p-checkbox .p-checkbox-box, .p-checkbox-box').first();
-      if (await visibleToggle.isVisible({ timeout: 2_000 }).catch(() => false)) {
-        await visibleToggle.click();
+    // This PrimeNG version doesn't expose `aria-checked` on the input — the native
+    // `checked` property (what `.check()`/`.isChecked()` use) is the real signal.
+    if (!(await hiddenInput.isChecked().catch(() => false))) {
+      // The visible `.p-checkbox-box` div sits underneath its own native checkbox
+      // `<input>`, which intercepts pointer events — target the input directly.
+      if (await hiddenInput.isVisible({ timeout: 2_000 }).catch(() => false)) {
+        await hiddenInput.check();
       } else {
         await savingsLabel.locator('xpath=preceding-sibling::*[1]').click({ force: true });
+        await expect(hiddenInput).toBeChecked({ timeout: 10_000 });
       }
     }
-    await expect(hiddenInput).toHaveAttribute('aria-checked', 'true', { timeout: 10_000 });
     await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
   }
 
