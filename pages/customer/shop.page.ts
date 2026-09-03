@@ -82,9 +82,11 @@ export class ShopPage extends BasePage {
     // Price-range radios are bucketed live from the catalog's min/max price, so the
     // lowest-bucket label (e.g. "₹100 - ₹20000") drifts as the cheapest product's price
     // changes. Select by position (first = lowest bucket) instead of matching that text.
+    // The visible `.p-radiobutton-box` div sits underneath its own native radio
+    // `<input>`, which intercepts pointer events — target the input directly.
     this.priceRange100To20000Radio = page
       .getByRole('heading', { name: 'Price Range', exact: true })
-      .locator('xpath=following::*[contains(@class,"p-radiobutton-box")][1]');
+      .locator('xpath=following::input[@type="radio"][1]');
     this.resultsText = page.getByText(/\d+\s+results/i).first();
     this.goldCoinHeading = page.getByRole('heading', { name: 'Gold Coin', level: 2, exact: true });
     this.goldCoinProductGrid = this.goldCoinHeading.locator(
@@ -94,7 +96,8 @@ export class ShopPage extends BasePage {
     this.productPrice = page.locator('div.font-semibold').filter({ hasText: /^₹/ }).first();
     this.mrpNote = page.getByText('MRP inclusive of all taxes');
     this.emiBanner = page.getByText(/EMI STARTS FROM/i);
-    this.quantityDropdown = page.locator('.p-dropdown-label');
+    // PrimeNG renamed its Dropdown component's classes from `p-dropdown*` to `p-select*`.
+    this.quantityDropdown = page.locator('.p-select-label');
     this.returnsPolicyText = page.getByText(/30-day returns/i);
     this.trustBadgeLabels = page.locator('.bg-maroon span.font-medium');
     this.productPropertiesAccordion = page.getByRole('button', { name: 'Product Properties' });
@@ -267,8 +270,10 @@ export class ShopPage extends BasePage {
     await this.scrollPageUp();
     await this.page.getByRole('heading', { name: 'Jewellery Type', level: 1 }).scrollIntoViewIfNeeded();
 
+    // The visible `.p-radiobutton-box` div sits underneath its own native radio
+    // `<input>`, which intercepts pointer events — target the input directly.
     const silverInput = this.page.locator('input#silver[name="jwelleryType"]');
-    await this.page.locator('p-radiobutton:has(input#silver[name="jwelleryType"]) .p-radiobutton-box').click();
+    await silverInput.check();
 
     await expect.poll(() => silverInput.isChecked()).toBe(true);
     await this.waitForShopListingReady();
@@ -301,7 +306,7 @@ export class ShopPage extends BasePage {
 
   async clickPriceRangeRadio(): Promise<void> {
     await this.priceRange100To20000Radio.scrollIntoViewIfNeeded();
-    await this.priceRange100To20000Radio.click();
+    await this.priceRange100To20000Radio.check();
     await this.waitForShopListingReady(30_000);
   }
 

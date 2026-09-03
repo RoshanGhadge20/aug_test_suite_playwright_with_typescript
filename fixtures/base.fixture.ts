@@ -26,6 +26,7 @@ import { KycDigiKycPage } from '../pages/customer/kyc-digi-kyc.page';
 import { MyProfilePage } from '../pages/customer/my-profile.page';
 import { GoldLoanInquiryPage } from '../pages/customer/gold-loan-inquiry.page';
 import { SellOldGoldInquiryPage } from '../pages/customer/sell-old-gold-inquiry.page';
+import { AccountStatementPage } from '../pages/customer/account-statement.page';
 import {
   getWorkerShopEmiPurchaseChainState,
   type ShopEmiPurchaseChainState,
@@ -34,6 +35,7 @@ import { WithdrawDetailPage } from '@pages/customer/withdraw-detail.page';
 import { WithdrawAccountDetailPage } from '../pages/customer/withdraw-accountdetail.page';
 import { WithdrawPamentPage } from   '../pages/customer/withdraw-payment.page';
 import { Withdrawsip } from '@pages/customer/withdraw-sip.page';
+import { GoalWiseSipPage } from '../pages/customer/goal-wise-sip.page';
 
 type PageObjectFixtures = {
   customerLogin: CustomerLoginPage;
@@ -67,6 +69,8 @@ type PageObjectFixtures = {
   myProfilePage: MyProfilePage;
   goldLoanInquiryPage: GoldLoanInquiryPage;
   sellOldGoldInquiryPage: SellOldGoldInquiryPage;
+  accountStatementPage: AccountStatementPage;
+  goalWiseSipPage: GoalWiseSipPage;
 
   // customerLogin: CustomerLoginPage;
   // businessLogin: BusinessLoginPage;
@@ -124,6 +128,8 @@ export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
   myProfilePage: async ({ page }, use) => { await use(new MyProfilePage(page)); },
   goldLoanInquiryPage: async ({ page }, use) => { await use(new GoldLoanInquiryPage(page)); },
   sellOldGoldInquiryPage: async ({ page }, use) => { await use(new SellOldGoldInquiryPage(page)); },
+  accountStatementPage: async ({ page }, use) => { await use(new AccountStatementPage(page)); },
+  goalWiseSipPage: async ({ page }, use) => { await use(new GoalWiseSipPage(page)); },
 
 
   shopEmiPurchaseChain009: async ({}, use) => {

@@ -51,12 +51,15 @@ export class EmiOrderDetailValidationPage extends BasePage {
       return;
     }
 
+    // PrimeNG renamed AccordionTab's markup: `p-accordiontab` -> `p-accordion-panel`,
+    // and the `a.p-accordion-header-link` anchor was dropped in favor of the
+    // `<p-accordion-header>` element itself being the clickable toggle.
     const accordionLink = this.page
-      .locator('p-accordiontab')
+      .locator('p-accordion-panel')
       .filter({
         has: this.page.getByRole('heading', { name: 'My EMIs', exact: true }),
       })
-      .locator('a.p-accordion-header-link')
+      .locator('p-accordion-header')
       .first();
 
     if (await accordionLink.isVisible({ timeout: 3_000 }).catch(() => false)) {

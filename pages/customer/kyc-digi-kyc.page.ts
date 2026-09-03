@@ -27,6 +27,7 @@ export class KycDigiKycPage extends BasePage {
   private readonly panAlreadyExistsError: Locator;
   private readonly verifiedModalHeading: Locator;
   private readonly verifiedModalProceedButton: Locator;
+  private readonly formHeading: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -34,14 +35,23 @@ export class KycDigiKycPage extends BasePage {
     this.dobInput = page.locator('#dateOfBirth');
     // State/City are cascading PrimeNG dropdowns (City's option list depends on the selected
     // State) — confirmed live 2026-07-06, not documented in the original exploration, which only
-    // found PAN + DOB on this screen. `div.p-dropdown` (class, not the `<p-dropdown>` custom
-    // element itself) is the actual clickable trigger; State is the first of the two, City second.
-    this.stateDropdown = page.locator('div.p-dropdown').nth(0);
-    this.cityDropdown = page.locator('div.p-dropdown').nth(1);
+    // found PAN + DOB on this screen. State is the first of the two, City second.
+    // PrimeNG's Dropdown component was renamed to Select in a later library version (confirmed
+    // live 2026-09-01, same upgrade that changed the calendar's DOM — see calendar-helper.ts):
+    // the host `<p-dropdown>` custom element and its `div.p-dropdown` class are gone, replaced by
+    // `<p-select class="... p-select ...">`. The `li[role="option"]` option-list markup this drives
+    // via `selectState()`/`selectFirstAvailableCity()` below is unchanged.
+    this.stateDropdown = page.locator('.p-select').nth(0);
+    this.cityDropdown = page.locator('.p-select').nth(1);
     this.emailInput = page.locator('#email');
     this.verifyButton = page.getByRole('button', { name: 'Verify' });
     this.panRequiredError = page.getByText('PAN Number is required');
-    this.dobRequiredError = page.getByText('DOB is required');
+    // The DOB field has no dedicated "required" message in its markup (confirmed live
+    // 2026-09-01: an empty DOB never triggers "DOB is required" no matter what — the field's
+    // wrapper component simply doesn't render one). Blank/invalid DOB instead fails the age
+    // validator and surfaces its message, "Please enter an age of 18 years or above" — confirmed
+    // live against a manually-reproduced blank-DOB case.
+    this.dobRequiredError = page.getByText('Please enter an age of 18 years or above');
     this.panInvalidError = page.getByText('Enter a valid PAN Number');
     this.stateRequiredError = page.getByText('Select a State');
     this.cityRequiredError = page.getByText('Select a City/District');
@@ -58,6 +68,7 @@ export class KycDigiKycPage extends BasePage {
     // (mocked, in UAT) verification and this success modal appears in-app, no external redirect.
     this.verifiedModalHeading = page.getByText('All Set! Verified!');
     this.verifiedModalProceedButton = page.getByRole('dialog').getByRole('button', { name: 'Proceed' });
+    this.formHeading = page.getByText('PAN Card Details');
   }
 
   /**
@@ -194,8 +205,35 @@ export class KycDigiKycPage extends BasePage {
     await this.panInput.fill('');
   }
 
+  /**
+   * `.fill('')` sets the DOM input's text but — same limitation documented in calendar-helper.ts
+   * for setting a date — never reaches the underlying Angular form control: confirmed live
+   * 2026-09-01, the field stayed `ng-pristine` and no validation message ever appeared, no matter
+   * how long we waited or what we clicked afterward. Only driving the picker's own panel "Clear"
+   * button actually flips it to `ng-dirty` and reliably surfaces the age-validator message.
+   */
   async clearDob(): Promise<void> {
-    await this.dobInput.fill('');
+    // `aria-controls` on the input isn't populated until the panel has opened at least once
+    // (confirmed live 2026-09-01: reading it beforehand returns null) — go straight through the
+    // global `.p-datepicker-panel` overlay locator instead, same as calendar-helper.ts.
+    const panel = this.page.locator('.p-datepicker-panel');
+    const alreadyOpen = await panel.isVisible({ timeout: 500 }).catch(() => false);
+    if (!alreadyOpen) {
+      await this.dobInput.click();
+    }
+    await panel.waitFor({ state: 'visible', timeout: 10_000 });
+    await panel.locator('.p-datepicker-clear-button').click({ force: true });
+  }
+
+  /**
+   * Blurs whichever field currently has focus by clicking the static "PAN Card Details" heading.
+   * Required-field/format errors on this form now render on blur, independent of Verify's state
+   * (confirmed live 2026-09-01) — Verify itself carries a real `disabled` attribute until the
+   * whole form is valid, so it can no longer be relied on to force validation display the way
+   * New Signup Window Test Plan.md §4.6 originally documented.
+   */
+  async blurActiveField(): Promise<void> {
+    await this.formHeading.click();
   }
 
   /** Opens the State dropdown and selects the option matching `stateName` (e.g. "Maharashtra"). */

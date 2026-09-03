@@ -1307,7 +1307,9 @@ export class ShopCheckoutPage extends BasePage {
 
   private async readSummaryAddress(accordion: Locator): Promise<ShopBillingAddressDetails> {
     await accordion.waitFor({ state: 'visible', timeout: 15_000 });
-    await accordion.locator('a.p-accordion-header-link').click();
+    // PrimeNG's Accordion markup dropped the `a.p-accordion-header-link` anchor —
+    // the custom `<p-accordion-header>` element itself is now the clickable toggle.
+    await accordion.locator('p-accordion-header').click();
     await accordion.locator('p.text-gray-600').first().waitFor({ state: 'visible', timeout: 10_000 });
 
     const headerText = await this.text(accordion.locator('span.font-semibold'));
@@ -1632,15 +1634,12 @@ export class ShopCheckoutPage extends BasePage {
     this.page.locator('p-checkbox:has(#isDefault)');
 
   async clickSetAsDefaultCheckbox(): Promise<void> {
+    // The visible `.p-checkbox-box` div sits underneath its own native checkbox
+    // `<input>`, which intercepts pointer events — target the input directly.
     const input = this.defaultAddressCheckbox.locator('#isDefault');
-    const box = this.defaultAddressCheckbox.locator('.p-checkbox-box');
 
-    await expect(box).toBeVisible();
-
-    if (!(await input.isChecked())) {
-      await box.click();
-    }
-
+    await expect(input).toBeVisible();
+    await input.check();
     await expect(input).toBeChecked();
   }  /** Delivery address management — Save & Proceed on address edit form. */
   async clickSaveAndContinue(): Promise<void> {

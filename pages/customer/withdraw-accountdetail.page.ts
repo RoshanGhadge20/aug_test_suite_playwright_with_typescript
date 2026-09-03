@@ -127,8 +127,15 @@ export class WithdrawAccountDetailPage extends BasePage {
     await this.upiOption.click();
   }
 
+  private async waitForDialogMaskHidden(timeoutMs = 10_000): Promise<void> {
+    await this.page
+      .locator('.p-dialog-mask')
+      .waitFor({ state: 'hidden', timeout: timeoutMs })
+      .catch(() => {});
+  }
 
   async clickBankAccount(): Promise<void> {
+    await this.waitForDialogMaskHidden();
     await this.bankAccountOption.waitFor({ state: 'visible' });
     await this.bankAccountOption.click();
   }
@@ -177,14 +184,31 @@ export class WithdrawAccountDetailPage extends BasePage {
     );
   }
 
-  /** True if `bankName` already appears among the customer's linked bank accounts. */
+  /**
+   * True if `bankName` already appears among the customer's linked bank accounts.
+   * Uses a bounded wait rather than a bare `.isVisible()` check (which returns immediately,
+   * without retrying) — confirmed live 2026-09-01: called right after `clickBankAccount()` opens
+   * the account list, before its accordion content has finished rendering, a bare `.isVisible()`
+   * can read `false` on an already-linked bank. That false negative sent the test down the
+   * "add new bank" branch for a bank that already existed, and the app's resulting "Customer bank
+   * already added" toast (plus the add-bank dialog's mask) then blocked pointer events over the
+   * bank list for the next several seconds, so the caller's own follow-up `selectBank()` click
+   * kept timing out too. Same bounded-wait pattern `hasAnyBank()` already uses below.
+   */
   async isBankAvailable(bankName: string): Promise<boolean> {
-    return this.bankCardByName(bankName).isVisible().catch(() => false);
+    return this.bankCardByName(bankName)
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false);
   }
 
   /** True if the customer has any linked bank account at all. */
   async hasAnyBank(): Promise<boolean> {
-    return this.bankCards.first().isVisible().catch(() => false);
+    return this.bankCards
+      .first()
+      .waitFor({ state: 'visible', timeout: 3_000 })
+      .then(() => true)
+      .catch(() => false);
   }
 
   async selectBank(bankName: string): Promise<void> {
@@ -280,7 +304,20 @@ export class WithdrawAccountDetailPage extends BasePage {
 
     console.log(`Selected UPI: ${upiId}`);
 
-    await upiText.locator('xpath=ancestor::*[@role="button" or contains(@class,"cursor-pointer")][1]').click();
+    // A UPI account that hasn't been verified yet renders as a `cursor-not-allowed` card with its
+    // own "VERIFY" button instead of the selectable `cursor-pointer` card the ancestor lookup
+    // below expects — confirmed live 2026-09-01 against the shared UAT customer's account.
+    // Verifying flips the card to selectable immediately; no OTP step is involved.
+    const card = upiText.locator(
+      'xpath=ancestor::div[contains(@class,"border") and contains(@class,"rounded-lg")][1]'
+    );
+    const verifyButton = card.getByRole('button', { name: 'VERIFY' });
+    if (await verifyButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await verifyButton.click();
+      await expect(card).not.toHaveClass(/cursor-not-allowed/, { timeout: 10_000 });
+    }
+
+    await card.click();
 
     return upiId;
   }  async getSelectedBankDetails() {

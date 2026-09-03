@@ -79,7 +79,21 @@ export class ShopEmiPage extends BasePage {
 
   async selectPlan(tenure: string): Promise<void> {
     await this.waitForScreen();
-    await this.page.locator('span.p-button-label', { hasText: tenure }).click();
+    // Tenure options are the app's own `<button class="aug-select-option">` with the
+    // label as direct text — never a PrimeNG `span.p-button-label`. The first click can
+    // land before Angular finishes wiring the handler (button visible but not yet
+    // interactive), silently doing nothing — verify the `aug-active` class actually
+    // applied and retry if not.
+    const option = this.page.getByRole('button', { name: tenure, exact: true });
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await option.click();
+      const className = await option.getAttribute('class').catch(() => null);
+      if (/\baug-active\b/.test(className ?? '')) {
+        return;
+      }
+      await this.page.waitForTimeout(500);
+    }
+    throw new Error(`[Shop EMI] "${tenure}" plan did not become active after 3 click attempts.`);
   }
 
   async getDetails(): Promise<ShopEmiDetails> {
@@ -121,6 +135,9 @@ export class ShopEmiPage extends BasePage {
   }
 
   async payAndAddToCart(): Promise<void> {
+    // The Pay button briefly re-renders with "Pay ₹null" while the amount recalculates —
+    // wait for a real digit amount so the click doesn't land during that reset.
+    await expect(this.payButton).toHaveText(/^Pay ₹[\d,]/, { timeout: 15_000 });
     await this.payButton.click();
     await this.addedToCartToast.waitFor({ state: 'visible', timeout: 20_000 });
   }
