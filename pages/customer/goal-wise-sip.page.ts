@@ -1,5 +1,6 @@
 import { Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { setPrimeCalendarDate, type CalendarDate } from '../../utils/calendar-helper';
 
 export type GoalType = 'wedding' | 'education' | 'home' | 'emergencies' | 'specialOnes' | 'retirement';
 
@@ -37,6 +38,8 @@ export class GoalWiseSipPage extends BasePage {
   private readonly startPlanningButton: Locator;
   private readonly proceedToPayButton: Locator;
   private readonly frequencyHeading: Locator;
+  private readonly specialDateInput: Locator;
+  private readonly selectAmountButton: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -45,6 +48,11 @@ export class GoalWiseSipPage extends BasePage {
     this.startPlanningButton = page.getByRole('button', { name: /^Start planning$/i });
     this.proceedToPayButton = page.getByRole('button', { name: /^Proceed to pay$/i });
     this.frequencyHeading = page.locator('h3').filter({ hasText: /^Save/ }).first();
+    // Special Ones' first step ("When is the special day?") is a `p-datepicker` text input, not
+    // the year `p-slider` every other goal type uses — confirmed live 2026-09-03. Its own
+    // continue button is labeled "Select amount", not "Start planning".
+    this.specialDateInput = page.locator('input.p-datepicker-input');
+    this.selectAmountButton = page.getByRole('button', { name: /^Select amount$/i });
   }
 
   async open(): Promise<void> {
@@ -128,6 +136,24 @@ export class GoalWiseSipPage extends BasePage {
 
   async clickStartPlanning(): Promise<void> {
     await this.startPlanningButton.click();
+  }
+
+  /**
+   * Special Ones' date step ("When is the special day?") is a `p-datepicker` text input that
+   * arrives pre-filled with a valid default (confirmed live: "01 January 2027"). Picking any
+   * OTHER date drives the same year/month/day picker `setPrimeCalendarDate` already handles for
+   * KYC/profile DOB fields — confirmed live it's the identical PrimeNG widget.
+   */
+  async setSpecialDate(date: CalendarDate): Promise<void> {
+    await setPrimeCalendarDate(this.page, this.specialDateInput, date);
+  }
+
+  async getSpecialDateValue(): Promise<string> {
+    return (await this.specialDateInput.inputValue()).trim();
+  }
+
+  async clickSelectAmount(): Promise<void> {
+    await this.selectAmountButton.click();
   }
 
   /**
