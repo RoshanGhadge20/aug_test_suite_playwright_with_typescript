@@ -2,13 +2,13 @@
 
 **Application:** Augmont Customer Portal (UAT) — `https://cp.gfau.augmont.com/goal-wise-sip`
 **Source CRs:** three user stories — GBSIP-001 (Wedding / Education / Home), GBSIP-002 (Gold Coins), GBSIP-003 (Silver) — pasted into this session, not yet filed as separate tracked documents.
-**Status:** Grounded in live exploration on 2026-09-01 against the existing `Retirement01092026` account (KYC-verified, storage state `customer`). First automation landed the same day: `pages/customer/goal-wise-sip.page.ts` + two specs under `tests/customer/goalwisesip/goal-based-sip/` covering Wedding's positive and negative paths (§6).
+**Status:** Grounded in live exploration on 2026-09-01 against the existing `Retirement01092026` account (KYC-verified, storage state `customer`). First automation landed the same day: `pages/customer/goal-wise-sip.page.ts` + two specs under `tests/customer/goal-based-sip/` covering Wedding's positive and negative paths (§6). Coverage has since grown to include Special Ones, Home, and Education, each in their own subfolder.
 
 ## 1. Objective & Scope
 
 Document the Goal-Based SIP feature (goal creation, tracking, Save More, Withdraw, Rename, Delete) in enough functional detail that Playwright automation can be implemented directly from it, per this repo's conventions (`CLAUDE.md`): Page Objects hold locators/actions only, specs hold assertions, tests tagged `@smoke`/`@regression` + `@customer` + `@goalwisesip`.
 
-**Important naming collision:** `tests/customer/goalwisesip/` already contains 38 `TC_GoalWiseSip_0XX` specs. Those are **not** UI tests — each is a one-line stub that logs a user-segment description (`TC_GoalWiseSip_001_AllUsers.spec.ts` etc., see `goalwisesip.helpers.ts`). They exercise no browser interaction and cover a completely different concept (dashboard user cohorts). Per `[[feedback_goalwisesip_isolated_edits]]`, editing any one of those 38 TCs must never touch shared files — the same isolation discipline should extend to this new work: **new Goal-Based SIP specs should live in their own subfolder** (e.g. `tests/customer/goalwisesip/goal-based-sip/`) or a sibling directory, not interleaved with the existing 38 files, to avoid confusing the two entirely different meanings of "GoalWiseSip."
+**Naming collision, resolved 2026-09-16:** this feature used to share `tests/customer/goalwisesip/` with 38 unrelated `TC_GoalWiseSip_0XX` user-segment stub specs (dashboard user cohorts, no browser interaction — see `[[feedback_goalwisesip_isolated_edits]]`), which made the `@goalwisesip` tag ambiguous between two entirely different concepts. Those 38 stubs have been renamed to `TC_UserWiseSip_0XX` and moved to `tests/customer/userwisesip/` under the `@userwisesip` tag; this feature now lives on its own at `tests/customer/goal-based-sip/`, one subfolder per goal type (`wedding-goal/`, `special-ones-goal/`, `home-goal/`, `education-goal/`), and `@goalwisesip` unambiguously means this feature going forward.
 
 ## 2. Live Exploration Findings (confirmed 2026-09-01)
 
@@ -149,12 +149,12 @@ Confirmed with the team 2026-09-01: Silver goals are not implemented. Do not aut
 
 ## 6. What's Automated So Far (2026-09-01)
 
-`tests/customer/goalwisesip/goal-based-sip/` (both passing, run together and individually):
+`tests/customer/goal-based-sip/` (both passing, run together and individually):
 
 - **`TC_Wedding_Boundary_And_Abandoned_Payment.spec.ts`** (negative) — year slider clamps exactly to 2030/2050 via both ARIA read and push-to-floor/ceiling; budget slider's ARIA bounds match the CR's ₹1,00,000–₹1,00,00,000 exactly; abandoning payment at the summary screen (via `buySummaryPage.cancelSipFlow()`) creates no new Wedding goal.
 - **`TC_Wedding_CreateGoal_Positive.spec.ts`** (positive) — walks goal type → year → budget → Daily frequency → computed SIP amount → Proceed to pay, confirms the `/digital-gold/buy/summary` page correctly reflects the goal's name/frequency/amount, and confirms Proceed To Pay generates a valid payment QR. Stops there per the blocker in item 3 above; does not (and currently cannot) complete payment or verify the goal reaching Pending/appearing under Your Savings.
 
-`tests/customer/goalwisesip/goal-based-sip/special-ones-goal/` (both passing live against UAT, run together and individually):
+`tests/customer/goal-based-sip/special-ones-goal/` (both passing live against UAT, run together and individually):
 
 **Correction to §2.5's assumption:** Special Ones is *not* a clone of the year+budget wizard used elsewhere. Confirmed live 2026-09-03: its step 1 (`/goal-wise-sip/select-date/special-ones`, "When is the special day?") is a `p-datepicker` free-text date input — the same PrimeNG widget `setPrimeCalendarDate` (`utils/calendar-helper.ts`) already drives for KYC/profile DOB fields, now reused via `GoalWiseSipPage.setSpecialDate()`. Its continue button is labeled "Select amount", not "Start planning". From the budget step onward (`/goal-wise-sip/select-amount/special-ones`) the mechanics match: same `p-slider`, same confirmed ₹1,00,000–₹1,00,00,000 bounds, "Start planning"/frequency/payment steps, and "Special Ones" is the Investment Purpose label on the payment summary. Per-goal-type mechanics do differ, as the plan's own open item #4 flagged as a possibility — Emergencies/Retirement still need their own confirmatory pass.
 
