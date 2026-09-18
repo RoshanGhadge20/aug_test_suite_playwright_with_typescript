@@ -1489,7 +1489,11 @@ export class PaymentPage extends BasePage {
 
     const firstRadioBox = bankCards.first().locator('div.p-radiobutton-box');
     await firstRadioBox.waitFor({ state: 'visible' });
-    await firstRadioBox.click();
+    // PrimeNG overlays its own native `input[type=radio]` on top of this visual box, which
+    // sometimes intercepts pointer events and times out a plain click (confirmed live
+    // 2026-09-15) — force it through, same workaround already used elsewhere in this file for
+    // the identical "intercepts pointer events" class of issue.
+    await firstRadioBox.click({ force: true });
     return true;
   }
 

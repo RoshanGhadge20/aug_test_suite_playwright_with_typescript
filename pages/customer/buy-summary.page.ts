@@ -41,7 +41,9 @@ export class BuySummaryPage extends BasePage {
     this.amountValue = page.locator('//span[text()="Amount"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
     this.taxValue = page.locator('//span[text()="Tax"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
     this.totalValue = page.locator('//span[text()="Total Amount"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
-    this.paidFromWallet = page.locator('//span[text()="Paid From Wallet"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
+    // "Paid From Wallet" everywhere except goal-based-sip's Save More flow, which labels the
+    // same field "Paid From Funds" — confirmed live 2026-09-17.
+    this.paidFromWallet = page.locator('//span[text()="Paid From Wallet" or text()="Paid From Funds"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
     this.amountPayable = page.locator('//span[text()="Amount Payable"]/following::span[@class="font-gilroybold text-darkgunmetal"][1]');
     this.cancelBtn = page.getByText('Cancel', { exact: true });
     this.yesCancelBtn = page.getByText('Yes, Cancel', { exact: true });
