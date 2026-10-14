@@ -43,7 +43,8 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Weekly @regression @customer @goalw
       await test.step('TC_GBSIP_SpecialOnes_003 | Select a valid budget within ₹1,00,000-₹1,00,00,000', async () => {
         const bounds = await goalWiseSipPage.getSliderBounds();
         expect(bounds.min).toBe(100_000);
-        expect(bounds.max).toBe(10_000_000);
+        // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+        expect(bounds.max).toBe(1_000_000);
 
         await goalWiseSipPage.setBudget(targetBudget);
         console.log('[TC_GBSIP_SpecialOnes_003_Weekly] Entered target budget:', targetBudget);
@@ -78,7 +79,13 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Weekly @regression @customer @goalw
           '| Expected weekly amount (budget/weeks):', expectedWeeklyAmount.toFixed(2),
         );
         expect(weeklyAmount).toBeGreaterThan(0);
-        expect(Math.abs(weeklyAmount - expectedWeeklyAmount)).toBeLessThanOrEqual(3);
+        // The app divides by a whole number of weeks and rounds, so allow anything between
+        // budget/ceil(weeks) and budget/floor(weeks) (seen 2026-10-06: 88.14 weeks → app ₹1705 vs ₹1701.78).
+        const minWeekly = Math.floor(targetBudget / Math.ceil(numberOfWeeks));
+        const maxWeekly = Math.ceil(targetBudget / Math.floor(numberOfWeeks));
+        console.log('[TC_GBSIP_SpecialOnes_008_Weekly] Accepted weekly range:', minWeekly, '–', maxWeekly);
+        expect(weeklyAmount).toBeGreaterThanOrEqual(minWeekly);
+        expect(weeklyAmount).toBeLessThanOrEqual(maxWeekly);
       });
 
       await test.step('TC_GBSIP_SpecialOnes_009 | Summary reflects the goal-wizard selections', async () => {
@@ -88,7 +95,7 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Weekly @regression @customer @goalw
         console.log('[TC_GBSIP_SpecialOnes_009_Weekly] Verifying summary — frequency:', frequency, '| amount: ₹', weeklyAmount);
         await expect(page.getByText('Special Ones', { exact: true })).toBeVisible();
         await expect(page.getByText('Weekly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${weeklyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${weeklyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // The next-day SIP start rule for amounts at/below ₹1,00,000 was confirmed live for
         // Weekly Wedding SIPs — carried over here as a payment-gateway rule rather than a

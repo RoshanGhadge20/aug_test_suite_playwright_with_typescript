@@ -92,7 +92,7 @@ test.describe('TC_GBSIP_Wedding_Positive_Monthly @regression @customer @goalwise
         console.log('[TC_GBSIP_009_Monthly] Verifying summary — goalType:', goalType, '| frequency:', frequency, '| amount: ₹', monthlyAmount);
         await expect(page.getByText('Wedding', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed live 2026-09-02: unlike Daily/Weekly (next calendar day), a Monthly SIP's
         // start date is the 1st of next month.

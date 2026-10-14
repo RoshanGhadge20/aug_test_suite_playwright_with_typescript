@@ -27,14 +27,27 @@ export class GoldLoanInquiryPage extends BasePage {
     await this.enquireNowHeading.waitFor({ state: 'visible' });
   }
 
-  /** State is a PrimeNG `p-dropdown` — click the trigger, then pick the first available option. */
+  /**
+   * State is a PrimeNG select — click the trigger, then pick the first available option. Newer
+   * PrimeNG renders it as `combobox "Select your state*"` (`p-select`) instead of `div.p-dropdown`.
+   */
   private stateDropdownTrigger(): Locator {
-    return this.page.locator('div.p-dropdown').filter({ visible: true }).first();
+    return this.page
+      .getByRole('combobox', { name: /select your state/i })
+      .or(this.page.locator('div.p-dropdown'))
+      .filter({ visible: true })
+      .first();
   }
 
   async selectFirstAvailableState(): Promise<void> {
-    await this.stateDropdownTrigger().click();
-    const firstOption = this.page.locator('.p-dropdown-panel li[role="option"]').first();
+    const firstOption = this.page
+      .locator('.p-select-overlay li[role="option"], .p-dropdown-panel li[role="option"]')
+      .first();
+    // The first click can land before the form is interactive and not open the list — retry.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await this.stateDropdownTrigger().click();
+      if (await firstOption.waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false)) break;
+    }
     await firstOption.waitFor({ state: 'visible' });
     await firstOption.click();
   }
@@ -68,6 +81,14 @@ export class GoldLoanInquiryPage extends BasePage {
     await this.fillMobile(details.mobile);
     await this.selectFirstAvailableState();
     await this.fillCity(details.city);
+    // For a logged-in user the form re-renders after the State select and can clear the earlier
+    // fields (seen live: "Mobile Number is required" on submit). Re-fill anything that was lost.
+    if ((await this.firstNameInput.inputValue()) !== details.name) {
+      await this.fillName(details.name);
+    }
+    if ((await this.mobileNumberInput.inputValue()) !== details.mobile) {
+      await this.fillMobile(details.mobile);
+    }
     await this.acceptTerms();
     await this.clickSubmit();
   }

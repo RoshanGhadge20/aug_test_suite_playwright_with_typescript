@@ -2092,7 +2092,7 @@ export class MyOrderVerificationPage extends BasePage {
 
   async getNarrationQuantity(): Promise<number | null> {
     const narration = await this.getNarration();
-    const match = narration.match(/([\d.]+)\s*gm/i);
+    const match = narration.match(/([\d.]+)\s*gm?\b/i);
     return match ? parseFloat(match[1]) : null;
   }
 

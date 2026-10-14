@@ -55,13 +55,9 @@ export class BuySummaryPage extends BasePage {
 
   async getBuyingGoldRate(): Promise<number> {
     const text = await this.page.getByText('Buying at ₹', { exact: false }).innerText();
-    const rate = text
-      .replace('Buying at ₹', '')
-      .replace('/ gm', '')
-      .replace('Valid for', '')
-      .split(':')[0]
-      .trim();
-    return Number(rate);
+    // UI shows "Buying at ₹15312.54/g" (older builds: "/ gm")
+    const match = text.match(/₹\s*([\d,]+(?:\.\d+)?)/);
+    return match ? Number(match[1].replace(/,/g, '')) : NaN;
   }
 
   async waitForValidForText(): Promise<void> {

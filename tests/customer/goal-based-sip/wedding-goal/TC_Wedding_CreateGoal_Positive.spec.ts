@@ -91,7 +91,7 @@ test.describe('TC_GBSIP_Wedding_Positive @regression @customer @goalwisesip', ()
         console.log('[TC_GBSIP_009] Verifying summary — goalType:', goalType, '| frequency:', frequency, '| amount: ₹', dailyAmount);
         await expect(page.getByText('Wedding', { exact: true })).toBeVisible();
         await expect(page.getByText('Daily', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${dailyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${dailyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);

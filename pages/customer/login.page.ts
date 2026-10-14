@@ -254,7 +254,15 @@ export class CustomerLoginPage extends BasePage {
     await this.mobileInput().click();
     await this.mobileInput().fill(mobile);
     await this.continueButton().waitFor({ state: 'visible' });
-    await this.continueButton().click();
+    // The first Continue click can land before the page is interactive and silently do nothing
+    // (seen live on UAT, worst right after a restart). Retry until the PIN screen appears.
+    const pinInput = this.securityPinInputs().first();
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await this.continueButton().click();
+      if (await pinInput.isVisible({ timeout: 6_000 }).catch(() => false)) break;
+      if (await pinInput.waitFor({ state: 'visible', timeout: 4_000 }).then(() => true, () => false)) break;
+      console.log(`[customer login] PIN screen not shown after Continue (attempt ${attempt}/3) — retrying`);
+    }
     await this.enterSecurityPin(pin);
     await this.continueButton().click();
 

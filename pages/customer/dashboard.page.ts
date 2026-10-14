@@ -1038,14 +1038,14 @@ export class DashBoardPage extends BasePage {
         if (preferSilver) {
           if (await totalSilverNode.isVisible().catch(() => false)) {
             const silverLine = ((await totalSilverNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?\b/i);
             valueText = (silverMatch?.[1] ?? silverLine).trim();
             metalType = 'Silver';
             return;
           }
           if (await totalGoldNode.isVisible().catch(() => false)) {
             const goldLine = ((await totalGoldNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?\b/i);
             valueText = (goldMatch?.[1] ?? goldLine).trim();
             metalType = 'Gold';
             return;
@@ -1053,14 +1053,14 @@ export class DashBoardPage extends BasePage {
         } else {
           if (await totalGoldNode.isVisible().catch(() => false)) {
             const goldLine = ((await totalGoldNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            const goldMatch = goldLine.match(/Total Gold\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?\b/i);
             valueText = (goldMatch?.[1] ?? goldLine).trim();
             metalType = 'Gold';
             return;
           }
           if (await totalSilverNode.isVisible().catch(() => false)) {
             const silverLine = ((await totalSilverNode.textContent()) ?? '').replace(/\s+/g, ' ').trim();
-            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm/i);
+            const silverMatch = silverLine.match(/Total Silver\s*:?\s*([0-9]+(?:\.[0-9]+)?)\s*gm?\b/i);
             valueText = (silverMatch?.[1] ?? silverLine).trim();
             metalType = 'Silver';
             return;
@@ -1338,7 +1338,7 @@ export class DashBoardPage extends BasePage {
           .first();
         const fallbackGoldNode = candidateCard
           .locator('div.text-18.font-gilroybold')
-          .filter({ hasText: /gm/i })
+          .filter({ hasText: /\d\s*gm?\b/i })
           .first();
 
         const planTypeText = ((await candidateCard
@@ -1379,9 +1379,9 @@ export class DashBoardPage extends BasePage {
 
         if (!totalGoldText) {
           // Keep this fallback generic because card styles/labels can vary across builds.
-          const labelledGoldMatch = cardText.match(/Total Gold\s*([0-9]+(?:\.[0-9]+)?\s*gm)/i);
-          const labelledSilverMatch = cardText.match(/Total Silver\s*([0-9]+(?:\.[0-9]+)?\s*gm)/i);
-          const anyGoldMatch = cardText.match(/([0-9]+(?:\.[0-9]+)?\s*gm)\b/i);
+          const labelledGoldMatch = cardText.match(/Total Gold\s*([0-9]+(?:\.[0-9]+)?\s*gm?)\b/i);
+          const labelledSilverMatch = cardText.match(/Total Silver\s*([0-9]+(?:\.[0-9]+)?\s*gm?)\b/i);
+          const anyGoldMatch = cardText.match(/([0-9]+(?:\.[0-9]+)?\s*gm?)\b/i);
           totalGoldText = (labelledGoldMatch?.[1] ?? labelledSilverMatch?.[1] ?? anyGoldMatch?.[1] ?? '').trim();
           if (labelledGoldMatch?.[1]) {
             metalLabel = 'Gold';

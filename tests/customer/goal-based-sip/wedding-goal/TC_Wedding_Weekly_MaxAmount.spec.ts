@@ -82,7 +82,7 @@ test.describe('TC_GBSIP_Wedding_Weekly_MaxAmount @regression @customer @goalwise
 
         await expect(page.getByText('Wedding', { exact: true })).toBeVisible();
         await expect(page.getByText('Weekly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${weeklyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${weeklyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed live 2026-09-02: a Weekly SIP amount over ₹1,00,000 starts 5 calendar days
         // out (not "tomorrow", the rule for amounts at/below ₹1,00,000 — see the sibling positive

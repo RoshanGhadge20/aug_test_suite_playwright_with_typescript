@@ -40,7 +40,7 @@ test.describe('TC_GBSIP_SpecialOnes_Negative @regression @customer @goalwisesip'
     });
   });
 
-  test('TC_GBSIP_SpecialOnes_004_005 | Special Ones budget selector range is exactly ₹1,00,000 – ₹1,00,00,000', async ({
+  test('TC_GBSIP_SpecialOnes_004_005 | Special Ones budget selector range is exactly ₹1,00,000 – ₹10,00,000', async ({
     page,
     goalWiseSipPage,
   }) => {
@@ -53,11 +53,12 @@ test.describe('TC_GBSIP_SpecialOnes_Negative @regression @customer @goalwisesip'
 
     let bounds = { min: 0, max: 0, current: 0 };
 
-    await test.step('Slider ARIA bounds match ₹1,00,000 min / ₹1,00,00,000 max', async () => {
+    await test.step('Slider ARIA bounds match ₹1,00,000 min / ₹10,00,000 max', async () => {
       bounds = await goalWiseSipPage.getSliderBounds();
       console.log('[TC_GBSIP_SpecialOnes_004_005] Budget slider bounds:', bounds);
       expect(bounds.min).toBe(100_000);
-      expect(bounds.max).toBe(10_000_000);
+      // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+      expect(bounds.max).toBe(1_000_000);
     });
 
     await test.step('A small "-" run moves the value down without going below the floor', async () => {

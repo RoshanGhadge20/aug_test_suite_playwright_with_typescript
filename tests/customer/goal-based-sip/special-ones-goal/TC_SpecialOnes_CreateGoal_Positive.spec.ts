@@ -44,7 +44,8 @@ test.describe('TC_GBSIP_SpecialOnes_Positive @regression @customer @goalwisesip'
         const bounds = await goalWiseSipPage.getSliderBounds();
         console.log('[TC_GBSIP_SpecialOnes_003] Budget slider bounds:', bounds);
         expect(bounds.min).toBe(100_000);
-        expect(bounds.max).toBe(10_000_000);
+        // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+        expect(bounds.max).toBe(1_000_000);
 
         await goalWiseSipPage.setBudget(targetBudget);
         console.log('[TC_GBSIP_SpecialOnes_003] Entered target budget:', targetBudget);
@@ -73,7 +74,7 @@ test.describe('TC_GBSIP_SpecialOnes_Positive @regression @customer @goalwisesip'
         // "Special Ones" confirmed live as the Investment Purpose label on the summary page.
         await expect(page.getByText('Special Ones', { exact: true })).toBeVisible();
         await expect(page.getByText('Daily', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${dailyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${dailyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);

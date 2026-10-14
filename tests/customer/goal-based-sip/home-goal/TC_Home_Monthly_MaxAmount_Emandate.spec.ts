@@ -84,7 +84,7 @@ test.describe('TC_GBSIP_Home_Monthly_MaxAmount_Emandate @regression @customer @g
 
         await expect(page.locator('#sip-information').getByText('Home', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed live for Wedding/Home (TC_Home_Monthly_MaxAmount.spec.ts): a Monthly SIP
         // amount > ₹1,00,000 starts on the 5th of next month, instead of the 1st-of-next-month

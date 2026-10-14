@@ -90,7 +90,7 @@ test.describe('TC_GBSIP_Wedding_Positive_Weekly @regression @customer @goalwises
         console.log('[TC_GBSIP_009_Weekly] Verifying summary — goalType:', goalType, '| frequency:', frequency, '| amount: ₹', weeklyAmount);
         await expect(page.getByText('Wedding', { exact: true })).toBeVisible();
         await expect(page.getByText('Weekly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${weeklyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${weeklyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);

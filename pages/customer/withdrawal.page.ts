@@ -103,7 +103,7 @@ this.silverVaultCard  =page.locator(
     );
     this.totalGoldInGramText = page
       .locator('p.text-18.font-gilroybold')
-      .filter({ hasText: /\d+(\.\d+)?\s*gm/i })
+      .filter({ hasText: /\d+(\.\d+)?\s*gm?\b/i })
       .first();
     this.totalGoldInRsText = page
       .locator('p.text-18.font-gilroybold')
@@ -226,7 +226,7 @@ this.silverVaultCard  =page.locator(
 
   async getTotalGoldValue(): Promise<number> {
     const text = ((await this.totalGoldInGramText.textContent()) ?? '').replace(/\s+/g, ' ');
-    const match = text.match(/([\d]+(?:\.\d+)?)\s*gm/i);
+    const match = text.match(/([\d]+(?:\.\d+)?)\s*gm?\b/i);
     return match ? Number(match[1]) : 0;
   }
 
@@ -1338,7 +1338,8 @@ this.silverVaultCard  =page.locator(
   }
 
   async getAndLogProductCountAndNames(): Promise<{ count: number; names: string[] }> {
-    const productCards = this.page.locator('div.border-2.border-stroke.rounded-2xl.cursor-pointer');
+    // Product card is now an <a> (was a <div>); match on its classes regardless of tag.
+    const productCards = this.page.locator('.border-2.border-stroke.rounded-2xl.cursor-pointer');
     await productCards.first().waitFor({ state: 'visible' });
 
     const count = await productCards.count();
@@ -1409,7 +1410,7 @@ this.silverVaultCard  =page.locator(
       const target =
         (await directTarget.isVisible({ timeout: 2_000 }).catch(() => false)) ? directTarget : reflectedTitleTarget;
       await target.scrollIntoViewIfNeeded().catch(() => {});
-      const styledCard = target.locator('div.border-2.border-stroke.rounded-2xl.cursor-pointer').first();
+      const styledCard = target.locator('.border-2.border-stroke.rounded-2xl.cursor-pointer').first();
       const clickTarget = (await styledCard.isVisible({ timeout: 2_000 }).catch(() => false))
         ? styledCard
         : target.locator('div.cursor-pointer, [cursor="pointer"]').first();
@@ -3132,7 +3133,7 @@ async getVaultDetailsAndClick(
     withdrawalMetal: Number(
       withdrawalMetalText
         ?.replace(`Withdrawal ${metal}:`, '')
-        .replace('gm', '')
+        .replace(/\s*gm?\b/i, '')
         .replace(/,/g, '')
         .trim() ?? '0',
     ),
@@ -3164,7 +3165,7 @@ async getMetalSummary(metalType: 'Gold' | 'Silver') {
     .locator(`p:has-text("Live ${metalType} Price")`)
     .locator('xpath=following-sibling::p[1]');
 
-  await expect(totalLocator).not.toHaveText(/^\s*gm\s*$/, {
+  await expect(totalLocator).not.toHaveText(/^\s*gm?\s*$/, {
     timeout: 15000,
   });
 
@@ -3178,7 +3179,7 @@ async getMetalSummary(metalType: 'Gold' | 'Silver') {
 
   return {
     total: Number(
-      totalText?.replace('gm', '').replace(/,/g, '').trim() ?? '0',
+      totalText?.replace(/\s*gm?\b/i, '').replace(/,/g, '').trim() ?? '0',
     ),
     value: Number(
       valueText?.replace('₹', '').replace(/,/g, '').trim() ?? '0',
@@ -3186,7 +3187,7 @@ async getMetalSummary(metalType: 'Gold' | 'Silver') {
     livePrice: Number(
       livePriceText
         ?.replace('₹', '')
-        .replace('/gm', '')
+        .replace(/\/\s*gm?\b/i, '').replace(/,/g, '')
         .replace(/,/g, '')
         .trim() ?? '0',
     ),
