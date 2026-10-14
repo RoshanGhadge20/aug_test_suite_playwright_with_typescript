@@ -956,6 +956,16 @@ export class PaymentPage extends BasePage {
     const namePattern = new RegExp(this.escapeRegExp(normalized), 'i');
     const codePattern = new RegExp(`^${this.escapeRegExp(bankCode)}$`, 'i');
 
+    // Newer Razorpay checkout renders each bank as `button "HDFC Bank HDFC Bank"`. Match it by
+    // accessible name first: the img-by-code lookup below can hit the Netbanking *tab*, whose
+    // icon strip also contains img "HDFC", and select the tab instead of the bank.
+    const byButtonName = frame
+      .getByRole('button', { name: new RegExp(`^${this.escapeRegExp(normalized)}\\b`, 'i') })
+      .first();
+    if (await byButtonName.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      return { locator: byButtonName, selectedName: normalized };
+    }
+
     const byBankImg = frame.getByRole('img', { name: codePattern }).first();
     if (await byBankImg.isVisible({ timeout: 2_000 }).catch(() => false)) {
       const row = byBankImg.locator('xpath=ancestor::div[@role="button"][1]').first();

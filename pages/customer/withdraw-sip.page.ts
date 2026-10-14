@@ -1,5 +1,5 @@
 import { BasePage } from '@pages/shared/base.page';
-import { Locator, Page } from '@playwright/test';
+import { expect, Locator, Page } from '@playwright/test';
 
 export interface SipDetails {
   sipName: string;
@@ -174,6 +174,22 @@ export class Withdrawsip extends BasePage {
   //   );
   // }
 
+  /**
+   * Click the paginator's next button and wait until the list actually re-renders. The page
+   * shows a loading overlay and keeps the previous page's cards until data arrives, so reading
+   * right after `networkidle` can return page 1's cards again.
+   */
+  private async goToNextSipPage(): Promise<void> {
+    const firstName = this.sipCards.first().locator('p.text-16.font-bold').first();
+    const before = ((await firstName.textContent().catch(() => '')) ?? '').trim();
+    await this.nextPageButton.click();
+    await this.page.locator('.p-blockui').first().waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await expect
+      .poll(async () => ((await firstName.textContent().catch(() => '')) ?? '').trim(), { timeout: 15_000 })
+      .not.toBe(before)
+      .catch(() => console.log('[SIP list] next page did not change the first card within 15s'));
+  }
+
   async selectSipForWithdrawal(
     metal: 'Gold' | 'Silver',
     withdrawalQuantityInput: number
@@ -210,7 +226,7 @@ export class Withdrawsip extends BasePage {
           )?.trim() ?? '';
 
         const quantity = Number(
-          quantityText.match(/([\d.]+)\s*gm/i)?.[1] ?? 0
+          quantityText.match(/([\d.]+)\s*gm?\b/i)?.[1] ?? 0
         );
 
         const amount = Number(
@@ -242,9 +258,7 @@ export class Withdrawsip extends BasePage {
           'No valid SIP found on current page. Moving to next page...'
         );
 
-        await this.nextPageButton.click();
-        await this.page.waitForLoadState('networkidle');
-        await this.page.waitForTimeout(1000);
+        await this.goToNextSipPage();
         continue;
       }
 
@@ -300,7 +314,7 @@ export class Withdrawsip extends BasePage {
           )?.trim() ?? '';
 
         const quantity = Number(
-          quantityText.match(/([\d.]+)\s*gm/i)?.[1] ?? 0
+          quantityText.match(/([\d.]+)\s*gm?\b/i)?.[1] ?? 0
         );
 
         const amount = Number(
@@ -330,9 +344,7 @@ export class Withdrawsip extends BasePage {
           `No SIP matching goal "${goalName}" found on current page. Moving to next page...`
         );
 
-        await this.nextPageButton.click();
-        await this.page.waitForLoadState('networkidle');
-        await this.page.waitForTimeout(1000);
+        await this.goToNextSipPage();
         continue;
       }
 

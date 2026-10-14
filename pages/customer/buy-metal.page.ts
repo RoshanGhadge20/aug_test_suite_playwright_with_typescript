@@ -35,11 +35,16 @@ export class BuyMetalPage extends BasePage {
       .locator('..')
       .locator('input[role="spinbutton"]');
 
-    this.oneTimeClick = page.getByRole('button', { name: 'One-Time' });
+    // Toggle has shipped as button "One-Time", radio "One Time" and (current) button "One Time".
+    const oneTimeName = /^One[\s-]Time$/i;
+    this.oneTimeClick = page
+      .getByRole('button', { name: oneTimeName })
+      .or(page.getByRole('radio', { name: oneTimeName }))
+      .first();
     this.createSipClick = page.getByRole('button', { name: 'Create SIP' });
     this.buyGoldBtn = page.getByRole('button', { name: 'Buy Gold' });
     this.buySilverBtn = page.getByRole('button', { name: 'Buy Silver' });
-    this.oneTimeRadioBtn = page.getByRole('radio', { name: 'One Time' });
+    this.oneTimeRadioBtn = this.oneTimeClick;
     this.investmentDayDropdown = page
       .locator('text=Investment Day')
       .locator('..')
@@ -146,9 +151,9 @@ export class BuyMetalPage extends BasePage {
   }
 
   private async ensureSipModeSelected(): Promise<void> {
-    const sipRadio = this.page.getByRole('radio', { name: /SIP Recommended/i });
+    const sipRadio = this.toggleOption(/SIP Recommended/i);
     if (await sipRadio.isVisible({ timeout: 5_000 }).catch(() => false)) {
-      if (!(await sipRadio.isChecked().catch(() => false))) {
+      if (!(await this.isToggleSelected(sipRadio))) {
         await sipRadio.click();
         await this.waitForBlockUiHidden(15_000);
       }
@@ -157,7 +162,24 @@ export class BuyMetalPage extends BasePage {
 
   private sipFrequencyRadio(frequency: 'weekly' | 'monthly'): Locator {
     const label = frequency === 'monthly' ? 'Monthly' : 'Weekly';
-    return this.page.getByRole('radio', { name: label, exact: true });
+    return this.toggleOption(new RegExp(`^${label}$`));
+  }
+
+  /** Toggle options used to be radios; they now render as buttons marked `aug-active` when selected. */
+  private toggleOption(name: RegExp): Locator {
+    return this.page
+      .getByRole('button', { name })
+      .or(this.page.getByRole('radio', { name }))
+      .first();
+  }
+
+  private async isToggleSelected(option: Locator): Promise<boolean> {
+    if (await option.isChecked().catch(() => false)) return true;
+    return /\baug-active\b/.test((await option.getAttribute('class').catch(() => null)) ?? '');
+  }
+
+  private async expectToggleSelected(option: Locator): Promise<void> {
+    await expect.poll(() => this.isToggleSelected(option), { timeout: 10_000 }).toBe(true);
   }
 
   private async selectInvestmentDayIfVisible(day: string): Promise<void> {
@@ -361,7 +383,7 @@ export class BuyMetalPage extends BasePage {
     const weekly = this.sipFrequencyRadio('weekly');
     await weekly.waitFor({ state: 'visible', timeout: 20_000 });
     await weekly.click();
-    await expect(weekly).toBeChecked({ timeout: 10_000 });
+    await this.expectToggleSelected(weekly);
     await this.waitForBlockUiHidden(15_000);
   }
 
@@ -370,7 +392,7 @@ export class BuyMetalPage extends BasePage {
     const monthly = this.sipFrequencyRadio('monthly');
     await monthly.waitFor({ state: 'visible', timeout: 20_000 });
     await monthly.click();
-    await expect(monthly).toBeChecked({ timeout: 10_000 });
+    await this.expectToggleSelected(monthly);
     await this.waitForBlockUiHidden(15_000);
   }
 
@@ -466,27 +488,31 @@ export class BuyMetalPage extends BasePage {
     console.log(`[SIP DATE] input-meta=${JSON.stringify(startDateMeta)}`);
 
     await this.startDateInput.click();
-    const datePicker = this.page.locator('.p-datepicker');
+    // Newer PrimeNG: popup is a detached `.p-datepicker-panel` overlay (see utils/calendar-helper.ts);
+    // each day is `span.p-datepicker-day[data-date="YYYY-M-D"]` with a 0-based month.
+    const datePicker = this.page.locator('.p-datepicker-panel');
     await datePicker.waitFor({ state: 'visible', timeout: 10_000 });
     const calendarMeta = await datePicker.evaluate((el) => {
-      const selected = el.querySelector('td .p-highlight')?.textContent?.trim() || '';
-      const disabledCount = el.querySelectorAll('td.p-disabled').length;
-      const enabledCount = el.querySelectorAll('td:not(.p-disabled)').length;
+      const selected = el.querySelector('.p-datepicker-day-selected')?.textContent?.trim() || '';
+      const disabledCount = el.querySelectorAll('.p-datepicker-day.p-disabled').length;
+      const enabledCount = el.querySelectorAll('.p-datepicker-day:not(.p-disabled)').length;
       return { selected, disabledCount, enabledCount };
     });
     console.log(`[SIP DATE] calendar-meta=${JSON.stringify(calendarMeta)}`);
 
     let value = '';
     let selectedDay = NaN;
-    const dayMatcher = new RegExp(`^${expectedDay}$`);
 
-    const dateCellButton = datePicker
-      .locator('td:not(.p-disabled):not(.p-datepicker-other-month) span')
-      .filter({ hasText: dayMatcher })
-      .first();
-    await dateCellButton.waitFor({ state: 'visible', timeout: 10_000 });
-    await dateCellButton.click({ force: true });
-    await expect(this.startDateInput).not.toHaveValue('', { timeout: 10_000 });
+    const dataDate = `${expectedYear}-${expectedMonth - 1}-${expectedDay}`;
+    const dateCellButton = datePicker.locator(
+      `span.p-datepicker-day[data-date="${dataDate}"]:not(.p-disabled)`,
+    );
+    if (await dateCellButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await dateCellButton.click({ force: true });
+      await expect(this.startDateInput).not.toHaveValue('', { timeout: 10_000 });
+    } else {
+      console.log(`[SIP DATE] day ${dataDate} not selectable in visible month — falling back to typing`);
+    }
     value = await this.startDateInput.inputValue();
     selectedDay = Number(value.split('/')[0]);
     console.log(`[SIP DATE] after calendar click, inputValue=${value}`);

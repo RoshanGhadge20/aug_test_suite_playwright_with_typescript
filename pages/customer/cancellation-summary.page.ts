@@ -2,7 +2,7 @@ import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { shopLogActualExpected, shopLogGet } from '../../utils/test/shop-log';
 
-const CANCELLATION_CHARGE_RATE = 0.03;
+const CANCELLATION_CHARGE_RATE = 0.02;
 const GST_MULTIPLIER = 1.18;
 
 /** Top-level summary grid shown before expanding the accordion (D, C, refund). */
@@ -111,7 +111,7 @@ export class CancellationSummaryPage extends BasePage {
       differencePayableA: await this.readGridAmount(panel, 'Difference Payable (A)'),
       cancellationChargesB: await this.readGridAmount(
         panel,
-        /Cancellation Charges\(3% of Price on Booking Date\)\(B\)/i,
+        /Cancellation Charges\(2% of Price on Booking Date\)\(B\)/i,
       ),
       totalChargesDebitedAB: await this.readGridAmount(panel, 'Total Charges Debited(A)+(B)'),
       totalChargesDebitedIncGstC:
@@ -150,7 +150,7 @@ export class CancellationSummaryPage extends BasePage {
     const expected = this.calculateExpectedAmounts(screen);
 
     this.assertRefundLine('A — Difference Payable', screen.differencePayableA, expected.differenceA);
-    this.assertRefundLine('B — Cancellation Charges (3%)', screen.cancellationChargesB, expected.cancellationB);
+    this.assertRefundLine('B — Cancellation Charges (2%)', screen.cancellationChargesB, expected.cancellationB);
     this.assertRefundLine('A+B — Charges before GST', screen.totalChargesDebitedAB, expected.chargesAB);
     this.assertRefundLine('C — Charges with GST', screen.totalChargesDebitedIncGstC, expected.chargesC);
     this.assertRefundLine('Refund = D − C', screen.totalRefundableAmount, expected.refundable);

@@ -154,7 +154,12 @@ export class EmiOrderDetailValidationPage extends BasePage {
       expect(installment.dueDate).toMatch(/\d{4}/);
       expect(installment.detailLine).toMatch(/EMI amount\s*₹/i);
       if (expectedInstallmentAmounts[i] != null) {
-        expect(Math.abs(installment.emiAmount - expectedInstallmentAmounts[i])).toBeLessThanOrEqual(0.02);
+        // Last installment absorbs per-month rounding: up to ₹0.005 per installment.
+        const isLast = i === myEmis.installments.length - 1;
+        const tolerance = isLast ? Math.max(0.02, 0.005 * expectedCount) : 0.02;
+        expect(Math.abs(installment.emiAmount - expectedInstallmentAmounts[i])).toBeLessThanOrEqual(
+          tolerance + 1e-9,
+        );
       }
     }
     return myEmis;

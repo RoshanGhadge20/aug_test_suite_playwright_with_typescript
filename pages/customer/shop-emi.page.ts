@@ -41,21 +41,16 @@ export class ShopEmiPage extends BasePage {
   }
 
   /**
-   * My Orders EMI list truncates decimals on early installments; remainder rolls into the last.
-   * e.g. ₹150.91 × 9 → eight × ₹150, last ₹158.19 (150 + 9×0.91).
+   * My Orders EMI list shows every installment at the per-month amount (paise kept); only the
+   * last absorbs the rounding remainder, e.g. 9 months → eight × ₹169.84, last ₹169.82.
+   * The last entry is therefore approximate — see `validateAllInstallmentsPending` tolerance.
    */
   static expectedInstallmentAmounts(emiPerMonth: number, installmentCount: number): number[] {
     if (installmentCount < 1) {
       throw new Error(`installmentCount must be >= 1, got ${installmentCount}`);
     }
     const perMonth = ShopEmiPage.roundMoney(emiPerMonth);
-    const fractionalPart = perMonth - Math.floor(perMonth);
-    if (fractionalPart < 0.001) {
-      return Array.from({ length: installmentCount }, () => perMonth);
-    }
-    const base = Math.floor(perMonth);
-    const last = ShopEmiPage.roundMoney(perMonth * installmentCount - base * (installmentCount - 1));
-    return [...Array.from({ length: installmentCount - 1 }, () => base), last];
+    return Array.from({ length: installmentCount }, () => perMonth);
   }
 
   static expectedInstallmentAmountsForTenure(emiPerMonth: number, emiPlanTenure: string): number[] {

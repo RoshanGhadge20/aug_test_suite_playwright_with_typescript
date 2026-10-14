@@ -82,7 +82,7 @@ test.describe('TC_GBSIP_Home_Daily_MaxAmount @regression @customer @goalwisesip'
 
         await expect(page.locator('#sip-information').getByText('Home', { exact: true })).toBeVisible();
         await expect(page.getByText('Daily', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${dailyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${dailyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);

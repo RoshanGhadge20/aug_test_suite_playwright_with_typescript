@@ -17,7 +17,8 @@ const bankDetails = {
   accountType: dataset.AccountType,
 };
 
-const sipDashboardAmount = '0';
+// Dashboard SIP card shows the plan amount with western grouping, e.g. "SIP: ₹100,000/weekly".
+const sipDashboardAmount = (amount: string): string => Number(amount).toLocaleString('en-US');
 const sipDashboardStatus = dataset.SIPStatus;
 
 test.describe('customer SIP flows @customer-flows', () => {
@@ -107,7 +108,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await dashboardPage.clickViewAll();
       await dashboardPage.validateSipDetailsOnDashboard(
         recreatedPlanName,
-        sipDashboardAmount,
+        sipDashboardAmount(tc001Data.amount),
         sipDashboardStatus,
         tc001Data.frequency,
       );
@@ -177,7 +178,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await dashboardPage.clickViewAll();
       await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        sipDashboardAmount,
+        sipDashboardAmount(tc002Data.amount),
         sipDashboardStatus,
         tc002Data.frequency,
       );
@@ -247,7 +248,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await dashboardPage.clickViewAll();
       await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        sipDashboardAmount,
+        sipDashboardAmount(tc003Data.amount),
         sipDashboardStatus,
         tc003Data.frequency,
       );
@@ -310,7 +311,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await dashboardPage.clickViewAll();
       await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        sipDashboardAmount,
+        sipDashboardAmount(tc004Data.amount),
         sipDashboardStatus,
         tc004Data.frequency,
       );
@@ -395,7 +396,7 @@ test.describe('customer SIP flows @customer-flows', () => {
       await dashboardPage.clickViewAll();
       await dashboardPage.validateSipDetailsOnDashboard(
         planName,
-        sipDashboardAmount,
+        sipDashboardAmount(tc005Data.amount),
         sipDashboardStatus,
         tc005Data.frequency,
       );

@@ -44,7 +44,8 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Monthly @regression @customer @goal
       await test.step('TC_GBSIP_SpecialOnes_003 | Select a valid budget within ₹1,00,000-₹1,00,00,000', async () => {
         const bounds = await goalWiseSipPage.getSliderBounds();
         expect(bounds.min).toBe(100_000);
-        expect(bounds.max).toBe(10_000_000);
+        // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+        expect(bounds.max).toBe(1_000_000);
 
         await goalWiseSipPage.setBudget(targetBudget);
         console.log('[TC_GBSIP_SpecialOnes_003_Monthly] Entered target budget:', targetBudget);
@@ -91,7 +92,7 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Monthly @regression @customer @goal
         console.log('[TC_GBSIP_SpecialOnes_009_Monthly] Verifying summary — frequency:', frequency, '| amount: ₹', monthlyAmount);
         await expect(page.getByText('Special Ones', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed live for Wedding: unlike Daily/Weekly (next calendar day), a Monthly SIP's
         // start date is the 1st of next month — carried over here as a payment-gateway rule

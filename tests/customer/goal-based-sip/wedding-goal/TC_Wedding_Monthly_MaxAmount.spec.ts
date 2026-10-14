@@ -80,7 +80,7 @@ test.describe('TC_GBSIP_Wedding_Monthly_MaxAmount @regression @customer @goalwis
 
         await expect(page.getByText('Wedding', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed with the team 2026-09-02: a Monthly SIP amount > ₹1,00,000 starts on the 5th
         // of next month, instead of the 1st-of-next-month rule that applies at/below ₹99,999

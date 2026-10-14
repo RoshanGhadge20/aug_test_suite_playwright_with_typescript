@@ -98,7 +98,7 @@ test.describe('TC_GBSIP_Home_Monthly_MidAmount @regression @customer @goalwisesi
 
         await expect(page.locator('#sip-information').getByText('Home', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // The key assertion for this scenario: at this mid-range amount, the start date is still
         // the 1st of next month — the "5th of next month" rule only kicks in at the much higher

@@ -194,7 +194,16 @@ test.describe('TC_Referral_003 @regression @customer @referral', () => {
       await bankDialog.getByText('Add New', { exact: false }).click();
 
       await addNewBankPage.fillAndSubmitBankForm(bankDetails);
-      await paymentPage.clickPayButton();
+      // Since 2026-10 submitting a new bank opens the Razorpay eMandate popup directly (no
+      // separate Pay click); a Pay click then just times out behind the loading overlay.
+      const razorpayOpened = await page
+        .locator('iframe[src*="razorpay"]')
+        .first()
+        .waitFor({ state: 'visible', timeout: 15_000 })
+        .then(() => true, () => false);
+      if (!razorpayOpened) {
+        await paymentPage.clickPayButton();
+      }
       await paymentPage.completeEmandatePayment(dataset.ContactNumber, dataset.EmandateBankName);
     });
 

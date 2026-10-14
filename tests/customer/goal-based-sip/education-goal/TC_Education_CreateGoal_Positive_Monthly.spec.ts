@@ -56,7 +56,7 @@ test.describe('TC_GBSIP_Education_Positive_Monthly @regression @customer @goalwi
 
     await expect(page.locator('#sip-information').getByText('Education', { exact: true })).toBeVisible();
     await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+    await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
     // Confirmed live for Wedding/Special Ones/Home: unlike Daily/Weekly (next calendar day), a
     // Monthly SIP's start date is the 1st of next month.

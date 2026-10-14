@@ -157,8 +157,16 @@ test.describe('TC_Withdrawal_ConvertToProduct_011 @customer-flows', () => {
           await page.goto('/dashboard');
           await expect(page).toHaveURL(/dashboard/i);
 
-          const totalSilverAfter = await dashboardPage.getTotalSilverValue();
           const expectedSilverAfter = Number((totalSilverBefore - productGm).toFixed(4));
+          let totalSilverAfter = await dashboardPage.getTotalSilverValue();
+
+          // Balance deduction lands asynchronously after payment — reload until it reflects (max 60s).
+          const deadline = Date.now() + 60_000;
+          while (Math.abs(totalSilverAfter - expectedSilverAfter) >= 0.005 && Date.now() < deadline) {
+            await page.waitForTimeout(5_000);
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            totalSilverAfter = await dashboardPage.getTotalSilverValue();
+          }
 
           console.log(`[${TC011(8)}] Total Silver before/after/expected:`, totalSilverBefore, totalSilverAfter, expectedSilverAfter);
 

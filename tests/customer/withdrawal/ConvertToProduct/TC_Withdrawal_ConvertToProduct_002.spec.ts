@@ -128,7 +128,7 @@ test.describe('TC_Withdrawal_ConvertToProduct_002 @customer-flows', () => {
           throw new Error('Selected product details missing before SIP selection.');
         }
         selectedProductGm = Number(
-          (selectedProductDetails.productWeight.match(/([0-9]+(?:\.[0-9]+)?)\s*gm/i)?.[1] ?? '0').trim(),
+          (selectedProductDetails.productWeight.match(/([0-9]+(?:\.[0-9]+)?)\s*gm?\b/i)?.[1] ?? '0').trim(),
         );
         console.log(`[TC002_PRODUCT_TOTAL_GM] ${selectedProductGm}`);
         const selectedSipDetails = await dashboardPage.deliveryScrollUpAndClickProceedByMatchingSipMetalValue(

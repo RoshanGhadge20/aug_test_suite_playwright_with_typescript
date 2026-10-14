@@ -226,7 +226,8 @@ export async function restoreDefaultCustomerSession(
   }
 
   console.log(`[${logLabel}] Switching from alt ${altMobile} to default ${defaultMobile}.`);
-  await clearCustomerSessionState(page);
+  // A plain storage clear can bounce /login straight back to /dashboard; retry until logged out.
+  await customerLogin.logoutAndReturnToMobileEntry();
   await customerLogin.login(defaultMobile, otp);
   await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
   await persistCustomerStorageState(page);

@@ -100,7 +100,7 @@ export class WithdrawAccountDetailPage extends BasePage {
 
       quantity: Number(
         quantityText
-          ?.replace('gm', '')
+          ?.replace(/\s*gm?\b/i, '')
           .replace(/,/g, '')
           .trim() ?? '0',
       ),
@@ -169,7 +169,7 @@ export class WithdrawAccountDetailPage extends BasePage {
     console.log(`Live Silver Price: ${priceText}`);
 
     return Number(
-      priceText.replace('₹', '').replace('/gm', '').trim()
+      priceText.replace('₹', '').replace(/\/\s*gm?\b/i, '').replace(/,/g, '').trim()
     );
   }
 
@@ -287,7 +287,7 @@ export class WithdrawAccountDetailPage extends BasePage {
     console.log(`Live ${metal} Price: ${priceText}`);
   
     return Number(
-      priceText.replace('₹', '').replace('/gm', '').trim()
+      priceText.replace('₹', '').replace(/\/\s*gm?\b/i, '').replace(/,/g, '').trim()
     );
   }
   async selectUpi(): Promise<string> {

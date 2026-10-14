@@ -74,7 +74,7 @@ test.describe('TC_GBSIP_Retirement_Monthly_MaxAmount @regression @customer @goal
 
         await expect(page.locator('#sip-information').getByText('Retirement', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const today = new Date();
         const expectedStartDate = new Date(today.getFullYear(), today.getMonth() + 1, 5);

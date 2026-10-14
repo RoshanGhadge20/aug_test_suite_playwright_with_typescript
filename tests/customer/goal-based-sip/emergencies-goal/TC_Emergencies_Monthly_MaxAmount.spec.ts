@@ -77,7 +77,7 @@ test.describe('TC_GBSIP_Emergencies_Monthly_MaxAmount @regression @customer @goa
 
         await expect(page.locator('#sip-information').getByText('Emergencies', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         const today = new Date();
         const expectedStartDate = new Date(today.getFullYear(), today.getMonth() + 1, 5);

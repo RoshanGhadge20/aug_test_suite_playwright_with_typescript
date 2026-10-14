@@ -42,7 +42,8 @@ test.describe('TC_GBSIP_SpecialOnes_Weekly_MaxAmount @regression @customer @goal
       await test.step('TC_GBSIP_SpecialOnes_003 | Select a valid budget within ₹1,00,000-₹1,00,00,000', async () => {
         const bounds = await goalWiseSipPage.getSliderBounds();
         expect(bounds.min).toBe(100_000);
-        expect(bounds.max).toBe(10_000_000);
+        // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+        expect(bounds.max).toBe(1_000_000);
 
         await goalWiseSipPage.setBudget(targetBudget);
         console.log('[TC_GBSIP_SpecialOnes_003] Entered target budget:', targetBudget);
@@ -84,7 +85,7 @@ test.describe('TC_GBSIP_SpecialOnes_Weekly_MaxAmount @regression @customer @goal
 
         await expect(page.getByText('Special Ones', { exact: true })).toBeVisible();
         await expect(page.getByText('Weekly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${weeklyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${weeklyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed live for Wedding: a Weekly SIP amount over ₹1,00,000 starts 5 calendar days
         // out (not "tomorrow", the rule for amounts at/below ₹1,00,000). ₹999,999 exceeds that

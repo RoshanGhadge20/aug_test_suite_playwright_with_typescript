@@ -86,7 +86,7 @@ async getWithdrawalAmount(): Promise<number> {
     ),
     totalMetal: Number(
       totalMetalText
-        ?.replace('gm', '')
+        ?.replace(/\s*gm?\b/i, '')
         .replace(/,/g, '')
         .trim(),
     ),

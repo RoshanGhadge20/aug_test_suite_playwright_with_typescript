@@ -41,7 +41,8 @@ test.describe('TC_GBSIP_SpecialOnes_Monthly_MaxAmount @regression @customer @goa
       await test.step('TC_GBSIP_SpecialOnes_003 | Select a valid budget within ₹1,00,000-₹1,00,00,000', async () => {
         const bounds = await goalWiseSipPage.getSliderBounds();
         expect(bounds.min).toBe(100_000);
-        expect(bounds.max).toBe(10_000_000);
+        // Special Ones budget is capped at ₹10 lakh (other goals stay at ₹1 crore) — confirmed 2026-10-06.
+        expect(bounds.max).toBe(1_000_000);
 
         await goalWiseSipPage.setBudget(targetBudget);
         console.log('[TC_GBSIP_SpecialOnes_003] Entered target budget:', targetBudget);
@@ -82,7 +83,7 @@ test.describe('TC_GBSIP_SpecialOnes_Monthly_MaxAmount @regression @customer @goa
 
         await expect(page.getByText('Special Ones', { exact: true })).toBeVisible();
         await expect(page.getByText('Monthly', { exact: true }).first()).toBeVisible();
-        await expect(page.getByText(`₹ ${monthlyAmount}`, { exact: false }).first()).toBeVisible();
+        await expect(page.getByText(new RegExp(`₹\\s?${monthlyAmount}(?![\\d,])`)).first()).toBeVisible();
 
         // Confirmed for Wedding: a Monthly SIP amount > ₹99,999 starts on the 5th of next
         // month, instead of the 1st-of-next-month rule that applies at/below ₹99,999.
