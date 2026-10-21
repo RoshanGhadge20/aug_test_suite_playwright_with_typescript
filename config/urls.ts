@@ -2,8 +2,6 @@ import { env } from './env';
 import type { Panel, ApiService } from './constants';
 import type { EnvName } from './environments';
 import { getTargetEnv } from './environments';
-import type { AdminRole } from './roles';
-import { roleMobileKey } from './roles';
 
 export interface Credential { mobile: string; otp: string; }
 
@@ -59,28 +57,6 @@ export function apiUrl(service: ApiService, envName: EnvName = getTargetEnv()): 
 
 export function apiCreds(service: ApiService, envName: EnvName = getTargetEnv()): Credential {
   return BUNDLES[envName].apiCreds[service];
-}
-
-export function adminRoleCreds(role: AdminRole, envName: EnvName = getTargetEnv()): Credential {
-  const e = env as unknown as Record<string, string>;
-  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
-  return {
-    mobile: e[roleMobileKey(role, prefix)],
-    otp: e[`${prefix}_ADMIN_${role.toUpperCase()}_OTP`] ?? e.ADMIN_OTP ?? '1234',
-  };
-}
-
-/** Full URL for digital-gold spot rates (gBuy / gSell), aligned with `{TEST|UAT}_BASE_URL_BACKEND`. */
-export function digitalGoldRatesUrl(envName: EnvName = getTargetEnv()): string {
-  const base = apiUrl('api-backend', envName).replace(/\/+$/, '');
-  return `${base}/api/digital-gold/rates`;
-}
-
-/** Get the file path for document uploads (PAN, Aadhaar, Signature, Document). */
-export function documentPath(docType: 'PAN_CARD' | 'AADHAAR' | 'SIGNATURE' | 'DOCUMENT', envName: EnvName = getTargetEnv()): string | undefined {
-  const e = env as unknown as Record<string, string | undefined>;
-  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
-  return e[`${prefix}_${docType}_PATH`];
 }
 
 export interface ApiServiceAuthConfig {

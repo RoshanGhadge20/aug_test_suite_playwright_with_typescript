@@ -8,13 +8,9 @@
   "scripts": {
     "test": "playwright test",
     "test:admin": "playwright test --project=admin",
-    "test:admin:uat": "set TARGET_ENV=uat&& set HEADLESS=true&& playwright test --project=admin",
-    "test:customer": "set TARGET_PANEL=customer&& playwright test --project=auth-setup && playwright test --project=customer",
-    "test:customer:uat": "set TARGET_ENV=uat&& set HEADLESS=true&& playwright test --project=customer",
+    "test:customer": "playwright test --project=customer",
     "test:business": "playwright test --project=business",
-    "test:business:uat": "set TARGET_ENV=uat&& set HEADLESS=true&& playwright test --project=business",
     "test:new-admin": "playwright test --project=new-admin",
-    "test:new-admin:uat": "set TARGET_ENV=uat&& set HEADLESS=true&& playwright test --project=new-admin",
     "test:api": "playwright test --project=api-backend --project=api-emi",
     "test:api:backend": "playwright test --project=api-backend",
     "test:api:emi": "playwright test --project=api-emi",
@@ -25,8 +21,7 @@
     "api:dev": "tsx watch src/api/index.ts",
     "api:start": "node dist/api/index.js",
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit",
-    "setup:test-docs": "node testdata/admin/documents/create-test-images.js"
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -37,7 +32,6 @@
     "express": "^4.22.1",
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
-    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -46,7 +40,6 @@
     "@types/node": "^25.6.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
-    "pdf-parse": "^2.4.5",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",

@@ -15,10 +15,6 @@ function buildEnvBlock(prefix: string): Record<string, string> {
     [`${prefix}_NEW_ADMIN_USER_MOBILE`]: '9000000004', [`${prefix}_NEW_ADMIN_USER_OTP`]: '1234',
     [`${prefix}_BACKEND_USER_MOBILE`]: '9000000005', [`${prefix}_BACKEND_USER_OTP`]: '1234',
     [`${prefix}_EMI_USER_MOBILE`]: '9000000006', [`${prefix}_EMI_USER_OTP`]: '1234',
-    [`${prefix}_ADMIN_APPRAISER_MOBILE`]: '9000000007',
-    [`${prefix}_ADMIN_BM_MOBILE`]: '9000000008',
-    [`${prefix}_ADMIN_OPS_MOBILE`]: '9000000009',
-    [`${prefix}_ADMIN_PARTNER_MOBILE`]: '9000000010',
   };
 }
 
@@ -50,29 +46,15 @@ describe('loadEnv (multi-env)', () => {
     expect(() => loadEnv({ ...valid, DEFAULT_ENV: 'production' })).toThrow();
   });
 
-  it('allows the inactive env block to be incomplete (only the active env is required)', () => {
-    // DEFAULT_ENV is 'test', so UAT is the inactive block and may be absent.
+  it('fails when a UAT url is missing', () => {
     const missing = { ...valid } as Record<string, string>;
-    delete missing.UAT_BASE_URL_ADMIN;
-    expect(() => loadEnv(missing)).not.toThrow();
-  });
-
-  it('requires the env block selected by TARGET_ENV', () => {
-    // Selecting uat makes the UAT block the active (required) one.
-    const missing = { ...valid, TARGET_ENV: 'uat' } as Record<string, string>;
     delete missing.UAT_BASE_URL_ADMIN;
     expect(() => loadEnv(missing)).toThrow(/UAT_BASE_URL_ADMIN/);
   });
 
-  it('fails when an active-env base URL is missing', () => {
+  it('fails when a TEST OTP is missing', () => {
     const missing = { ...valid } as Record<string, string>;
-    delete missing.TEST_BASE_URL_ADMIN;
-    expect(() => loadEnv(missing)).toThrow(/TEST_BASE_URL_ADMIN/);
-  });
-
-  it('fails when an active-env admin role credential is missing', () => {
-    const missing = { ...valid } as Record<string, string>;
-    delete missing.TEST_ADMIN_OPS_MOBILE;
-    expect(() => loadEnv(missing)).toThrow(/TEST_ADMIN_OPS_MOBILE/);
+    delete missing.TEST_ADMIN_USER_OTP;
+    expect(() => loadEnv(missing)).toThrow(/TEST_ADMIN_USER_OTP/);
   });
 });

@@ -11,10 +11,6 @@ function setEnv(prefix: string) {
     process.env[`${prefix}_${who}_USER_MOBILE`] = `${prefix.toLowerCase()}-${who.toLowerCase()}-mobile`;
     process.env[`${prefix}_${who}_USER_OTP`] = '1234';
   }
-  for (const role of ['APPRAISER', 'BM', 'OPS', 'PARTNER']) {
-    process.env[`${prefix}_ADMIN_${role}_MOBILE`] = '9000000001';
-    process.env[`${prefix}_ADMIN_${role}_OTP`] = '1234';
-  }
 }
 
 beforeAll(() => {
@@ -53,19 +49,5 @@ describe('urls (env-aware)', () => {
     expect(cfg.otp).toBe('1234');
     expect(cfg.sendOtpPath).toBe('/api/v1/auth/send-otp');
     expect(cfg.verifyOtpPath).toBe('/api/v1/auth/verify-otp');
-  });
-
-  it('digitalGoldRatesUrl uses api-backend base for active env', async () => {
-    process.env.TARGET_ENV = 'test';
-    const mod = await import('../../config/urls');
-    expect(mod.digitalGoldRatesUrl('test')).toBe('http://test-base_url_backend/api/digital-gold/rates');
-    expect(mod.digitalGoldRatesUrl('uat')).toBe('http://uat-base_url_backend/api/digital-gold/rates');
-  });
-
-  it('adminRoleCreds returns mobile+otp for a role/env', async () => {
-    const mod = await import('../../config/urls');
-    const c = mod.adminRoleCreds('ops', 'test');
-    expect(c).toHaveProperty('mobile');
-    expect(c).toHaveProperty('otp');
   });
 });
