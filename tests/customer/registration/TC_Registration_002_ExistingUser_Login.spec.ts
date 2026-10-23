@@ -11,8 +11,7 @@ async function loginUpToOtpVerified(
   mobile: string,
 ): Promise<void> {
   await customerLogin.enterMobileNumber(mobile);
-  await customerLogin.clickContinue();
-  await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+  await customerLogin.continueToOtp();
   await customerLogin.enterOtp(REGISTRATION_OTP);
   await customerLogin.clickVerifyOtp();
   await page.waitForURL((url) => !/\/login\/verify-otp/i.test(url.pathname), { timeout: 20_000 });

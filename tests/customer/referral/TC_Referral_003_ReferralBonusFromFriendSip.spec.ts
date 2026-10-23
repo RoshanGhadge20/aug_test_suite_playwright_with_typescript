@@ -73,8 +73,7 @@ test.describe('TC_Referral_003 @regression @customer @referral', () => {
       console.log(`[TC_Referral_003_2] New unique mobile: ${newMobile}`);
 
       await customerLogin.enterMobileNumber(newMobile);
-      await customerLogin.clickContinue();
-      await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+      await customerLogin.continueToOtp();
 
       await customerLogin.openReferralCodeEntry();
       await customerLogin.enterReferralCode(referralCode);

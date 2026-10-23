@@ -136,7 +136,7 @@ test.describe('TC_Withdrawal_GetCash_007 @customer-flows', () => {
                     );
                     console.log('account details', accountDetails);
                     await withdrawAccountDetailPage.clickUPI();
-                    upiID = await withdrawAccountDetailPage.selectUpi();
+                    upiID = await withdrawAccountDetailPage.getFirstUpiId();
                     console.log(upiID);
                 }
             );

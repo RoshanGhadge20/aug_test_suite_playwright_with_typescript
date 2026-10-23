@@ -14,8 +14,7 @@ test.describe('TC_Registration_005 @regression @customer @registration @slow', (
     const mobile = generateUnregisteredMobile();
     await customerLogin.open();
     await customerLogin.enterMobileNumber(mobile);
-    await customerLogin.clickContinue();
-    await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await customerLogin.continueToOtp();
 
     await test.step('Resend button is hidden while the countdown is running', async () => {
       await expect(customerLogin.otpCountdownText()).toBeVisible();

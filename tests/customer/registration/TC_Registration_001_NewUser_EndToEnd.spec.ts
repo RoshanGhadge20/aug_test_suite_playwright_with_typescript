@@ -33,9 +33,7 @@ test.describe('TC_Registration_001 @smoke @regression @customer @registration', 
 
       await customerLogin.enterMobileNumber(mobile);
       await expect(customerLogin.continueButtonLocator()).toBeEnabled();
-      await customerLogin.clickContinue();
-
-      await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+      await customerLogin.continueToOtp();
       console.log(`[${TC_001(2)}] Landed on OTP screen: ${page.url()}`);
     });
 

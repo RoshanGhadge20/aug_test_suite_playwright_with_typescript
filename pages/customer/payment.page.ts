@@ -1859,6 +1859,40 @@ export class PaymentPage extends BasePage {
    * Digital-gold Buy Now: HDFC Bank → demo Success → payment-success Continue → leave Razorpay.
    */
   async completeNetbankingPaymentBuyNow(bankName: string): Promise<void> {
+    await this.submitNetbankingDemoSuccessBuyNow(bankName);
+    console.log('[BUY PAYMENT] Demo-bank Success clicked — waiting for payment-success Continue…');
+    await this.waitAndClickBuyNowPaymentSuccess(this.razorpayFrame());
+  }
+
+  /**
+   * Digital Shagun (`/digi-gold-transfer/send/review`): same Razorpay buy-now checkout, but after
+   * demo-bank Success the app redirects straight to `/digi-gold-transfer/send/success` — there is
+   * no in-frame "Payment successful → Continue" step, so the buy-now wait would time out.
+   * Confirmed live on UAT 2026-10-14.
+   */
+  async completeShagunNetbankingPayment(
+    contactNumber: string,
+    expectedAmount: number,
+    bankName = 'HDFC Bank',
+  ): Promise<number> {
+    await this.waitForRazorpayFrame();
+    const razorpayAmountRaw = await this.getPriceSummaryAmountFromFrame();
+    const normalized =
+      razorpayAmountRaw > expectedAmount * 10
+        ? Number((razorpayAmountRaw / 100).toFixed(2))
+        : razorpayAmountRaw;
+    console.log(`[SHAGUN PAYMENT] razorpay raw=${razorpayAmountRaw} normalized=${normalized} expected=${expectedAmount}`);
+    expect(Math.abs(normalized - expectedAmount)).toBeLessThanOrEqual(1);
+    await this.fillContactNumber(contactNumber);
+    await this.clickRazorpayContinueBuyNow();
+    await this.selectNetbankingBuyNow();
+    await this.submitNetbankingDemoSuccessBuyNow(bankName);
+    await this.page.waitForURL(/\/digi-gold-transfer\/send\/success/i, { timeout: 60_000 });
+    return normalized;
+  }
+
+  /** Bank pick → optional "Continue and Pay" → demo-bank Success. Shared by buy-now and Shagun. */
+  private async submitNetbankingDemoSuccessBuyNow(bankName: string): Promise<void> {
     await this.waitForRazorpayFrame();
     await this.dismissRazorpayFeeOverlay();
     const frame = this.razorpayFrame();
@@ -1902,9 +1936,6 @@ export class PaymentPage extends BasePage {
         'Razorpay (buy-now): demo-bank Success button was not found/clicked — see [SHOP PAYMENT] DIAG logs above.',
       );
     }
-
-    console.log('[BUY PAYMENT] Demo-bank Success clicked — waiting for payment-success Continue…');
-    await this.waitAndClickBuyNowPaymentSuccess(frame);
   }
 
   /** @deprecated Use {@link completeNetbankingPaymentShop} or {@link completeNetbankingPaymentBuyNow}. */

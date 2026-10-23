@@ -126,6 +126,23 @@ export class CustomerLoginPage extends BasePage {
     }
   }
 
+  /**
+   * Click Continue and wait for the OTP screen. On UAT the first click is intermittently
+   * ignored (stays on mobile entry, no error — seen 2026-10-15), so click again if needed.
+   */
+  async continueToOtp(attempts = 3): Promise<void> {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      await this.clickContinue();
+      const onOtp = await this.page
+        .waitForURL(/\/login\/verify-otp/i, { timeout: 10_000 })
+        .then(() => true, () => false);
+      if (onOtp) {
+        return;
+      }
+    }
+    throw new Error(`Continue did not open the OTP screen after ${attempts} attempts.`);
+  }
+
   async clickVerifyOtp(): Promise<void> {
     await this.verifyOtpButton().click();
   }
@@ -161,8 +178,7 @@ export class CustomerLoginPage extends BasePage {
     await this.open();
     await this.enterMobileNumber(mobile);
     await this.continueButton().waitFor({ state: 'visible' });
-    await this.clickContinue();
-    await this.page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await this.continueToOtp();
     await this.enterOtp(otp);
     await this.clickVerifyOtp();
 

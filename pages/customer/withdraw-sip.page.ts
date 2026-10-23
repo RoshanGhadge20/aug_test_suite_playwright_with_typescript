@@ -190,9 +190,11 @@ export class Withdrawsip extends BasePage {
       .catch(() => console.log('[SIP list] next page did not change the first card within 15s'));
   }
 
+  /** `maxAmount` (optional): only pick a SIP whose withdrawable amount is below it (e.g. UPI limit). */
   async selectSipForWithdrawal(
     metal: 'Gold' | 'Silver',
-    withdrawalQuantityInput: number
+    withdrawalQuantityInput: number,
+    maxAmount?: number
   ): Promise<SipDetails> {
     while (true) {
       const cardCount = await this.sipCards.count();
@@ -239,9 +241,13 @@ export class Withdrawsip extends BasePage {
           amount,
         });
 
-        // Select only if quantity is >= requested withdrawal quantity
-        // and amount is greater than 0
-        if (quantity >= withdrawalQuantityInput && amount > 0) {
+        // Select only if quantity is >= requested withdrawal quantity,
+        // amount is greater than 0 and (when given) below maxAmount
+        if (
+          quantity >= withdrawalQuantityInput &&
+          amount > 0 &&
+          (maxAmount === undefined || amount < maxAmount)
+        ) {
           await card.click();
 
           return {
@@ -266,7 +272,8 @@ export class Withdrawsip extends BasePage {
     }
 
     throw new Error(
-      `No ${metal} SIP found with quantity >= ${withdrawalQuantityInput} gm and amount > 0.`
+      `No ${metal} SIP found with quantity >= ${withdrawalQuantityInput} gm and amount > 0` +
+        (maxAmount === undefined ? '.' : ` and < ₹${maxAmount}.`)
     );
   }
 

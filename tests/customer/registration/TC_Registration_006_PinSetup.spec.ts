@@ -14,8 +14,7 @@ test.describe('TC_Registration_006 @regression @customer @registration', () => {
 
     await customerLogin.open();
     await customerLogin.enterMobileNumber(mobile);
-    await customerLogin.clickContinue();
-    await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await customerLogin.continueToOtp();
     await customerLogin.enterOtp(REGISTRATION_OTP);
     await customerLogin.clickVerifyOtp();
     await page.waitForURL((url) => !/\/login\/verify-otp/i.test(url.pathname), { timeout: 20_000 });
@@ -30,10 +29,18 @@ test.describe('TC_Registration_006 @regression @customer @registration', () => {
       }
       await customerLogin.logoutAndReturnToMobileEntry();
       await customerLogin.enterMobileNumber(mobile);
-      await customerLogin.clickContinue();
-      await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
-      await customerLogin.enterOtp(REGISTRATION_OTP);
-      await customerLogin.clickVerifyOtp();
+      await customerLogin.continueToOtp();
+
+      // Right after logout the app intermittently ignores the OTP submit (seen 2026-10-15:
+      // stayed on OTP with empty boxes) — retry it.
+      const reachedPin = async (): Promise<boolean> =>
+        page.waitForURL(/\/login\/verify-pin/i, { timeout: 10_000 }).then(() => true, () => false);
+      let onPin = false;
+      for (let attempt = 1; attempt <= 3 && !onPin; attempt += 1) {
+        await customerLogin.enterOtp(REGISTRATION_OTP);
+        await customerLogin.clickVerifyOtp();
+        onPin = await reachedPin();
+      }
     }
 
     await page.waitForURL(/\/login\/verify-pin/i, { timeout: 20_000 });

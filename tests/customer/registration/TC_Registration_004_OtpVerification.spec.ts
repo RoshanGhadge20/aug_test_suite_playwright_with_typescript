@@ -8,8 +8,7 @@ test.describe('TC_Registration_004 @regression @customer @registration', () => {
     const mobile = generateUnregisteredMobile();
     await customerLogin.open();
     await customerLogin.enterMobileNumber(mobile);
-    await customerLogin.clickContinue();
-    await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await customerLogin.continueToOtp();
 
     await customerLogin.enterOtp(WRONG_OTP);
     await customerLogin.clickVerifyOtp();
@@ -22,8 +21,7 @@ test.describe('TC_Registration_004 @regression @customer @registration', () => {
     const mobile = generateUnregisteredMobile();
     await customerLogin.open();
     await customerLogin.enterMobileNumber(mobile);
-    await customerLogin.clickContinue();
-    await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await customerLogin.continueToOtp();
 
     await customerLogin.enterOtp(REGISTRATION_OTP);
     await customerLogin.clickVerifyOtp();
