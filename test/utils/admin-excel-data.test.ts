@@ -11,7 +11,7 @@ describe('admin excel data', () => {
 
   it('getLoginData returns partnerNumber', () => {
     const d = getLoginData();
-    expect(d.partnerNumber).toBe('9892403243');
+    expect(d.partnerNumber).toBe('6670305875');
   });
 
   it('getLoginData returns branchName', () => {
@@ -19,13 +19,13 @@ describe('admin excel data', () => {
     expect(d.branchName).toBe('Augmont');
   });
 
-  it('columnValues returns all 5 first names', () => {
-    expect(columnValues('FirstName').length).toBe(5);
+  it('columnValues skips blank rows and returns the single first name', () => {
+    expect(columnValues('FirstName')).toEqual(['Priyanka']);
   });
 
   it('pickFieldValue returns one of the expected first names', () => {
     const name = pickFieldValue('FirstName');
-    expect(['Automation', 'Meera', 'Aarav', 'Kavya', 'Arjun']).toContain(name);
+    expect(['Priyanka']).toContain(name);
   });
 
   it('pickFieldValue is memoised per field (same value on repeated calls)', () => {
