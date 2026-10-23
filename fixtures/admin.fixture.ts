@@ -21,7 +21,10 @@ import { FullReleasePage } from "../pages/admin/full-release.page";
 import { AppraiserRequestPage } from "../pages/admin/appraiser-request.page";
 import { CrlPagePage } from "../pages/admin/crl-page.page";
 import { KycForm60Page } from "../pages/admin/kyc-form60.page";
+import { KycOvdPage } from "../pages/admin/kyc-OVD.page";
 import { ViewKycDetailsPage } from "../pages/admin/view-kyc-details.page";
+import { ReKycPage } from "../pages/admin/re-kyc.page";
+import { IndustryPage } from "../pages/admin/industry.page";
 import { DeleteLoanPage } from "../pages/admin/delete-loan.page";
 import { IncompleteRatingPage } from "../pages/admin/incomplete-rating.page";
 import { PartnerLoanPage } from "../pages/admin/partner-loan.page";
@@ -59,11 +62,9 @@ import { WaiverTypePage } from "../pages/admin/waiver-type.page";
 import { LoanDefectsPage } from "../pages/admin/loan-defects.page";
 import type { AdminRole } from "../config/roles";
 import { adminRoleCreds } from "../config/urls";
-import { storageStatePath } from "../config/constants";
 import { getTargetEnv } from "../config/environments";
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "fs";
-import path from "path";
 import { getKycFilePaths } from "../utils/data/test-file-paths";
+import { loginWithSessionCache } from "../utils/auth/admin-session-cache";
 
 type AdminFixtures = {
   adminLogin: AdminLoginPage;
@@ -95,7 +96,10 @@ type AdminFixtures = {
   appraiserRequest: AppraiserRequestPage;
   crlPage: CrlPagePage;
   kycForm60: KycForm60Page;
+  kycOvd: KycOvdPage;
   viewKycDetails: ViewKycDetailsPage;
+  reKyc: ReKycPage;
+  industry: IndustryPage;
   deleteLoan: DeleteLoanPage;
   incompleteRating: IncompleteRatingPage;
   partnerLoan: PartnerLoanPage;
@@ -134,83 +138,18 @@ type AdminFixtures = {
 };
 
 export const test = base.extend<AdminFixtures>({
-  // The admin app stores its auth token in sessionStorage, which Playwright's built-in storageState
-  // cannot capture. Strategy:
-  //   1. If a saved sessionStorage file exists, inject it via addInitScript before navigation and
-  //      verify the dashboard is reachable — skipping OTP login entirely.
-  //   2. If the file is missing or the session has expired, log in fresh via OTP, then persist
-  //      both the regular storage state AND the sessionStorage to disk for the next run.
-  page: async ({ page }, use) => {
-    const env = getTargetEnv();
-    const storagePath = storageStatePath(env, "admin");
-    const ssPath = path.join(path.dirname(storagePath), "admin-session-storage.json");
-
-    let sessionRestored = false;
-
-    if (existsSync(ssPath) && existsSync(storagePath)) {
-      // Restore cookies from the saved Playwright storage state (admin.json).
-      const storedState = JSON.parse(readFileSync(storagePath, "utf-8")) as {
-        cookies?: Array<Record<string, unknown>>;
-        origins?: Array<{ origin: string; localStorage: Array<{ name: string; value: string }> }>;
-      };
-      if (storedState.cookies?.length) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await page.context().addCookies(storedState.cookies as any);
-      }
-
-      // Inject sessionStorage + localStorage via addInitScript (before the first navigation).
-      const sessionData: Record<string, string> = JSON.parse(readFileSync(ssPath, "utf-8"));
-      const localData: Record<string, string> = {};
-      for (const origin of storedState.origins ?? []) {
-        for (const item of origin.localStorage ?? []) {
-          localData[item.name] = item.value;
-        }
-      }
-      await page.addInitScript(
-        (data: { session: Record<string, string>; local: Record<string, string> }) => {
-          for (const [k, v] of Object.entries(data.session)) {
-            window.sessionStorage.setItem(k, v);
-          }
-          for (const [k, v] of Object.entries(data.local)) {
-            window.localStorage.setItem(k, v);
-          }
-        },
-        { session: sessionData, local: localData },
-      );
-
-      await page.goto("/");
-      await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
-
-      const landedUrl = page.url();
-      console.log(`[admin fixture] URL after session restore: ${landedUrl}`);
-      sessionRestored = !landedUrl.toLowerCase().includes("login");
-
-      if (sessionRestored) {
-        console.log("[admin fixture] Session restored (cookies + sessionStorage) — skipping OTP login.");
-      } else {
-        console.log("[admin fixture] Saved session invalid — performing fresh OTP login and saving new session.");
-      }
-    }
-
-    if (!sessionRestored) {
-      // No valid session on disk — log in via OTP and persist fresh session files.
+  page: [
+    async ({ page }, use) => {
       const login = new AdminLoginPage(page);
       const { mobile, otp } = adminRoleCreds("admin");
-      await login.login(mobile, otp);
-
-      mkdirSync(path.dirname(storagePath), { recursive: true });
-      const state = await page.context().storageState();
-      writeFileSync(storagePath, JSON.stringify(state, null, 2));
-
-      const newSessionData: Record<string, string> = await page.evaluate(() =>
-        Object.fromEntries(Object.entries(window.sessionStorage)),
-      );
-      writeFileSync(ssPath, JSON.stringify(newSessionData, null, 2));
-      console.log(`[admin fixture] Fresh session saved to ${ssPath}`);
-    }
-
-    await use(page);
-  },
+      const env = getTargetEnv();
+      await loginWithSessionCache(page, "admin", env, async () => {
+        await login.login(mobile, otp);
+      });
+      await use(page);
+    },
+    { scope: "test", timeout: 90_000 },
+  ],
   adminLogin: async ({ page }, use) => {
     await use(new AdminLoginPage(page));
   },
@@ -282,8 +221,17 @@ export const test = base.extend<AdminFixtures>({
   kycForm60: async ({ page }, use) => {
     await use(new KycForm60Page(page));
   },
+  kycOvd: async ({ page }, use) => {
+    await use(new KycOvdPage(page));
+  },
   viewKycDetails: async ({ page }, use) => {
     await use(new ViewKycDetailsPage(page));
+  },
+  reKyc: async ({ page }, use) => {
+    await use(new ReKycPage(page));
+  },
+  industry: async ({ page }, use) => {
+    await use(new IndustryPage(page));
   },
   deleteLoan: async ({ page }, use) => {
     await use(new DeleteLoanPage(page));

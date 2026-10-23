@@ -140,7 +140,8 @@ export class FullReleasePage extends AdminBasePage {
   private readonly netBanking = () =>
     this.page.locator("xpath=//img[@alt='netbanking']");
   // PO10_QuickPayment.loc_selPayment
-
+  private readonly customerUniqID = () =>
+    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
   // PO13_RenewLoan.loc_btnYes
   private readonly btnYesRenew = () =>
     this.page.locator("xpath=//span[contains(.,'Yes')]");
@@ -216,14 +217,6 @@ export class FullReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
   }
 
-  // ── Actions (from Flow18_FullReleaseLoan.fullReleaseOnlinePay) ────────────
-
-  /**
-   * Port of Java Flow18_FullReleaseLoan.fullReleaseOnlinePay().
-   *
-   * Navigates to Loan Details, reads customer ID, clicks Jewellery Release → Full Release → Proceed,
-   * selects PAYMENT GATEWAY / netbanking → Confirm → Yes → Razorpay iframe / SBI / Success popup.
-   */
   async fullReleaseOnlinePay(): Promise<void> {
     const data = getLoginData();
     await this.expandSidebar();
@@ -234,8 +227,8 @@ export class FullReleasePage extends AdminBasePage {
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
     await this.page.waitForTimeout(5000);
+    await this.customerUniqID().fill(customerData.customerId.trim());
     console.log(customerData.customerId);
     await this.waitForLoaderToDisappear();
     await this.filterbtn().click();
@@ -486,5 +479,135 @@ export class FullReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(500);
     await this.btnUpdate().click();
     await this.waitForLoaderToDisappear();
+  }
+  async fullReleaseCronPay(): Promise<void> {
+    const data = getLoginData();
+    await this.expandSidebar();
+    await this.page.waitForTimeout(5000);
+    await this.loanManagement().click();
+    await this.page.waitForTimeout(2000);
+    const el = this.loanDetails();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.textField().fill(customerData.customerId.trim());
+    await this.page.waitForTimeout(5000);
+    console.log(customerData.customerId);
+    await this.waitForLoaderToDisappear();
+    await this.filterbtn().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    // Read customer ID
+    const element = this.page.locator(
+      "xpath=(//td[@class='ui-resizable-column p-element p-frozen-column ng-star-inserted'])[1]",
+    );
+    const str = (await element.innerText()).trim();
+
+    await this.kebabMenu().click();
+    await this.waitForLoaderToDisappear();
+    await this.jewllaryRelease().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.fullReleaseBtn().click();
+
+    await this.page.waitForTimeout(5000);
+
+    const proceed = this.page.locator(
+      "//button[.//span[normalize-space()='Proceed']]",
+    );
+
+    await proceed.waitFor({ state: "visible", timeout: 30000 });
+
+    //await proceed.scrollIntoViewIfNeeded();
+    await proceed.click();
+    console.log("Proceed button is visible, clicking..." + proceed);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.waitForLoaderToDisappear();
+
+    const payment = this.selPayment();
+
+    await payment.waitFor({
+      state: "visible",
+      timeout: 30000,
+    });
+
+    console.log("Payment count:", await payment.count());
+    await payment.scrollIntoViewIfNeeded();
+
+    const options = await payment.locator("option").allTextContents();
+
+    console.log("Payment dropdown options:", options);
+
+    await this.page.waitForFunction(() => {
+      const select = document.querySelector(
+        "select[name='showPaymentValue']",
+      ) as HTMLSelectElement;
+
+      return select && select.options.length > 1;
+    });
+    await this.page.waitForTimeout(5000);
+    await this.selPayment().selectOption({ label: "CRON" });
+    await this.netBanking().click();
+    await this.waitForLoaderToDisappear();
+    await expect(this.btnConfirm()).toBeVisible();
+    await this.btnConfirm().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.btnYesAssign().click();
+    await this.page.waitForTimeout(5000);
+    // Switch into Razorpay iframe
+    const iframeEl = this.page.locator(
+      "xpath=//iframe[@class='razorpay-checkout-frame']",
+    );
+    await iframeEl.waitFor({ state: "attached" });
+    const frame =
+      this.page.frame({ url: /razorpay/ }) ??
+      this.page.frames().find((f) => f.url().includes("razorpay"));
+    if (frame) {
+      await frame.waitForTimeout(5000);
+      await frame.fill(
+        "xpath=//input[@placeholder='Search for Banks']",
+        "State Bank of India",
+      );
+      await frame.waitForTimeout(5000);
+      await frame.click("xpath=(//span[contains(.,'State Bank of India')])[1]");
+      const popupPromise = this.page.context().waitForEvent("page");
+      await frame.click("xpath=//button[contains(.,'Continue & Pay')]");
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    } else {
+      // fallback: use frameLocator
+      const razorFrame = this.page.frameLocator(
+        "xpath=//iframe[@class='razorpay-checkout-frame']",
+      );
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=//input[@placeholder='Search for Banks']")
+        .fill("State Bank of India");
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=(//span[contains(.,'State Bank of India')])[1]")
+        .click();
+      const popupPromise = this.page.context().waitForEvent("page");
+      await razorFrame
+        .locator("xpath=//button[contains(.,'Continue & Pay')]")
+        .click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    }
+    await this.page.waitForTimeout(2000);
   }
 }

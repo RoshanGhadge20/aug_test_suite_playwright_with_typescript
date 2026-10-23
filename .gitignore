@@ -2,6 +2,10 @@ node_modules/
 dist/
 .env
 .env.local
+
+# Real personal documents used as local-only test fixtures (never commit — see
+# testdata/admin/documents/README.md). Wire the actual path via an env var instead.
+testdata/admin/documents/private/
 storage/*
 !storage/.gitkeep
 reports/*

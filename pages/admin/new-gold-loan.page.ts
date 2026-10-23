@@ -2,39 +2,12 @@ import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
-import customerData from "../../testdata/admin/documents/customerData.json";
 import fs from "fs";
 
-/**
- * Port of Java: PO04_NewGoldLoan (locators) + Flow04_NewGoldLoan (actions)
- *
- * Cross-page locator notes:
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `branchDropdown` is an inline locator from Flow04 (same as CustomerManagementPage).
- *   - `customerManagementBtn` re-declares PO_CustomerManagement.loc_customer (same XPath).
- *   - `allCustomers` re-declares PO_CustomerManagement.loc_allcustomer (same XPath).
- *   - `firstNameFilter` re-declares PO01_KycSel.loc_firstName (same XPath).
- *   - `filterbtn` re-declares PO01_KycSel.loc_filterbtn (same XPath).
- *   - `imgCamera` re-declares PO01_KycSel.loc_imgCamera (same XPath).
- *
- * Omitted loginWith* calls:
- *   - Flow04_NewGoldLoan.validateGoldLoan() called Flow_LoginLogout.loginWithAppraiser() and
- *     Flow_LoginLogout.logout() — OMITTED. Role switching must be done by the caller via loginAs(role).
- *
- * File upload TODOs:
- *   - validateBasicDetails(): Income-generating document upload via sendKeys to (//input[@type='file'])[1].
- *     Best-effort Playwright: setInputFiles(). Caller must supply documentPath.
- *   - validateBankDetails(): Bank document upload via sendKeys to //input[@type='file'].
- *     Best-effort Playwright: setInputFiles(). Caller must supply documentPath.
- *     Both flagged DONE_WITH_CONCERNS — paths must be wired from test config/env vars.
- */
 export class NewGoldLoanPage extends AdminBasePage {
   constructor(page: Page) {
     super(page);
   }
-
-  // ── Locators (from PO04_NewGoldLoan) ──────────────────────────────────────
 
   private readonly kebabMenu = () =>
     this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
@@ -51,21 +24,19 @@ export class NewGoldLoanPage extends AdminBasePage {
   private readonly selectAppraiser = () =>
     this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
   private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
+    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique ID']");
   private readonly kebabMenu1 = () =>
     this.page.locator(
       "xpath=(//mat-row[.//*[contains(text(),'New Loan')]]//mat-icon[normalize-space()='more_vert'])[1]",
     );
-  private readonly kebabMenu2 = () =>
-    this.page.locator(
-      "xpath=(//mat-row[.//*[contains(text(),'Renew Loan')]]//mat-icon[normalize-space()='more_vert'])[1]",
-    );
+  private readonly customerField = () =>
+    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
   private readonly applyLoan = () =>
     this.page.locator(
       "xpath=//button[contains(@class,'mat-menu-item') and normalize-space(text())='Apply Loan']",
     );
   private readonly btnOk = () =>
-    this.page.locator("xpath=//button[@type='submit']");
+    this.page.locator("xpath=(//button[@type='submit'])[2]");
   private readonly btnNext = () =>
     this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
   private readonly txtNameField = () =>
@@ -120,13 +91,15 @@ export class NewGoldLoanPage extends AdminBasePage {
     );
   private readonly loanAmountField = () =>
     this.page.locator(
-      "//td[normalize-space()='Loan Amount']/following-sibling::td[1]",
+      "//tr[td[normalize-space()='Loan Amount']]/td[@class='currency']",
     );
   private readonly document = () =>
     this.page.locator("xpath=(//input[@type='file'])[1]");
+  private readonly alreadyExistsAlert = () =>
+    this.page.locator(
+      "xpath=//*[@role='alertdialog'][contains(normalize-space(.),'already Exists')]",
+    );
 
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
   private readonly profile = () =>
     this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
@@ -161,14 +134,6 @@ export class NewGoldLoanPage extends AdminBasePage {
       "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
     );
 
-  // ── Actions (from Flow04_NewGoldLoan) ──────────────────────────────────────
-
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateGoldLoan().
-   *
-   * NOTE: loginWithAppraiser() and logout() calls are OMITTED.
-   * Role switching must be handled by the caller via loginAs('appraiser').
-   */
   async validateGoldLoan(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(3000);
@@ -178,8 +143,6 @@ export class NewGoldLoanPage extends AdminBasePage {
 
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -190,7 +153,14 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.allCustomers().click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    // await this.firstNameFilter().fill(data.firstName);
+    const freshCustomerId = String(
+      JSON.parse(
+        fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
+      ).customerId,
+    ).trim();
+    await this.customerField().fill(freshCustomerId);
+    console.log(freshCustomerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(15000);
 
@@ -203,10 +173,21 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.startNewGL().click();
     await this.waitForLoaderToDisappear();
-
     await this.btnAdd().click();
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(5000);
+    const alreadyExists = await this.alreadyExistsAlert()
+      .waitFor({ state: "visible", timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (alreadyExists) {
+      await this.page
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      await this.page.waitForTimeout(1000);
+    } else {
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(5000);
+    }
 
     await this.appraisalRequest().waitFor({ state: "visible" });
     await this.appraisalRequest().click();
@@ -216,8 +197,8 @@ export class NewGoldLoanPage extends AdminBasePage {
     console.log(
       fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
     );
-    await this.textField().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    await this.textField().fill(freshCustomerId);
+    console.log(freshCustomerId);
 
     //await this.textField().fill(data.firstName);
     await this.waitForLoaderToDisappear();
@@ -240,10 +221,10 @@ export class NewGoldLoanPage extends AdminBasePage {
 
     await this.jsClick(this.kebabMenu1());
     await this.jsClick(this.applyLoan());
-
+    await this.page.waitForTimeout(3000);
     await this.btnOk().click();
     await this.waitForLoaderToDisappear();
-
+    await this.page.waitForTimeout(30000);
     await this.validateBasicDetails();
     await this.validateNomineeDetails();
     await this.validateOrnaments();
@@ -252,12 +233,6 @@ export class NewGoldLoanPage extends AdminBasePage {
     //await this.validateBankDetails();
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateBasicDetails().
-   *
-   * TODO(port): Income-generating document upload — Java used sendKeys to (//input[@type='file'])[1].
-   * Best-effort Playwright: setInputFiles(documentPath). Caller must supply documentPath.
-   */
   async validateBasicDetails(documentPath?: string): Promise<void> {
     await this.page.waitForTimeout(3000);
 
@@ -266,18 +241,11 @@ export class NewGoldLoanPage extends AdminBasePage {
     );
     await purposeDropdown.scrollIntoViewIfNeeded();
     await purposeDropdown.selectOption({ label: "Business Expansion" });
-
-    // TODO(port): Income-generating document upload — Java used sendKeys to hidden file input.
-    // Best-effort Playwright: setInputFiles(documentPath). documentPath must be supplied from test config/env vars.
-
     const nextButton = this.btnNext();
     await nextButton.scrollIntoViewIfNeeded();
     await this.jsClick(this.btnNext());
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateNomineeDetails().
-   */
   async validateNomineeDetails(): Promise<void> {
     await this.txtNameField().waitFor({ state: "visible" });
     await this.page.waitForTimeout(500);
@@ -304,9 +272,6 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.jsClick(this.btnNext());
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateOrnaments().
-   */
   async validateOrnaments(): Promise<void> {
     await this.page.waitForTimeout(5000);
     await this.page.evaluate("window.scrollBy(0, 1000)");
@@ -417,17 +382,13 @@ export class NewGoldLoanPage extends AdminBasePage {
       }
     }
 
-    // ===== Outside both loops =====
-
     const nextButton = this.btnNext();
     await nextButton.evaluate((el) =>
       (el as any).scrollIntoView({ behavior: "smooth", block: "center" }),
     );
     await this.page.waitForTimeout(3000);
     await this.jsClick(this.btnNext());
-  } /**
-   * Port of Java Flow04_NewGoldLoan.enterGrossAndDeductionDecimal().
-   */
+  }
   async enterGrossAndDeductionDecimal(): Promise<void> {
     const grossWt = 10.0 + Math.random() * 40.0;
     const maxDed = Math.min(1.0, grossWt);
@@ -446,11 +407,17 @@ export class NewGoldLoanPage extends AdminBasePage {
   async validateFICPage(): Promise<void> {
     await this.page.waitForTimeout(5000);
 
-    await this.selPartner().selectOption({ label: "KHARATMOL SK" });
+    // await this.selPartner().selectOption({ label: "KHARATMOL SK" });
+    // await this.page.waitForTimeout(4000);
+
+    // await this.selScheme().selectOption({
+    //   label: "[ALL] PURPOSE IGL +CONSUMPTION (0 - 3000000)",
+    // });
+    await this.selPartner().selectOption({ label: "ARVOG ARV10" });
     await this.page.waitForTimeout(4000);
 
     await this.selScheme().selectOption({
-      label: "[ALL] PURPOSE IGL +CONSUMPTION (0 - 3000000)",
+      label: "[ALL] TEST GOLD LOAN FOR ARVOG PARTNER (0 - 1500000)",
     });
     await this.page.waitForTimeout(2000);
 
@@ -471,12 +438,6 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.jsClick(this.btnNext());
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateBankDetails().
-   *
-   * TODO(port): Bank document upload — Java used sendKeys to //input[@type='file'].
-   * Best-effort Playwright: setInputFiles(). Caller must supply documentPath.
-   */
   async validateBankDetails(documentPath?: string): Promise<void> {
     const data = getLoginData();
 
@@ -506,9 +467,6 @@ export class NewGoldLoanPage extends AdminBasePage {
 
     await this.bankAccount().fill(data.accountNumber);
     await this.waitForLoaderToDisappear();
-
-    // TODO(port): Bank document upload — Java used sendKeys to //input[@type='file'].
-    // Best-effort Playwright: setInputFiles(). documentPath must be supplied from test config/env vars.
     if (documentPath) {
       const fileInput = this.page.locator("xpath=//input[@type='file']");
       await this.page.waitForTimeout(7000);
@@ -533,15 +491,29 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.jsClick(this.btnNext());
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateBankDetailsWithAdvanceCash().
-   */
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+    const tokenBefore = await this.page
+      .evaluate(() => window.localStorage.getItem("UserDetails"))
+      .catch(() => null);
     await this.page.reload();
+    await this.page.waitForLoadState("networkidle").catch(() => {});
+    await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(15000);
 
-    await this.page.waitForTimeout(2000);
-    await this.page.waitForLoadState("networkidle");
+    const tokenAfter = await this.page
+      .evaluate(() => window.localStorage.getItem("UserDetails"))
+      .catch(() => null);
+    if (
+      /\/auth\/|login/i.test(this.page.url()) ||
+      (tokenBefore && !tokenAfter)
+    ) {
+      throw new Error(
+        `Session was logged out by the refresh on Bank Details (url: ${this.page.url()}, ` +
+          `token before: ${!!tokenBefore}, after: ${!!tokenAfter}).`,
+      );
+    }
     const loanAmtEl = this.loanAmountField();
     //await loanAmtEl.evaluate((el) => (el as any).scrollIntoView(true));
 
@@ -581,17 +553,14 @@ export class NewGoldLoanPage extends AdminBasePage {
       (el as any).scrollIntoView({ block: "center" }),
     );
     await advanceCashEl.clear();
-    await advanceCashEl.fill(numericValue);
     await this.page.waitForTimeout(4000);
-
-    await this.page.waitForTimeout(5000);
+    await advanceCashEl.fill(numericValue);
+    await this.page.keyboard.press("Tab");
+    await this.page.waitForTimeout(4000);
+    await this.page.waitForTimeout(30000);
     await this.jsClick(this.btnNext());
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.safeClick().
-   * Clicks the Next button using jsClick for reliability.
-   */
   async safeClick(): Promise<void> {
     await this.jsClick(this.btnNext());
   }

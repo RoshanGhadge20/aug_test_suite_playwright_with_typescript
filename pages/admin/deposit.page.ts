@@ -1,25 +1,28 @@
-import { Page } from '@playwright/test';
-import { AdminBasePage } from './admin-base.page';
+import { Page } from "@playwright/test";
+import { AdminBasePage } from "./admin-base.page";
 
-/**
- * Port of Java: PO45_Deposit (locators only — no dedicated flow class defines a deposit() method;
- * locators are referenced by Flow67/69/70 indirectly via shared approval steps).
- *
- * NOTE: PO45_Deposit contains only four locators; no standalone flow method was found for it.
- * The locators are kept here for completeness and future reuse.
- */
 export class DepositPage extends AdminBasePage {
-  constructor(page: Page) { super(page); }
+  constructor(page: Page) {
+    super(page);
+  }
 
   // ── Locators (from PO45_Deposit) ─────────────────────────────────────────
 
-  private readonly deposit = () => this.page.locator("xpath=//span[normalize-space()='Deposit']");
+  private readonly deposit = () =>
+    this.page.locator("xpath=//span[normalize-space()='Deposit']");
 
-  private readonly btnEdit = () => this.page.locator("xpath=//button[contains(@class,'apply-kyc') and normalize-space()='Edit']");
+  private readonly btnEdit = () =>
+    this.page.locator(
+      "xpath=//button[contains(@class,'apply-kyc') and normalize-space()='Edit']",
+    );
 
-  private readonly btndone = () => this.page.locator("xpath=//button//span[normalize-space()='Done']");
+  private readonly btndone = () =>
+    this.page.locator("xpath=//button//span[normalize-space()='Done']");
 
-  private readonly btnYes = () => this.page.locator("xpath=//button[contains(@class,'mat-raised-button')]//span[normalize-space()='Yes']");
+  private readonly btnYes = () =>
+    this.page.locator(
+      "xpath=//button[contains(@class,'mat-raised-button')]//span[normalize-space()='Yes']",
+    );
 
   // ── Actions ───────────────────────────────────────────────────────────────
 

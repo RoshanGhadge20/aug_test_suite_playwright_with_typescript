@@ -2,6 +2,7 @@ import { env } from './env';
 import type { Panel, ApiService } from './constants';
 import type { EnvName } from './environments';
 import { getTargetEnv } from './environments';
+import { roleMobileKey, type AdminRole } from './roles';
 
 export interface Credential { mobile: string; otp: string; }
 
@@ -57,6 +58,58 @@ export function apiUrl(service: ApiService, envName: EnvName = getTargetEnv()): 
 
 export function apiCreds(service: ApiService, envName: EnvName = getTargetEnv()): Credential {
   return BUNDLES[envName].apiCreds[service];
+}
+
+export function adminRoleCreds(role: AdminRole, envName: EnvName = getTargetEnv()): Credential {
+  const e = env as unknown as Record<string, string>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return {
+    mobile: e[roleMobileKey(role, prefix)],
+    otp: e[`${prefix}_ADMIN_${role.toUpperCase()}_OTP`] ?? e.ADMIN_OTP ?? '1234',
+  };
+}
+
+/** Full URL for digital-gold spot rates (gBuy / gSell), aligned with `{TEST|UAT}_BASE_URL_BACKEND`. */
+export function digitalGoldRatesUrl(envName: EnvName = getTargetEnv()): string {
+  const base = apiUrl('api-backend', envName).replace(/\/+$/, '');
+  return `${base}/api/digital-gold/rates`;
+}
+
+/** Get the file path for document uploads (PAN, Aadhaar, Signature, Document, Aadhaar XML). */
+export function documentPath(docType: 'PAN_CARD' | 'AADHAAR' | 'SIGNATURE' | 'DOCUMENT' | 'AADHARXML', envName: EnvName = getTargetEnv()): string | undefined {
+  const e = env as unknown as Record<string, string | undefined>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return e[`${prefix}_${docType}_PATH`];
+}
+
+export function autoPanNumber(envName: EnvName = getTargetEnv()): string {
+  const e = env as unknown as Record<string, string | undefined>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return e[`${prefix}_AUTO_PAN_NUMBER`] ?? 'BLXPT4445F';
+}
+
+export interface PasswordCredential {
+  userId?: string;
+  password?: string;
+}
+
+/** Credentials for the admin panel's userId/password login form (negative-path login tests). */
+export function adminPasswordCreds(envName: EnvName = getTargetEnv()): PasswordCredential {
+  const e = env as unknown as Record<string, string | undefined>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return {
+    userId: e[`${prefix}_ADMIN_USER_EMAIL`],
+    password: e[`${prefix}_ADMIN_USER_PASSWORD`],
+  };
+}
+
+export function adminInactiveUserCreds(envName: EnvName = getTargetEnv()): PasswordCredential {
+  const e = env as unknown as Record<string, string | undefined>;
+  const prefix = envName === 'uat' ? 'UAT' : 'TEST';
+  return {
+    userId: e[`${prefix}_ADMIN_INACTIVE_USER_EMAIL`],
+    password: e[`${prefix}_ADMIN_INACTIVE_USER_PASSWORD`],
+  };
 }
 
 export interface ApiServiceAuthConfig {

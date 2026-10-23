@@ -1,6 +1,6 @@
 import { Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
-import customerData from "../../testdata/admin/documents/customerData.json";
+import fs from "fs";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 
 /**
@@ -40,6 +40,21 @@ export class PartPaymentPage extends AdminBasePage {
   private readonly btnProced = () =>
     this.page.locator(
       "xpath=(//kt-button[@ng-reflect-value='Proceed']//button[@type='button'])[2]",
+    );
+  // Confirmed live: the Part Payment screen surfaces its own copy of these buttons
+  // alongside the payment form — not the same locators as loan-view.page.ts's
+  // "View Loan" screen, even though the labels overlap.
+  private readonly viewPartPaymentLogsBtn = () =>
+    this.page.locator("xpath=//span[contains(.,'View Part Payment Logs')]");
+  private readonly partPayTransactionHistoryBtn = () =>
+    this.page.locator("xpath=//span[contains(text(),'Transaction History')]");
+  private readonly btnCancelText = () =>
+    this.page.locator("xpath=//span[normalize-space()='Cancel']");
+  private readonly logAmountCell = () =>
+    this.page.locator("xpath=(//td[@class='table-amount'])[1]");
+  private readonly logDialogClose = () =>
+    this.page.locator(
+      "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
     );
 
   // Cross-page re-declarations
@@ -94,27 +109,14 @@ export class PartPaymentPage extends AdminBasePage {
   private readonly selPayment = () =>
     this.page.locator("xpath=//select[@name='showPaymentValue']");
 
-  // ── Actions (from Flow12_PartPayment.partPaySuccess) ──────────────────────
-
-  /**
-   * Port of Java Flow12_PartPayment.partPaySuccess().
-   *
-   * NOTE: loginWithAppraiser() is OMITTED. Caller must loginAs('appraiser') first.
-   *
-   * Navigates to Loan Details, initiates Part Payment of 25000 with PAYMENT GATEWAY,
-   * switches to Razorpay iframe, selects SBI, and clicks Success in the bank popup.
-   */
   async partPaySuccess(): Promise<void> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
     await this.profile().click();
     await this.page.waitForTimeout(5000);
-
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -129,7 +131,7 @@ export class PartPaymentPage extends AdminBasePage {
     await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     await this.kebabMenu().click();
@@ -183,7 +185,104 @@ export class PartPaymentPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
   }
 
-  // Switch to bank simulator popup
+  private async navigateToPartPaymentScreen(): Promise<void> {
+    const data = getLoginData();
+
+    await this.page.waitForTimeout(5000);
+    await this.profile().click();
+    await this.page.waitForTimeout(5000);
+    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.page.waitForTimeout(2000);
+
+    await this.expandSidebar();
+    await this.waitForLoaderToDisappear();
+    await this.loanManagement().click();
+    await this.page.waitForTimeout(5000);
+
+    const el = this.loanDetails();
+    await el.scrollIntoViewIfNeeded();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+
+    await this.firstNameFilter().fill(data.firstName);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    // noWaitAfter: see partPaySuccess() above.
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
+
+    await this.kebabMenu().click();
+    await this.waitForLoaderToDisappear();
+    await this.partPay().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+  }
+
+  async validateViewTransactionLog(): Promise<string> {
+    await this.navigateToPartPaymentScreen();
+
+    await this.viewPartPaymentLogsBtn().click();
+    await this.waitForLoaderToDisappear();
+
+    const ele = this.logAmountCell();
+    const str = await ele
+      .waitFor({ state: "visible", timeout: 10000 })
+      .then(() => ele.innerText())
+      .then((t) => t.trim())
+      .catch(() => "No Records Found");
+
+    await this.logDialogClose().click();
+    await this.waitForLoaderToDisappear();
+
+    return str;
+  }
+
+  async validatePartPayTransactionHistory(): Promise<string> {
+    await this.partPayTransactionHistoryBtn().click();
+    await this.waitForLoaderToDisappear();
+
+    const ele = this.logAmountCell();
+    const str = await ele
+      .waitFor({ state: "visible", timeout: 10000 })
+      .then(() => ele.innerText())
+      .then((t) => t.trim())
+      .catch(() => "No Records Found");
+
+    await this.logDialogClose().click();
+    await this.waitForLoaderToDisappear();
+
+    return str;
+  }
+
+  async validateProceedAndCancelButtons(): Promise<{
+    proceedVisible: boolean;
+    proceedEnabled: boolean;
+    cancelVisible: boolean;
+  }> {
+    const proceed = this.btnProceed();
+    const proceedVisible = await proceed.isVisible();
+    const proceedEnabled = await proceed.isEnabled();
+    const cancelVisible = await this.btnCancelText().isVisible();
+
+    return { proceedVisible, proceedEnabled, cancelVisible };
+  }
+
+  async validateWithCashZero(): Promise<string> {
+    const amountField = this.paymentAmount();
+    await amountField.clear();
+    await this.page.waitForTimeout(1000);
+    await amountField.fill("0");
+    await this.page.waitForTimeout(1000);
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+
+    const error = this.page.locator(
+      "xpath=//mat-error[contains(normalize-space(.),'Amount should be atleast')]",
+    );
+    await error.waitFor({ state: "visible", timeout: 10000 });
+    return (await error.innerText()).trim();
+  }
 
   // ── Offline Part Pay (TC04 additions) ─────────────────────────────────────
 
@@ -232,6 +331,14 @@ export class PartPaymentPage extends AdminBasePage {
     return banks[Math.floor(Math.random() * banks.length)];
   }
 
+  /** Reads the customer ID most recently written by CustomerManagementPage during onboarding. */
+  private getCurrentCustomerId(): string {
+    const customerData = JSON.parse(
+      fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
+    );
+    return customerData.customerId.trim();
+  }
+
   private getRandomBranchName(): string {
     const branches = [
       "MG Road Branch",
@@ -248,28 +355,14 @@ export class PartPaymentPage extends AdminBasePage {
     return branches[Math.floor(Math.random() * branches.length)];
   }
 
-  /**
-   * Port of Java Flow31_PartPaymentOffline.partPayOffline().
-   *
-   * NOTE: loginWithAppraiser() is OMITTED. Caller must loginAs('appraiser') first.
-   *
-   * Navigates to Loan Details, initiates Part Payment of 25000, opens the Payment Mode dialog,
-   * selects IMPS, fills bank name/branch name/transaction ID, clicks Done, then JS-clicks the
-   * Part Payment proceed button to submit. Returns the customer's unique ID (read from the
-   * filtered Loan Details row) so the caller can pass it to deposit() to mark the deposit
-   * Completed for that exact customer.
-   */
   async partPayOffline(): Promise<string> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
     await this.profile().click();
     await this.page.waitForTimeout(5000);
-
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -284,7 +377,8 @@ export class PartPaymentPage extends AdminBasePage {
     await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: see partPaySuccess() above.
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     const customerIdCell = this.page.locator(
@@ -329,15 +423,6 @@ export class PartPaymentPage extends AdminBasePage {
     return customerId;
   }
 
-  /**
-   * Port of Java Flow31_PartPaymentOffline.deposit() (same pattern as Flow28).
-   *
-   * NOTE: No loginWith* call. Caller must be logged in as appraiser.
-   *
-   * Navigates to Funds and Approvals → Deposit, filters by the given customer's unique ID
-   * (instead of selecting Status=Pending) so the correct row is found deterministically,
-   * scrolls, marks Completed.
-   */
   async deposit(): Promise<void> {
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
@@ -359,8 +444,9 @@ export class PartPaymentPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    const customerId = this.getCurrentCustomerId();
+    await this.textField().fill(customerId);
+    console.log(customerId);
     await this.btnDepositFilter().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
@@ -390,5 +476,79 @@ export class PartPaymentPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.btnYesDeposit().click();
     await this.waitForLoaderToDisappear();
+  }
+  async partPaySuccessCron(): Promise<void> {
+    const data = getLoginData();
+
+    await this.page.waitForTimeout(5000);
+    await this.profile().click();
+    await this.page.waitForTimeout(5000);
+    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.page.waitForTimeout(2000);
+    await this.expandSidebar();
+    await this.waitForLoaderToDisappear();
+    await this.loanManagement().click();
+    await this.page.waitForTimeout(5000);
+
+    const el = this.loanDetails();
+    await el.scrollIntoViewIfNeeded();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+
+    await this.firstNameFilter().fill(data.firstName);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
+
+    await this.kebabMenu().click();
+    await this.waitForLoaderToDisappear();
+    await this.partPay().click();
+    await this.waitForLoaderToDisappear();
+
+    const ele = this.paymentAmount();
+    await ele.clear();
+    await this.page.waitForTimeout(2000);
+    await ele.fill("25000");
+    await this.waitForLoaderToDisappear();
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+
+    await this.selPayment().selectOption({ label: "CRON" });
+    await this.netBanking().click();
+    await this.page.waitForTimeout(3000);
+
+    // JS-click the Part Payment proceed button
+    await this.jsClick(this.btnProced());
+    await this.page.waitForTimeout(2000);
+
+    // Switch into Razorpay iframe
+    const razorFrame = this.page.frameLocator(
+      "xpath=//iframe[@class='razorpay-checkout-frame']",
+    );
+    await this.page.waitForTimeout(3000);
+    await razorFrame
+      .locator("xpath=//input[@placeholder='Search for Banks']")
+      .fill("State Bank of India");
+    await this.page.waitForTimeout(2000);
+    await razorFrame
+      .locator("xpath=(//span[contains(.,'State Bank of India')])[1]")
+      .click();
+    const popupPromise = this.page.context().waitForEvent("page");
+    await razorFrame
+      .locator("xpath=//button[contains(.,'Continue & Pay')]")
+      .click();
+    await this.page.waitForTimeout(10000);
+    const popup = await popupPromise;
+    await popup.waitForLoadState();
+
+    const successBtn = popup.getByRole("button", { name: "Success" });
+
+    await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+    await successBtn.click();
+
+    await this.page.waitForTimeout(2000);
   }
 }

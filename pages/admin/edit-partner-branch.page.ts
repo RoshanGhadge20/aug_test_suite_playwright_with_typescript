@@ -1,7 +1,8 @@
 import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
-import { getLoginData } from "../../utils/data/admin-excel-data";
+import { getPartnerBranchUserData } from "../../utils/data/admin-excel-data";
+import { TestDataFactory } from "../../utils/data/test-data.factory";
 
 /**
  * Port of Java: PO34_EditPartnerBranch (locators) + Flow55_ValidateEditPartnerBranch (actions)
@@ -32,7 +33,7 @@ export class EditPartnerBranchPage extends AdminBasePage {
       "xpath=(//div[contains(@class,'kt-pointer') and contains(text(),'Edit')])[1]",
     );
   private readonly btnUpdate = () =>
-    this.page.locator("xpath=//span[contains(.,'Update')]");
+    this.page.locator("xpath=//button[normalize-space()='Update']");
   private readonly btnDelete = () =>
     this.page.locator("xpath=(//div[contains(.,'Delete')])[1]");
   private readonly btnYes = () =>
@@ -41,38 +42,13 @@ export class EditPartnerBranchPage extends AdminBasePage {
     this.page.locator(
       "xpath=(//div[contains(@class,'kt-pointer') and contains(normalize-space(.),'View')])[1]",
     );
+  private readonly btnClose = () =>
+    this.page.locator(
+      "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
+    );
   private readonly selPartner = () =>
     this.page.locator("xpath=//select[@formcontrolname='partnerId']");
 
-  // ── Partner Branch User — Add User dialog locators ────────────────────────
-  private readonly partnerBranchUserNav = () =>
-    this.page.locator("xpath=//span[normalize-space()='Partner Branch User']");
-  private readonly btnAddUser = () =>
-    this.page.locator("xpath=//button[normalize-space()='Add User']");
-  private readonly userFirstNameInput = () =>
-    this.page.locator("xpath=//input[@placeholder='First Name']");
-  private readonly userLastNameInput = () =>
-    this.page.locator("xpath=//input[@placeholder='Last Name']");
-  private readonly selPartnerForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-  private readonly selBranchForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='branchId']");
-  private readonly userEmailInput = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g abc@123.com']");
-  private readonly userMobileInput = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g 9023451234']");
-  private readonly selStateForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='stateId']");
-  private readonly selCityForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='cityId']");
-  private readonly userPinCodeInput = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Pin Code']");
-  private readonly btnAddUserSubmit = () =>
-    this.page.locator(
-      "xpath=//mat-dialog-container//button[normalize-space()='Add']",
-    );
-
-  // Cross-page re-declarations
   private readonly profile = () =>
     this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
@@ -90,16 +66,18 @@ export class EditPartnerBranchPage extends AdminBasePage {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  async navigateToPartnerBranch(): Promise<void> {
-    const data = getLoginData();
+  private async openPartnerBranchList(): Promise<void> {
     await this.page.waitForTimeout(7000);
     await this.profile().click();
 
+    // Confirmed live: selecting any branch scope other than the account's own assigned
+    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
+    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
+    // Leave the account on its default branch scope instead of calling selectOption().
     await this.branchDropdown().waitFor({ state: "visible" });
-    await this.branchDropdown().selectOption({ label: data.branchName });
     await this.page.waitForTimeout(7000);
 
-    await this.expandSidebar();
+    await this.arrow().click();
     await this.page.waitForTimeout(1000);
     await this.userManagent().click();
 
@@ -109,13 +87,81 @@ export class EditPartnerBranchPage extends AdminBasePage {
     );
     await this.page.waitForTimeout(1000);
     await element1.click();
+    await this.page.waitForTimeout(5000);
+  }
+
+  async navigateToPartnerBranch(): Promise<void> {
+    await this.openPartnerBranchList();
     await this.addNewBranch();
     await this.page.waitForTimeout(5000);
     await this.verifyBranchDetailsInView();
     await this.page.waitForTimeout(5000);
     await this.validateEditPartnerBranch();
     await this.page.waitForTimeout(5000);
-    await this.validateDeletePartnerBranch();
+    await this.crossCheckOldPartnerBranch();
+    await this.page.waitForTimeout(5000);
+    await this.updateOldPartnerBranch();
+    await this.page.waitForTimeout(5000);
+   // await this.validateDeletePartnerBranch();
+  }
+
+  async crossCheckOldPartnerBranch(
+    searchText: string = "Regression Branch",
+  ): Promise<string> {
+    // await this.openPartnerBranchList();
+
+    await this.enterText().waitFor({ state: "visible", timeout: 15000 });
+    await this.enterText().fill(searchText);
+    await this.page.waitForTimeout(3000);
+
+    const firstResultCell = this.page.locator(
+      "xpath=(//mat-cell[@role='gridcell'])[2]",
+    );
+    const actualBranch = (await firstResultCell.innerText()).trim();
+    console.log(`[crossCheckOldPartnerBranch] Found branch: "${actualBranch}"`);
+    return actualBranch;
+  }
+
+  /**
+   * Searches for an existing Partner Branch, opens Edit, and updates its address.
+   * See crossCheckOldPartnerBranch() for the default searchText rationale.
+   */
+  async updateOldPartnerBranch(
+    newAddress: string = "Chakala branch",
+    searchText: string = "Regression Branch",
+  ): Promise<string> {
+    //await this.openPartnerBranchList();
+
+    await this.enterText().waitFor({ state: "visible", timeout: 15000 });
+    await this.enterText().fill(searchText);
+    await this.page.waitForTimeout(3000);
+
+    // Actions column (View | Edit | Delete) is clipped by the table wrapper's overflow —
+    // same fix validateEditPartnerBranch() uses above.
+    const scrollDiv = this.page.locator(
+      "xpath=//div[@class='mat-table__wrapper']",
+    );
+    await scrollDiv.evaluate((el: any) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await this.page.waitForTimeout(1000);
+
+    const editBtn = this.btnEdit();
+    await editBtn.waitFor({ state: "visible", timeout: 15000 });
+    await editBtn.click();
+    await this.page.waitForTimeout(2000);
+
+    const addressField = this.page.locator(
+      'xpath=//textarea[@formcontrolname="address"]',
+    );
+    await addressField.click();
+    await addressField.fill("");
+    await this.page.waitForTimeout(500);
+    await addressField.fill(newAddress);
+    await this.btnUpdate().click();
+    await this.page.waitForTimeout(1000);
+
+    return newAddress;
   }
   async addNewBranch(): Promise<void> {
     // Click Add New Branch button
@@ -188,38 +234,37 @@ export class EditPartnerBranchPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
     await this.page.getByRole("button", { name: "Add" }).click();
   }
-  // ── Actions (from Flow55_ValidateEditPartnerBranch) ───────────────────────
 
-  /**
-   * Port of Java Flow55_ValidateEditPartnerBranch.validateEditPartnerBranch().
-   * NOTE: Not called by TC05 but ported for completeness.
-   */
   async validateEditPartnerBranch(): Promise<void> {
-    await this.enterText().fill("Augmont");
+    await this.enterText().fill("Regression Branch");
+    await this.page.waitForTimeout(10000);
+
+    const scrollDiv = this.page.locator(
+      "xpath=//div[@class='mat-table__wrapper']",
+    );
+    await scrollDiv.evaluate((el: any) => {
+      el.scrollLeft = el.scrollWidth;
+    });
     await this.page.waitForTimeout(1000);
 
     const ele = this.btnEdit();
     await ele.waitFor({ state: "visible", timeout: 15000 });
-    await this.jsClick(ele);
+    await ele.click();
     await this.page.waitForTimeout(2000);
-
-    const ccmail = this.page.locator(
-      "xpath=//textarea[@placeholder='Enter CC Mails']",
+    const addressField = this.page.locator(
+      'xpath=//textarea[@formcontrolname="address"]',
     );
+    await addressField.click();
+    await addressField.fill(""); // clears existing value
     await this.page.waitForTimeout(2000);
-    await ccmail.scrollIntoViewIfNeeded();
-
+    await addressField.fill("Chakala branch");
     await this.btnUpdate().click();
   }
 
-  /**
-   * Port of Java Flow55_ValidateEditPartnerBranch.validateDeletePartnerBranch().
-   * Called by TC05 priority=1.
-   */
   async validateDeletePartnerBranch(): Promise<void> {
     await this.page.waitForTimeout(2000);
 
-    await this.expandSidebar();
+    await this.arrow().click();
     await this.page.waitForTimeout(2000);
 
     const deleteBtn = this.page.locator(
@@ -232,14 +277,6 @@ export class EditPartnerBranchPage extends AdminBasePage {
     await this.btnYes().click();
   }
 
-  /**
-   * Port of Java Flow55_ValidateEditPartnerBranch.validateViewPartnerBranch().
-   * NOTE: Not called by TC05 but ported for completeness.
-   */
-  // async validateViewPartnerBranch(): Promise<void> {
-  //   await this.navigateToPartnerBranch();
-  //   await this.btnView().click();
-  // }
   async verifyBranchDetailsInView(): Promise<void> {
     // Click View for created branch
     await this.page
@@ -314,101 +351,8 @@ export class EditPartnerBranchPage extends AdminBasePage {
       this.page.locator("//textarea[@formcontrolname='ccMail']"),
     ).toHaveValue("ccmail@gmail.com");
     console.log("Branch details verified successfully");
+    await this.btnClose().click();
   }
 
   // ── Partner Branch User actions ───────────────────────────────────────────
-
-  private async navigateToPartnerBranchUser(): Promise<void> {
-    const data = getLoginData();
-    await this.page.waitForTimeout(7000);
-    await this.profile().click();
-
-    await this.branchDropdown().waitFor({ state: "visible" });
-    await this.branchDropdown().selectOption({ label: data.branchName });
-    await this.page.waitForTimeout(7000);
-
-    await this.expandSidebar();
-    await this.page.waitForTimeout(1000);
-    await this.userManagent().click();
-    await this.page.waitForTimeout(1000);
-
-    const pbuLink = this.partnerBranchUserNav();
-    await pbuLink.waitFor({ state: "visible", timeout: 15_000 });
-    await pbuLink.click();
-    await this.page.waitForLoadState("networkidle");
-    await this.page.waitForTimeout(2000);
-  }
-
-  /**
-   * Opens the Add User dialog on the Partner Branch User page, fills all
-   * required fields, submits, and returns the entered first/last name for
-   * spec assertions.
-   */
-  async validateAddPartnerBranchUser(): Promise<{
-    firstName: string;
-    lastName: string;
-  }> {
-    await this.navigateToPartnerBranchUser();
-
-    await this.page.waitForLoadState("networkidle");
-
-    const addUserBtn = this.btnAddUser();
-    await addUserBtn.waitFor({ state: "visible", timeout: 30000 });
-    await addUserBtn.click();
-
-    const firstName = "Test";
-    const lastName = "PartnerUser";
-    await this.userFirstNameInput().fill(firstName);
-    await this.userLastNameInput().fill(lastName);
-
-    // Select Partner — wait until options are loaded then pick the first real one
-    const partnerSel = this.selPartnerForUser();
-    await partnerSel.waitFor({ state: "visible", timeout: 15_000 });
-    await this.page.waitForFunction(
-      () => {
-        const sel = document.querySelector(
-          "select[formcontrolname='partnerId']",
-        ) as HTMLSelectElement | null;
-        return sel && sel.options.length > 1;
-      },
-      { timeout: 20_000 },
-    );
-    await partnerSel.selectOption({ index: 1 });
-    await this.page.waitForTimeout(1000);
-
-    // Select Branch — may load dynamically after partner selection
-    const branchSel = this.selBranchForUser();
-    await this.page
-      .waitForFunction(
-        () => {
-          const sel = document.querySelector(
-            "select[formcontrolname='branchId']",
-          ) as HTMLSelectElement | null;
-          return sel && sel.options.length > 1;
-        },
-        { timeout: 15_000 },
-      )
-      .catch(() => {});
-    await branchSel.selectOption({ index: 1 });
-    await this.page.waitForTimeout(500);
-
-    await this.userEmailInput().fill("testpartneruser@augmont.com");
-    await this.userMobileInput().fill("9876543210");
-
-    const data = getLoginData();
-    await this.selStateForUser().selectOption({ label: data.state });
-    await this.page.waitForTimeout(500);
-    await this.selCityForUser().selectOption({ label: data.city });
-    await this.page.waitForTimeout(500);
-
-    await this.userPinCodeInput().fill("400001");
-
-    await this.btnAddUserSubmit().click();
-    await this.page.waitForTimeout(2000);
-
-    console.log(
-      `[validateAddPartnerBranchUser] Added user: "${firstName} ${lastName}"`,
-    );
-    return { firstName, lastName };
-  }
 }

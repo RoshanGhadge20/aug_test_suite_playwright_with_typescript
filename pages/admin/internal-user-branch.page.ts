@@ -13,25 +13,6 @@ const DEFAULT_DOCUMENT_PATH = path.resolve(
   "image.png",
 );
 
-/**
- * Port of Java: PO36_InternalUserBranch (locators) + Flow57_InternalUserBranch (actions)
- *
- * Methods ported (only active TC05 calls):
- *   - valiadateOdlInternalBranchUser()  ← Flow57.valiadateOdlInternalBranchUser()
- *   (validateInternalUserBranch(), validateViewInternalUserBranch(), validateEditInternalUserBranch() commented in TC05 — ported)
- *
- * Cross-page locator notes:
- *   - profile, arrow, branchDropdown, userManagent, nameInput re-declared locally.
- *
- * Omitted loginWith... logout calls:
- *   - All flows called loginWith* — OMITTED. Role = admin.
- *
- * File upload notes:
- *   - validateInternalUserBranch(): Java used sendKeys to //input[@id='file'] — guarded.
- *
- * SoftAssert translated to return value:
- *   - valiadateOdlInternalBranchUser() returns { isDisplayed, isEnabled } for spec assertions.
- */
 export class InternalUserBranchPage extends AdminBasePage {
   constructor(page: Page) {
     super(page);
@@ -93,9 +74,15 @@ export class InternalUserBranchPage extends AdminBasePage {
     this.page.locator("xpath=(//div[@class='kt-pointer ng-star-inserted'])[2]");
   private readonly btnUpdate = () =>
     this.page.locator("xpath=(//div[@class='kt-pointer ng-star-inserted'])[3]");
+
+  // Confirmed live: the "Total" field is formcontrolname="amount" and readonly — it's
+  // auto-computed from the denomination-count rows above it, so it can never be fill()ed
+  // directly. Instead target the input immediately BEFORE "Total" in document order — the
+  // last (smallest) denomination row, which is a genuinely editable field — and let the
+  // dialog recompute Total from that.
   private readonly inputfield = () =>
     this.page.locator(
-      "xpath=//input[@class='form-control ng-valid ng-dirty ng-touched']",
+      "xpath=(//*[normalize-space(.)='Total'])[last()]/preceding::input[1]",
     );
 
   // Cross-page re-declarations
@@ -151,33 +138,19 @@ export class InternalUserBranchPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
   }
 
-  // ── Actions (from Flow57_InternalUserBranch) ──────────────────────────────
-
-  /**
-   * Port of Java Flow57_InternalUserBranch.validateInternalUserBranch().
-   * NOTE: Not called by TC05 (commented out) but ported for completeness.
-   *
-   * TODO(port): File upload — Java used sendKeys to //input[@id='file'] — guarded.
-   */
   async validateInternalUserBranch(): Promise<void> {
     const d = getInternalUserBranchData();
     await this.navigateToInternalUserBranch();
     await this.page.waitForLoadState("networkidle");
     await this.page.waitForTimeout(2000);
 
-    // await this.validateViewInternalUserBranch(d.searchBranchName);
-    // await this.page.waitForTimeout(3000);
+     await this.validateViewInternalUserBranch(d.searchBranchName);
+    await this.page.waitForTimeout(3000);
 
-    // await this.validateEditInternalUserBranch(d.searchBranchName);
+    await this.validateEditInternalUserBranch(d.searchBranchName);
     await this.page.waitForTimeout(3000);
   }
 
-  /**
-   * Port of Java Flow57_InternalUserBranch.validateViewInternalUserBranch().
-   * NOTE: Not called by TC05 (commented out) but ported for completeness.
-   *
-   * Returns actualBranch for spec assertions.
-   */
   async validateViewInternalUserBranch(searchName?: string): Promise<string> {
     const d = getInternalUserBranchData();
     const nameToSearch = searchName ?? d.searchBranchName;
@@ -206,12 +179,6 @@ export class InternalUserBranchPage extends AdminBasePage {
     return actualBranch;
   }
 
-  /**
-   * Port of Java Flow57_InternalUserBranch.validateEditInternalUserBranch().
-   * NOTE: Not called by TC05 (commented out) but ported for completeness.
-   *
-   * Returns { isDisplayed, isEnabled } for spec assertions.
-   */
   async validateEditInternalUserBranch(searchName?: string): Promise<{
     isDisplayed: boolean;
     isEnabled: boolean;
@@ -254,12 +221,7 @@ export class InternalUserBranchPage extends AdminBasePage {
     return { isDisplayed, isEnabled };
   }
 
-  /**
-   * Port of Java Flow57_InternalUserBranch.valiadateOdlInternalBranchUser().
-   * Called by TC05 priority=3.
-   *
-   * Returns { isDisplayed, isEnabled } for spec assertions.
-   */
+ 
   async valiadateOdlInternalBranchUser(): Promise<{
     isDisplayed: boolean;
     isEnabled: boolean;

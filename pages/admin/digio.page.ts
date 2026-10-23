@@ -38,7 +38,9 @@ export class DigioPage extends AdminBasePage {
   private readonly customerManagementBtn = () => this.page.locator("xpath=(//span[normalize-space()='Customer Management'])[1]");
   private readonly allCustomers = () => this.page.locator("xpath=//span[normalize-space()='All Customers']");
   private readonly firstNameFilter = () => this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  private readonly customerUniqID = () => this.page.locator("xpath=//input[@placeholder='Enter Customer Unique ID']");
+  // Original used all-caps "ID" — confirmed live the actual placeholder is Title Case
+  // ("Enter Customer Unique Id"), so the exact-match locator always found zero elements.
+  private readonly customerUniqID = () => this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
   private readonly filterbtn = () => this.page.locator("xpath=//button[@type='submit']");
   private readonly kebabMenu = () => this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
   private readonly startNewGL = () => this.page.locator("xpath=//button[normalize-space()='Start New Gold Loan']");
@@ -57,6 +59,13 @@ export class DigioPage extends AdminBasePage {
   private readonly internalUserBranch = () => this.page.locator("xpath=//select[@formcontrolname='internalUserBranch']");
   private readonly btnNewpacket = () => this.page.locator("xpath=//button[normalize-space()='New Packet']");
   private readonly barCode = () => this.page.locator("xpath=//input[@formcontrolname='barcode']");
+  // Confirmed live this exact label is reused for two distinct steps: the Packets list
+  // screen's own trigger button (opens the packet-code/branch creation dialog) AND the
+  // in-dialog submit button after entering the barcode — both read "Add Packet". The
+  // original code's btnAdd() (generic '@class=...' exact-match) never matched the list-screen
+  // trigger, likely due to an Angular-appended class like "ng-star-inserted" breaking exact
+  // equality (same recurring pattern as other fixed locators this session) — use this
+  // text-based locator for both.
   private readonly btnAddPacket = () => this.page.locator("xpath=//button[normalize-space()='Add Packet']");
   private readonly btnEditPacket = () => this.page.locator("xpath=//button[normalize-space()='Edit']");
   private readonly userType = () => this.page.locator("xpath=//select[@formcontrolname='userType']");
@@ -86,33 +95,17 @@ export class DigioPage extends AdminBasePage {
   private readonly fileInput7 = () => this.page.locator("xpath=(//input[@type='file'])[7]");
   private readonly fileInput7dNone = () => this.page.locator("xpath=(//input[@type='file' and contains(@class, 'd-none')])[7]");
 
-  // ── Actions ──────────────────────────────────────────────────────────────
-
-  /**
-   * Port of Flow40_ValidateDigiOfunctionality.validateDigiO().
-   * Calls validateGoldLoan() (precondition) + validatePackets().
-   * Caller must first loginAs('appraiser') for the gold loan portion.
-   * NOTE: precondition validateGoldLoan() delegated to existing NewGoldLoanPage via spec.
-   */
   async validateDigiO(documentPath?: string): Promise<void> {
     await this.validatePackets_flow40(documentPath);
   }
 
-  /**
-   * Port of Flow40_ValidateDigiOfunctionality.validatePackets().
-   * Caller must be on ops session (after validateGoldLoan precondition, loginAs('ops')).
-   * Returns packetCode for subsequent use.
-   */
   async validatePackets_flow40(documentPath?: string): Promise<void> {
     const data = getLoginData();
     const packetCode = this.getRandomAPacketCode();
-
-    // Ops: create packet
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -122,7 +115,7 @@ export class DigioPage extends AdminBasePage {
     await this.btnPacket().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAdd().click();
+    await this.btnAddPacket().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
     await this.packetID().fill(packetCode);
@@ -159,8 +152,11 @@ export class DigioPage extends AdminBasePage {
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
+    // Confirmed live: selecting any branch scope other than the account's own assigned
+    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
+    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
+    // Leave the account on its default branch scope instead of calling selectOption().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
     await this.page.waitForTimeout(7000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -172,7 +168,12 @@ export class DigioPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.firstNameFilter().fill(data.firstName);
     await this.page.waitForTimeout(500);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
     await this.assignPacketBtn().click();
@@ -273,9 +274,11 @@ export class DigioPage extends AdminBasePage {
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login).
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(7000);
+    await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
@@ -286,7 +289,12 @@ export class DigioPage extends AdminBasePage {
     await this.customerUniqID().fill(fixedCustomerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -335,9 +343,9 @@ export class DigioPage extends AdminBasePage {
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
+    // NOTE: does NOT select "Show All" branch scope — see the earlier NOTE in this method.
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
@@ -346,7 +354,7 @@ export class DigioPage extends AdminBasePage {
     await this.btnPacket().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAdd().click();
+    await this.btnAddPacket().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
     await this.packetID().fill(packetCode);
@@ -370,9 +378,9 @@ export class DigioPage extends AdminBasePage {
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
+    // NOTE: does NOT select "Show All" branch scope — see the earlier NOTE in this method.
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
@@ -383,7 +391,12 @@ export class DigioPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.customerUniqID().fill(fixedCustomerId);
     await this.page.waitForTimeout(500);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
     await this.assignPacketBtn().click();
@@ -437,9 +450,11 @@ export class DigioPage extends AdminBasePage {
     await this.profile().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login).
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
@@ -450,7 +465,12 @@ export class DigioPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.customerUniqID().fill(fixedCustomerId);
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.btnUploadDocuments().click();

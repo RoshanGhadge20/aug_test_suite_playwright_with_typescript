@@ -121,9 +121,13 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login). Only applied to
+    // appraiser methods here — the ops method (validateAddCPVAndAttchCpv_opsPacket) is left
+    // as-is since no live evidence yet confirms/denies the same bug for the ops role.
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(7000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -135,7 +139,12 @@ export class CpvPage extends AdminBasePage {
     await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -196,8 +205,11 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // Confirmed live: selecting any branch scope other than the account's own assigned
+    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
+    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
+    // Leave the account on its default branch scope instead of calling selectOption().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
     await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
@@ -249,9 +261,9 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — see validateAddCPVAndAttchCpv_appraiserApplyLoan().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -264,7 +276,12 @@ export class CpvPage extends AdminBasePage {
 
     await this.firstNameFilter().fill(data.firstName);
     await this.page.waitForTimeout(500);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -325,9 +342,9 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — see validateAddCPVAndAttchCpv_appraiserApplyLoan().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -340,7 +357,12 @@ export class CpvPage extends AdminBasePage {
 
     await this.firstNameFilter().fill(data.firstName);
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -390,9 +412,9 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — see validateAddCPVAndAttchCpv_appraiserApplyLoan().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -405,7 +427,12 @@ export class CpvPage extends AdminBasePage {
 
     await this.firstNameFilter().fill(data.firstName);
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -450,9 +477,9 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — see validateAddCPVAndAttchCpv_appraiserApplyLoan().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -467,7 +494,12 @@ export class CpvPage extends AdminBasePage {
     await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     await this.kebabMenuDetails().click();
@@ -494,9 +526,9 @@ export class CpvPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — see validateAddCPVAndAttchCpv_appraiserApplyLoan().
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(7000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -508,7 +540,12 @@ export class CpvPage extends AdminBasePage {
     await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
+    // / waiver.page.ts / ops-approval.page.ts).
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 

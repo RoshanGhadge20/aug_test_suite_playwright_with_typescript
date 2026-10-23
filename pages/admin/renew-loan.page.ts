@@ -1,11 +1,11 @@
-﻿import { Page } from "@playwright/test";
+﻿import { Page, Locator } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
-import customerData from "../../testdata/admin/documents/customerData.json";
 import { AssignPacketPage } from "./assign-packet.page";
 import { documentPath } from "@config/urls";
 import { existsSync } from "fs";
+import fs from "fs";
 import { resolve } from "path";
 import { AdminLoginPage } from "./login.page";
 
@@ -55,6 +55,19 @@ export class RenewLoanPage extends AdminBasePage {
     this.adminLoginPage = new AdminLoginPage(page);
   }
 
+  // Confirmed live via outerHTML dump (2026-09-30, captured off the Renew+TopUp modal's own
+  // OTP text — "sent the Renewal + Top Up details" — proving this dialog really is shared
+  // across Top Up/Renewal/Renew+TopUp as assumed elsewhere in this file): after "Send OTP",
+  // the consent modal re-renders as a `<div class="consent-dialog">` (its own component, not
+  // a cdk-overlay-pane/Material dialog) with 6 `<input class="otp-cell" maxlength="1"
+  // type="text">` boxes. Scope directly to that dialog's otp-cell inputs — same fix applied to
+  // top-up.page.ts's otpInputLocator().
+  protected otpInputLocator(): Locator {
+    return this.page.locator(
+      "xpath=//div[contains(@class,'consent-dialog')]//input[contains(@class,'otp-cell')]",
+    );
+  }
+
   // ── Locators (from PO13_RenewLoan) ────────────────────────────────────────
 
   private readonly btnUploadDocuments = () =>
@@ -63,8 +76,36 @@ export class RenewLoanPage extends AdminBasePage {
     );
   private readonly btnProceed = () =>
     this.page.locator("xpath=//button[.//span[normalize-space()='Proceed']]");
+  private readonly btnCancelText = () =>
+    this.page.locator("xpath=//span[normalize-space()='Cancel']");
   private readonly btnRenewLoan = () =>
     this.page.locator("xpath=//button[contains(.,'Renew Loan')]");
+  // Offline (RTGS/NEFT) payment mode fields — re-declared from PO23_PartReleaseOffline,
+  // same fields renew-zero.page.ts's validaterenewofflineWithIMPS() fills after selPayment.
+  private readonly inputBankName = () =>
+    this.page.locator("xpath=//input[@formcontrolname='bankName']");
+  private readonly inputBranchName = () =>
+    this.page.locator("xpath=//input[@formcontrolname='branchName']");
+  private readonly inputBankTransactionID = () =>
+    this.page.locator("xpath=//input[@formcontrolname='transactionId']");
+  // PO11_PartPayment.loc_btnProced — the kt-button "Proceed" wrapper used to submit the
+  // offline (RTGS) payment-mode screen, distinct from the plain btnProceed() used on the
+  // scheme-selection screen (same distinction renew-zero.page.ts makes).
+  private readonly btnProced = () =>
+    this.page.locator(
+      "xpath=(//kt-button[@ng-reflect-value='Proceed']//button[@type='button'])[2]",
+    );
+  // PO16_FullRelease.loc_jwellaryReleaseApproval / renew-zero.page.ts deposit() locators
+  private readonly jwellaryReleaseApproval = () =>
+    this.page.locator(
+      "xpath=//span[normalize-space()='Jewellery Release Approval']",
+    );
+  private readonly Renewal = () =>
+    this.page.locator("xpath=//span[contains(.,'Renewal Loans')]");
+  private readonly btnUpdate = () =>
+    this.page.locator("xpath=(//button[contains(.,'Update')])[1]");
+  private readonly btnUpdate1 = () =>
+    this.page.locator("xpath=(//span[contains(.,'Update')])[1]");
   private readonly btnYes = () =>
     this.page.locator("xpath=//span[contains(.,'Yes')]");
   private readonly upfrontID = () =>
@@ -77,6 +118,13 @@ export class RenewLoanPage extends AdminBasePage {
     );
   private readonly btnNext = () =>
     this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
+
+  private readonly firstSchemeCheckbox = () =>
+    this.page
+      .locator(
+        "xpath=//td[starts-with(normalize-space(text()),'[ALL]')]/preceding-sibling::td//input[@type='checkbox']",
+      )
+      .first();
   // PO10_QuickPayment.loc_kebabMenu
   private readonly kebabMenu = () =>
     this.page.locator(
@@ -93,9 +141,19 @@ export class RenewLoanPage extends AdminBasePage {
   // PO05_AssignPacket.loc_btnDone
   private readonly btnDoneAssign = () =>
     this.page.locator("xpath=//span[normalize-space()='Done']");
-  // PO07_OpsTeamLoanApproval.loc_partnerApproval
+  // PO07_OpsTeamLoanApproval.loc_partnerApproval — one customer can have several loans awaiting
+  // partner approval (e.g. the original loan and the renewal), so always take the first (newest).
   private readonly partnerApproval = () =>
-    this.page.locator("xpath=//button[contains(.,'PARTNER APPROVAL')]");
+    this.page.locator("xpath=//button[contains(.,'PARTNER APPROVAL')]").first();
+
+  /** Reads the customer ID fresh — a static JSON import goes stale once onboarding rewrites it. */
+  private currentCustomerId(): string {
+    return String(
+      JSON.parse(
+        fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
+      ).customerId,
+    ).trim();
+  }
   // PO07_OpsTeamLoanApproval.loc_checkClick
   private readonly checkClick = () =>
     this.page.locator(
@@ -134,7 +192,7 @@ export class RenewLoanPage extends AdminBasePage {
   private readonly selectAppraiser = () =>
     this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
   private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
+    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique ID']");
   private readonly customerManagementBtn = () =>
     this.page.locator(
       "xpath=(//span[normalize-space()='Customer Management'])[1]",
@@ -185,6 +243,164 @@ export class RenewLoanPage extends AdminBasePage {
     this.page.locator(
       "xpath=//button[contains(@class,'mat')][.//span[normalize-space()='Confirm']]",
     );
+  private readonly confirmRenewalRequestedCheckbox = () =>
+    this.page.locator(
+      "xpath=//input[@formcontrolname='customerRequestConfirmed']",
+    );
+  private readonly confirmRenewalRevisedTermsCheckbox = () =>
+    this.page.locator("xpath=//input[@formcontrolname='termsAccepted']");
+  private readonly btnSendOtpRenewal = () =>
+    this.page.locator("xpath=//button[normalize-space()='Send OTP']");
+  private readonly btnVerifyRenewalOtp = () =>
+    this.page
+      .locator(
+        "xpath=//button[normalize-space()='Confirm' or normalize-space()='Verify' or " +
+          "normalize-space()='Verify OTP' or normalize-space()='Consent Received' or " +
+          "normalize-space()='Submit']",
+      )
+      .first();
+
+  private readonly consentDialog = () =>
+    this.page.locator("xpath=//div[contains(@class,'consent-dialog')]");
+  // Confirmed live via screenshot (2026-10-01): "Cancel" sits next to "Send OTP" in the same
+  // modal footer. Scoped to consentDialog() to avoid colliding with any other "Cancel" button
+  // elsewhere on the page.
+  private readonly btnCancelConsent = () =>
+    this.consentDialog().locator("xpath=.//button[normalize-space()='Cancel']");
+
+  // Shared by confirmRenewalConsentIfPresent() (Send OTP path) and
+  // verifyCancelRenewalConsentModal() (Cancel path) — both check the same two boxes before
+  // diverging. Same formcontrolname-based checkboxes as the other two consent modals.
+  private async checkConsentBox(
+    checkbox: Locator,
+    description: string,
+  ): Promise<boolean> {
+    try {
+      await checkbox.check({ timeout: 5000 });
+    } catch (err: any) {
+      console.log(
+        `check() on "${description}" checkbox failed (${err.message}) — retrying with a forced click.`,
+      );
+      await checkbox.click({ force: true }).catch(async () => {
+        await checkbox.dispatchEvent("click");
+      });
+    }
+    await this.page.waitForTimeout(300);
+
+    return checkbox.isChecked().catch(() => false);
+  }
+
+  private async checkBothRenewalConsentBoxes(): Promise<{
+    requestedCheckboxChecked: boolean;
+    revisedTermsCheckboxChecked: boolean;
+  }> {
+    const requestedCheckboxChecked = await this.checkConsentBox(
+      this.confirmRenewalRequestedCheckbox(),
+      "customer personally requested this Renewal",
+    );
+    const revisedTermsCheckboxChecked = await this.checkConsentBox(
+      this.confirmRenewalRevisedTermsCheckbox(),
+      "customer agrees to the revised rate/charges/tenure",
+    );
+    return { requestedCheckboxChecked, revisedTermsCheckboxChecked };
+  }
+
+  private async confirmRenewalConsentIfPresent(
+    otp: string = "123456",
+  ): Promise<{
+    modalOpened: boolean;
+    requestedCheckboxChecked: boolean;
+    revisedTermsCheckboxChecked: boolean;
+    otpSent: boolean;
+    otpEntered: boolean;
+    otpAccepted: boolean;
+  }> {
+    const modalOpen = await this.consentDialog()
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!modalOpen) {
+      return {
+        modalOpened: false,
+        requestedCheckboxChecked: false,
+        revisedTermsCheckboxChecked: false,
+        otpSent: false,
+        otpEntered: false,
+        otpAccepted: false,
+      };
+    }
+
+    console.log(
+      '"Confirm Renewal" consent modal appeared — checking both mandatory checkboxes and sending OTP.',
+    );
+
+    const { requestedCheckboxChecked, revisedTermsCheckboxChecked } =
+      await this.checkBothRenewalConsentBoxes();
+
+    const sendOtp = this.btnSendOtpRenewal();
+    await sendOtp.waitFor({ state: "visible", timeout: 8000 });
+    await sendOtp.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    let otpEntered = false;
+    let otpAccepted = false;
+    try {
+      await this.fillOtp(otp);
+      otpEntered = true;
+      await this.page.waitForTimeout(500);
+
+      const verifyBtn = this.btnVerifyRenewalOtp();
+      const verifyVisible = await verifyBtn
+        .waitFor({ state: "visible", timeout: 8000 })
+        .then(() => true)
+        .catch(() => false);
+      if (verifyVisible) {
+        try {
+          await verifyBtn.click({ timeout: 5000 });
+        } catch (err: any) {
+          console.log(
+            `Standard click on the renewal OTP "Confirm" button failed (${err.message}) — ` +
+              "retrying after scrollIntoView, then with a forced click.",
+          );
+          await verifyBtn.scrollIntoViewIfNeeded().catch(() => {});
+          await verifyBtn.click({ force: true }).catch(async () => {
+            await verifyBtn.dispatchEvent("click");
+          });
+        }
+        await this.waitForLoaderToDisappear();
+        await this.page.waitForTimeout(2000);
+      } else {
+        console.log(
+          "No OTP submit button found after entering the renewal consent OTP — some UIs " +
+            "auto-submit on the last digit; continuing to check the outcome regardless.",
+        );
+      }
+
+      const errorBanner = this.page.locator(
+        "xpath=//*[contains(@class,'toast-error') or contains(@class,'alert-danger')]",
+      );
+      const errorVisible = await errorBanner.isVisible().catch(() => false);
+      const modalStillOpen = await this.consentDialog()
+        .isVisible()
+        .catch(() => false);
+      otpAccepted = !errorVisible && !modalStillOpen;
+    } catch (err: any) {
+      console.log(
+        `Entering/submitting the renewal consent OTP failed: ${err.message}`,
+      );
+    }
+
+    return {
+      modalOpened: true,
+      requestedCheckboxChecked,
+      revisedTermsCheckboxChecked,
+      otpSent: true,
+      otpEntered,
+      otpAccepted,
+    };
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   /** Port of Flow05_AssignPacket.generateRandomCKYC() — inline. */
@@ -229,146 +445,140 @@ export class RenewLoanPage extends AdminBasePage {
       await this.page.waitForTimeout(1000);
     }
   }
-  // ── Actions (from Flow15_RenewLoan.renew — active section) ───────────────
 
-  /**
-   * Port of Java Flow15_RenewLoan.renew() — active (non-commented) section.
-   *
-   * NOTE: loginWithAppraiser() and loginWithPartner() are OMITTED.
-   * The caller must:
-   *   1. loginAs('appraiser') before calling renew().
-   *   2. The method internally navigates to Applied Loan as appraiser, uploads docs,
-   *      fills CKYC, saves, then switches to partner (caller must loginAs('partner')
-   *      before the partner-approval section — this method calls partnerRenewApproval()
-   *      which the spec wires with an explicit loginAs call).
-   *
-   * This method covers the appraiser portion only (upload docs → save → done).
-   * Call partnerRenewApproval() (as partner) for the partner approval step.
-   *
-   * File upload: documentPath param optional — skip when not provided.
-   */
   async renew(documentPath?: string): Promise<void> {
-    const data = getLoginData();
-
     await this.page.waitForTimeout(5000);
     await this.profile().click();
-
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
 
     await this.waitForLoaderToDisappear();
-    //await this.renewOnlinePay();
+    await this.renewOnlinePay();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
+    await this.customerManagementBtn().click();
+    await this.waitForLoaderToDisappear();
+    await this.appraisalRequest().waitFor({ state: "visible" });
+    await this.appraisalRequest().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.textField().fill(this.currentCustomerId());
+    console.log(this.currentCustomerId());
+    await this.page.waitForTimeout(5000);
 
-    // Navigate to Appraiser Requests and filter by customer ID.
-    // await this.customerManagementBtn().click();
-    // await this.waitForLoaderToDisappear();
-    // await this.appraisalRequest().waitFor({ state: "visible" });
-    // await this.appraisalRequest().click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(5000);
-    // await this.textField().fill(customerData.customerId.trim());
-    // console.log(customerData.customerId);
-    // await this.page.waitForTimeout(5000);
+    // Click the kebab button whose menu contains "Renew Loan".
+    // The table uses mat-row/mat-cell (ARIA grid), not tr/td. Only "Processing" rows have a kebab.
+    {
+      const allKebabs = this.page.locator(
+        "xpath=//button[contains(@class,'mat-menu-trigger')]",
+      );
+      const kebabCount = await allKebabs.count();
+      let renewClicked = false;
+      for (let k = 0; k < kebabCount; k++) {
+        const kebab = allKebabs.nth(k);
+        if (!(await kebab.isVisible().catch(() => false))) continue;
+        await kebab.scrollIntoViewIfNeeded();
+        await kebab.click();
+        await this.page.waitForTimeout(800);
+        const menuItem = this.page.getByRole("menuitem", {
+          name: "Renew Loan",
+        });
+        if (
+          (await menuItem.count()) > 0 &&
+          (await menuItem.isVisible().catch(() => false))
+        ) {
+          await menuItem.click();
+          renewClicked = true;
+          break;
+        }
+        await this.page.keyboard.press("Escape");
+        await this.page.waitForTimeout(400);
+      }
+      if (!renewClicked) {
+        throw new Error(
+          "No kebab with 'Renew Loan' found - loan may need to be in Processing state",
+        );
+      }
+    }
 
-    // // Click the kebab button whose menu contains "Renew Loan".
-    // // The table uses mat-row/mat-cell (ARIA grid), not tr/td. Only "Processing" rows have a kebab.
-    // {
-    //   const allKebabs = this.page.locator(
-    //     "xpath=//button[contains(@class,'mat-menu-trigger')]",
-    //   );
-    //   const kebabCount = await allKebabs.count();
-    //   let renewClicked = false;
-    //   for (let k = 0; k < kebabCount; k++) {
-    //     const kebab = allKebabs.nth(k);
-    //     if (!(await kebab.isVisible().catch(() => false))) continue;
-    //     await kebab.scrollIntoViewIfNeeded();
-    //     await kebab.click();
-    //     await this.page.waitForTimeout(800);
-    //     const menuItem = this.page.getByRole("menuitem", { name: "Renew Loan" });
-    //     if ((await menuItem.count()) > 0 && (await menuItem.isVisible().catch(() => false))) {
-    //       await menuItem.click();
-    //       renewClicked = true;
-    //       break;
-    //     }
-    //     await this.page.keyboard.press("Escape");
-    //     await this.page.waitForTimeout(400);
-    //   }
-    //   if (!renewClicked) {
-    //     throw new Error("No kebab with 'Renew Loan' found - loan may need to be in Processing state");
-    //   }
-    // }
+    await this.page.waitForTimeout(2000);
+    await this.btnOk().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(3000);
 
-    // await this.page.waitForTimeout(2000);
-    // await this.btnOk().click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(3000);
+    // The renew form opens on "Bank Details" (pre-filled tabs skip forward).
+    // Click "Final Interest Calculator" tab directly to run calculation first.
+    const finalInterestTab = this.page.getByRole("tab", {
+      name: "Final Interest Calculator",
+    });
+    await finalInterestTab.waitFor({ state: "visible", timeout: 15000 });
+    await finalInterestTab.click();
+    await this.page.waitForTimeout(2000);
 
-    // // The renew form opens on "Bank Details" (pre-filled tabs skip forward).
-    // // Click "Final Interest Calculator" tab directly to run calculation first.
-    // const finalInterestTab = this.page.getByRole("tab", { name: "Final Interest Calculator" });
-    // await finalInterestTab.waitFor({ state: "visible", timeout: 15000 });
-    // await finalInterestTab.click();
-    // await this.page.waitForTimeout(2000);
+    const calculateBtn = this.page.locator(
+      "xpath=//button[.//span[normalize-space(text())='Calculate']]",
+    );
+    await calculateBtn.waitFor({ state: "visible", timeout: 30000 });
+    console.log("Calculate visible:", await calculateBtn.isVisible());
+    await calculateBtn.scrollIntoViewIfNeeded();
+    try {
+      await calculateBtn.click({ timeout: 10000 });
+    } catch {
+      await calculateBtn.click({ force: true });
+    }
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    // const calculateBtn = this.page.locator(
-    //   "xpath=//button[.//span[normalize-space(text())='Calculate']]",
-    // );
-    // await calculateBtn.waitFor({ state: "visible", timeout: 30000 });
-    // console.log("Calculate visible:", await calculateBtn.isVisible());
-    // await calculateBtn.scrollIntoViewIfNeeded();
-    // try {
-    //   await calculateBtn.click({ timeout: 10000 });
-    // } catch {
-    //   await calculateBtn.click({ force: true });
-    // }
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(2000);
+    // Navigate to Bank Details tab and handle upload.
+    const bankDetailsTab = this.page.getByRole("tab", { name: "Bank Details" });
+    await bankDetailsTab.click();
+    await this.page.waitForTimeout(2000);
 
-    // // Navigate to Bank Details tab and handle upload.
-    // const bankDetailsTab = this.page.getByRole("tab", { name: "Bank Details" });
-    // await bankDetailsTab.click();
-    // await this.page.waitForTimeout(2000);
+    const upfrontReceiptLabel = this.page.locator(
+      "xpath=//*[contains(text(),'Upload Upfront Receipt')]",
+    );
+    if (
+      await upfrontReceiptLabel.isVisible({ timeout: 3000 }).catch(() => false)
+    ) {
+      console.log("Upload Upfront Receipt step - uploading file");
+      const pdfPath = resolve(
+        process.cwd(),
+        "testdata/admin/singnature-sample.pdf",
+      );
+      const fileInputs = this.page.locator("xpath=//input[@type='file']");
+      const fileCount = await fileInputs.count();
+      if (fileCount > 0) {
+        const lastInput = fileInputs.nth(fileCount - 1);
+        await lastInput.evaluate((el) => {
+          (el as HTMLInputElement).style.display = "block";
+        });
+        await lastInput.setInputFiles(pdfPath);
+        console.log("Upfront Receipt uploaded: " + pdfPath);
+        await this.page.waitForTimeout(1500);
+      }
+      const txnIdInput = this.page.locator(
+        "xpath=//input[@placeholder='Upfront Transaction Id']",
+      );
+      if (await txnIdInput.isVisible({ timeout: 2000 }).catch(() => false)) {
+        const existing = await txnIdInput.inputValue();
+        if (!existing) {
+          await txnIdInput.fill("UPFR" + String(Date.now()).slice(-8));
+        }
+      }
+      await this.btnNext().click();
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(2000);
+    }
 
-    // const upfrontReceiptLabel = this.page.locator(
-    //   "xpath=//*[contains(text(),'Upload Upfront Receipt')]",
-    // );
-    // if (await upfrontReceiptLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
-    //   console.log("Upload Upfront Receipt step - uploading file");
-    //   const pdfPath = resolve(process.cwd(), "testdata/admin/singnature-sample.pdf");
-    //   const fileInputs = this.page.locator("xpath=//input[@type='file']");
-    //   const fileCount = await fileInputs.count();
-    //   if (fileCount > 0) {
-    //     const lastInput = fileInputs.nth(fileCount - 1);
-    //     await lastInput.evaluate((el) => { (el as HTMLInputElement).style.display = "block"; });
-    //     await lastInput.setInputFiles(pdfPath);
-    //     console.log("Upfront Receipt uploaded: " + pdfPath);
-    //     await this.page.waitForTimeout(1500);
-    //   }
-    //   const txnIdInput = this.page.locator(
-    //     "xpath=//input[@placeholder='Upfront Transaction Id']",
-    //   );
-    //   if (await txnIdInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    //     const existing = await txnIdInput.inputValue();
-    //     if (!existing) {
-    //       await txnIdInput.fill("UPFR" + String(Date.now()).slice(-8));
-    //     }
-    //   }
-    //   await this.btnNext().click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(2000);
-    // }
-
-    // await this.page.waitForTimeout(3000);
-    // // "Loan Status Approval" may or may not have a Next button. Only click if visible.
-    // const postBankNext = this.page.locator("//button[span[normalize-space()='Next']]").first();
-    // if (await postBankNext.isVisible({ timeout: 5000 }).catch(() => false)) {
-    //   await postBankNext.click();
-    //   await this.waitForLoaderToDisappear();
-    // }
+    await this.page.waitForTimeout(3000);
+    // "Loan Status Approval" may or may not have a Next button. Only click if visible.
+    const postBankNext = this.page
+      .locator("//button[span[normalize-space()='Next']]")
+      .first();
+    if (await postBankNext.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await postBankNext.click();
+      await this.waitForLoaderToDisappear();
+    }
     await this.page.waitForTimeout(3000);
     const loanMgmt = this.loanManagement();
     await loanMgmt.click();
@@ -380,8 +590,8 @@ export class RenewLoanPage extends AdminBasePage {
     await appliedLoan.waitFor({ state: "visible" });
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    await this.customerUniqID().fill(this.currentCustomerId());
+    console.log(this.currentCustomerId());
 
     await this.page.waitForTimeout(1000);
     await this.filterbtn().click();
@@ -400,12 +610,10 @@ export class RenewLoanPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
     await this.waitForLoaderToDisappear();
 
-    // // Yes
     await this.btnYesAssign().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    // // Lead converter dropdown
     const dropdownEle = this.page.locator(
       "xpath=//select[@formcontrolname='leadConverterId']",
     );
@@ -413,9 +621,7 @@ export class RenewLoanPage extends AdminBasePage {
     await this.page.waitForTimeout(1000);
     try {
       await dropdownEle.selectOption({ label: "Priyanka Thorat" });
-    } catch {
-      // option not available — skip
-    }
+    } catch {}
     await this.page.waitForTimeout(1000);
     await this.btnDoneAssign().click();
     await this.waitForLoaderToDisappear();
@@ -432,12 +638,11 @@ export class RenewLoanPage extends AdminBasePage {
     await loanMgmt.click();
     await this.page.waitForTimeout(2000);
     const el = this.loanDetails();
-
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.customerUniqID().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    await this.customerUniqID().fill(this.currentCustomerId());
+    console.log(this.currentCustomerId());
     //await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
@@ -467,9 +672,7 @@ export class RenewLoanPage extends AdminBasePage {
     await this.page.getByText("Renewal", { exact: true }).click();
     await this.page.waitForTimeout(2000);
 
-    const checkbox = this.page.locator(
-      "xpath=//td[text()='[ALL] SK_RBL_06']/preceding-sibling::td//input[@type='checkbox']",
-    );
+    const checkbox = this.firstSchemeCheckbox();
 
     await this.page.waitForTimeout(5000);
     await checkbox.dispatchEvent("click");
@@ -486,9 +689,9 @@ export class RenewLoanPage extends AdminBasePage {
     await expect(this.btnConfirm()).toBeVisible();
     await this.btnConfirm().click();
     await this.waitForLoaderToDisappear();
+    await this.confirmRenewalConsentIfPresent();
     await this.btnYesAssign().click();
     await this.page.waitForTimeout(5000);
-    // Switch into Razorpay iframe
     const iframeEl = this.page.locator(
       "xpath=//iframe[@class='razorpay-checkout-frame']",
     );
@@ -515,7 +718,6 @@ export class RenewLoanPage extends AdminBasePage {
 
       await successBtn.click();
     } else {
-      // fallback: use frameLocator
       const razorFrame = this.page.frameLocator(
         "xpath=//iframe[@class='razorpay-checkout-frame']",
       );
@@ -541,7 +743,360 @@ export class RenewLoanPage extends AdminBasePage {
       await successBtn.click();
     }
     await this.page.waitForTimeout(2000);
+    await this.deposit();
   }
+
+  async deposit(): Promise<void> {
+    await this.page.waitForTimeout(5000);
+    await this.expandSidebar();
+    await this.waitForLoaderToDisappear();
+
+    const fundsAndApprovals = this.page.locator(
+      "xpath=//span[normalize-space()='Funds and Approvals']",
+    );
+    await fundsAndApprovals.evaluate((el: any) =>
+      el.scrollIntoView({ block: "center" }),
+    );
+    // DOM-level click (Tech Support button can cover bottom sidebar items)
+    await fundsAndApprovals.evaluate((el: any) => el.click());
+    await this.page.waitForTimeout(3000);
+
+    // The menu is a toggle: if it was already open the click above closed it,
+    // so click again when the submenu isn't present.
+    const jra = this.jwellaryReleaseApproval().first();
+    if (!(await jra.isVisible().catch(() => false))) {
+      await fundsAndApprovals.evaluate((el: any) => el.click());
+      await this.page.waitForTimeout(3000);
+    }
+    await jra.waitFor({ state: "attached", timeout: 30000 });
+    await jra.evaluate((el: any) => el.scrollIntoView({ block: "center" }));
+    await this.page.waitForTimeout(1000);
+    await jra.evaluate((el: any) => el.click());
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.Renewal().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+
+    const selectStatusDropdown = this.page.locator(
+      "xpath=//select[@ng-reflect-name='amountStatus']",
+    );
+    await selectStatusDropdown.evaluate((el: any) => el.scrollIntoView(true));
+    await selectStatusDropdown.selectOption({ label: "Pending" });
+    await this.page.waitForTimeout(2000);
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+
+    const scrollDiv = this.page.locator(
+      "xpath=//div[@class='mat-table__wrapper']",
+    );
+    await scrollDiv.click();
+    await scrollDiv.evaluate((el: any) => {
+      el.scrollLeft = el.scrollWidth;
+    });
+    await this.page.waitForTimeout(3000);
+    await scrollDiv.click();
+    await this.page.keyboard.press("Home");
+    await this.page.waitForTimeout(3000);
+
+    await this.btnUpdate().evaluate((el: any) =>
+      el.scrollIntoView({ behavior: "smooth", block: "center" }),
+    );
+    await this.btnUpdate().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+
+    const selStatus = this.page.locator(
+      "xpath=//select[@formcontrolname='depositStatus']",
+    );
+    await selStatus.evaluate((el: any) => el.scrollIntoView(true));
+    await selStatus.selectOption({ label: "Completed" });
+    await this.page.waitForTimeout(1000);
+    await this.btnUpdate1().click();
+    await this.waitForLoaderToDisappear();
+  }
+
+  /**
+   * Real (committing) offline-payment counterpart to validateWithOffline() — same
+   * navigation and RTGS selection, but fills bank details and actually submits (Done →
+   * the kt-button Proceed) instead of cancelling, then runs deposit() to mark the
+   * resulting payment Completed. Same commit sequence renew-zero.page.ts's
+   * validaterenewofflineWithIMPS() uses for real.
+   */
+  async renewOfflinePay(): Promise<void> {
+    await this.navigateToRenewSchemeScreen();
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.selPayment().selectOption({ label: "RTGS" });
+    await this.page.waitForTimeout(2000);
+
+    await this.inputBankName().fill("State Bank of India");
+    await this.inputBranchName().fill("Lower Parel Branch");
+    await this.page.waitForTimeout(1000);
+    await this.inputBankTransactionID().fill(this.randomTransactionId(12));
+    await this.page.waitForTimeout(2000);
+
+    await this.btnDonePartner().click();
+    await this.waitForLoaderToDisappear();
+    await this.btnProced().click();
+    await this.waitForLoaderToDisappear();
+
+    await this.deposit();
+  }
+
+  // ── Actions (standalone, extracted for renew-loan-validations.spec.ts) ────
+
+  /**
+   * Navigates to Loan Details, opens Renew Loan → Renewal, selects a scheme and Loan
+   * Purpose (same steps as renewOnlinePay() up to the payment-mode screen). Stops right
+   * before Proceed so callers can branch into different payment-mode validations.
+   */
+  private async navigateToRenewSchemeScreen(): Promise<void> {
+    await this.expandSidebar();
+    await this.page.waitForTimeout(5000);
+    const loanMgmt = this.loanManagement();
+    await loanMgmt.click();
+    await this.page.waitForTimeout(2000);
+    const el = this.loanDetails();
+
+    await el.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.customerUniqID().fill(this.currentCustomerId());
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.filterbtn().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    const kebab = this.kebabMenu();
+    await kebab.scrollIntoViewIfNeeded();
+    try {
+      await this.page.waitForTimeout(5000);
+      await kebab.click();
+    } catch {
+      await this.jsClick(kebab);
+    }
+    await this.page.waitForTimeout(5000);
+    await this.btnRenewLoan().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    const renewLoan = this.page.getByText("Renew Loan", { exact: true });
+    await renewLoan.click();
+    await this.page.waitForTimeout(5000);
+    await this.page.getByText("Renewal", { exact: true }).click();
+    await this.page.waitForTimeout(2000);
+
+    const checkbox = this.firstSchemeCheckbox();
+    await this.page.waitForTimeout(5000);
+    await checkbox.dispatchEvent("click");
+    await this.page.waitForTimeout(2000);
+    await this.selPurpose().selectOption({ label: "Business Expansion" });
+    await this.page.waitForTimeout(2000);
+  }
+
+  /**
+   * Shared navigation for the "Confirm Renewal" consent modal: scheme selection, Proceed,
+   * PAYMENT GATEWAY + netBanking, and the "Confirm" click (same sequence renewOnlinePay()
+   * already uses up to that point). Extracted so verifyConfirmRenewalConsentModal() (Send OTP
+   * path) and verifyCancelRenewalConsentModal() (Cancel path) don't duplicate it.
+   */
+  private async navigateAndConfirmRenewal(): Promise<void> {
+    await this.navigateToRenewSchemeScreen();
+
+    await this.btnProceed().click();
+    await this.page.waitForTimeout(5000);
+    await this.waitForLoaderToDisappear();
+    await this.selPayment().selectOption({ label: "PAYMENT GATEWAY" });
+    await this.netBanking().click();
+    await this.waitForLoaderToDisappear();
+    await expect(this.btnConfirm()).toBeVisible();
+    await this.btnConfirm().click();
+    await this.waitForLoaderToDisappear();
+  }
+
+  /**
+   * Test hook for the "Confirm Renewal" consent modal: drives the renew flow through
+   * navigateAndConfirmRenewal(), then exercises confirmRenewalConsentIfPresent() and returns
+   * what happened so a spec can assert on it.
+   */
+  async verifyConfirmRenewalConsentModal(): Promise<{
+    modalOpened: boolean;
+    requestedCheckboxChecked: boolean;
+    revisedTermsCheckboxChecked: boolean;
+    otpSent: boolean;
+    otpEntered: boolean;
+    otpAccepted: boolean;
+  }> {
+    await this.navigateAndConfirmRenewal();
+    return this.confirmRenewalConsentIfPresent();
+  }
+
+  /**
+   * "Confirm Renewal" consent modal — Cancel path (screenshot, 2026-10-01): drives the same
+   * navigation as verifyConfirmRenewalConsentModal(), checks both mandatory checkboxes, then
+   * clicks "Cancel" instead of "Send OTP" and verifies the modal closes without sending an OTP
+   * or submitting the renewal. Non-mutating — safe to run before an accept-path test reuses
+   * the same loan/customer. Never throws.
+   */
+  async verifyCancelRenewalConsentModal(): Promise<{
+    modalOpened: boolean;
+    requestedCheckboxChecked: boolean;
+    revisedTermsCheckboxChecked: boolean;
+    modalClosedAfterCancel: boolean;
+  }> {
+    await this.navigateAndConfirmRenewal();
+
+    const modalOpen = await this.consentDialog()
+      .waitFor({ state: "visible", timeout: 8000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!modalOpen) {
+      return {
+        modalOpened: false,
+        requestedCheckboxChecked: false,
+        revisedTermsCheckboxChecked: false,
+        modalClosedAfterCancel: false,
+      };
+    }
+
+    console.log(
+      '"Confirm Renewal" consent modal appeared — checking both mandatory checkboxes then clicking Cancel.',
+    );
+
+    const { requestedCheckboxChecked, revisedTermsCheckboxChecked } =
+      await this.checkBothRenewalConsentBoxes();
+
+    const cancelBtn = this.btnCancelConsent();
+    await cancelBtn.waitFor({ state: "visible", timeout: 8000 });
+    await cancelBtn.click();
+    await this.waitForLoaderToDisappear().catch(() => {});
+    await this.page.waitForTimeout(1500);
+
+    const modalClosedAfterCancel = await this.consentDialog()
+      .isVisible()
+      .then((visible) => !visible)
+      .catch(() => true);
+
+    return {
+      modalOpened: true,
+      requestedCheckboxChecked,
+      revisedTermsCheckboxChecked,
+      modalClosedAfterCancel,
+    };
+  }
+
+  async validateProceedAndCancelButtons(): Promise<{
+    proceedVisible: boolean;
+    proceedEnabled: boolean;
+    cancelVisible: boolean;
+  }> {
+    await this.navigateToRenewSchemeScreen();
+
+    const proceed = this.btnProceed();
+    const proceedVisible = await proceed.isVisible();
+    const proceedEnabled = await proceed.isEnabled();
+
+    await proceed.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    const cancelVisible = await this.btnCancelText()
+      .isVisible()
+      .catch(() => false);
+
+    await this.btnCancelText()
+      .click()
+      .catch(() => {});
+    await this.waitForLoaderToDisappear();
+
+    return { proceedVisible, proceedEnabled, cancelVisible };
+  }
+
+  async validateWithCashZero(): Promise<{
+    cashWithZeroOptionFound: boolean;
+    doneVisible: boolean;
+  }> {
+    await this.navigateToRenewSchemeScreen();
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.selPayment().selectOption({ label: "CASH" });
+    await this.page.waitForTimeout(2000);
+
+    const cashWithZeroOption = this.page.locator(
+      "xpath=//select[@formcontrolname='paymentType']//option[normalize-space()='CASH WITH 0']",
+    );
+    const cashWithZeroOptionFound =
+      (await cashWithZeroOption.count().catch(() => 0)) > 0;
+    if (cashWithZeroOptionFound) {
+      await this.page
+        .locator("xpath=//select[@formcontrolname='paymentType']")
+        .selectOption({ label: "CASH WITH 0" })
+        .catch(() => {});
+      await this.page.waitForTimeout(1000);
+    }
+
+    const doneVisible = await this.btnDonePartner()
+      .isVisible()
+      .catch(() => false);
+
+    await this.btnCancelText()
+      .click()
+      .catch(() => {});
+    await this.waitForLoaderToDisappear();
+
+    return { cashWithZeroOptionFound, doneVisible };
+  }
+
+  async validateWithOffline(): Promise<{
+    bankNameValue: string;
+    branchNameValue: string;
+    transactionIdValue: string;
+    doneVisible: boolean;
+  }> {
+    await this.navigateToRenewSchemeScreen();
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.selPayment().selectOption({ label: "RTGS" });
+    await this.page.waitForTimeout(2000);
+
+    await this.inputBankName().fill("State Bank of India");
+    await this.inputBranchName().fill("Lower Parel Branch");
+    await this.page.waitForTimeout(1000);
+    await this.inputBankTransactionID().fill(this.randomTransactionId(12));
+    await this.page.waitForTimeout(2000);
+
+    const bankNameValue = await this.inputBankName()
+      .inputValue()
+      .catch(() => "");
+    const branchNameValue = await this.inputBranchName()
+      .inputValue()
+      .catch(() => "");
+    const transactionIdValue = await this.inputBankTransactionID()
+      .inputValue()
+      .catch(() => "");
+    const doneVisible = await this.btnDonePartner()
+      .isVisible()
+      .catch(() => false);
+
+    await this.btnCancelText()
+      .click()
+      .catch(() => {});
+    await this.waitForLoaderToDisappear();
+
+    return { bankNameValue, branchNameValue, transactionIdValue, doneVisible };
+  }
+
   async validateUploadDocumnets(docPath?: string): Promise<void> {
     // Auto-resolve document path from environment if not provided, then resolve to absolute
     const envPath = docPath || documentPath("DOCUMENT");
@@ -644,14 +1199,6 @@ export class RenewLoanPage extends AdminBasePage {
     }
   }
 
-  /**
-   * Port of the partner-approval section inside Flow15_RenewLoan.renew().
-   *
-   * NOTE: loginWithPartner() is OMITTED. Caller must loginAs('partner') before calling this.
-   *
-   * Navigates to Applied Loan as partner, clicks Partner Approval, Next×7,
-   * checks boxes, selects Approved, submits.
-   */
   async partnerRenewApproval(): Promise<void> {
     const data = getLoginData();
 
@@ -667,12 +1214,14 @@ export class RenewLoanPage extends AdminBasePage {
     await appliedLoan2.waitFor({ state: "visible", timeout: 30000 });
     await appliedLoan2.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    await this.customerUniqID().fill(this.currentCustomerId());
+    console.log(this.currentCustomerId());
     await this.page.waitForTimeout(1000);
     await this.filterbtn().click();
     await this.page.waitForTimeout(2000);
 
+    await this.waitForLoaderToDisappear();
+    await this.partnerApproval().waitFor({ state: "visible", timeout: 30000 });
     await this.partnerApproval().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
@@ -695,5 +1244,115 @@ export class RenewLoanPage extends AdminBasePage {
 
     await this.btnSubmitOps().click();
     await this.waitForLoaderToDisappear();
+  }
+  async renewCronPay(): Promise<void> {
+    const data = getLoginData();
+    await this.expandSidebar();
+    await this.page.waitForTimeout(5000);
+    const loanMgmt = this.loanManagement();
+    await loanMgmt.click();
+    await this.page.waitForTimeout(2000);
+    const el = this.loanDetails();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.customerUniqID().fill(this.currentCustomerId());
+    console.log(this.currentCustomerId());
+    //await this.firstNameFilter().fill(data.firstName);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.filterbtn().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    const kebab = this.kebabMenu();
+    await kebab.scrollIntoViewIfNeeded();
+    try {
+      await this.page.waitForTimeout(5000);
+      await kebab.click();
+    } catch {
+      await this.jsClick(kebab);
+    }
+    await this.page.waitForTimeout(5000);
+    await this.btnRenewLoan().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    const renewLoan = this.page.getByText("Renew Loan", { exact: true });
+
+    console.log("Visible:", await renewLoan.isVisible());
+
+    await renewLoan.highlight();
+    await renewLoan.click();
+    await this.page.waitForTimeout(5000);
+    await this.page.getByText("Renewal", { exact: true }).click();
+    await this.page.waitForTimeout(2000);
+    const checkbox = this.firstSchemeCheckbox();
+
+    await this.page.waitForTimeout(5000);
+    await checkbox.dispatchEvent("click");
+    await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(2000);
+    await this.selPurpose().selectOption({ label: "Business Expansion" });
+    await this.page.waitForTimeout(2000);
+    await this.btnProceed().click();
+    await this.page.waitForTimeout(5000);
+    await this.waitForLoaderToDisappear();
+    await this.selPayment().selectOption({ label: "CRON" });
+    await this.netBanking().click();
+    await this.waitForLoaderToDisappear();
+    await expect(this.btnConfirm()).toBeVisible();
+    await this.btnConfirm().click();
+    await this.waitForLoaderToDisappear();
+    await this.btnYesAssign().click();
+    await this.page.waitForTimeout(5000);
+    const iframeEl = this.page.locator(
+      "xpath=//iframe[@class='razorpay-checkout-frame']",
+    );
+    await iframeEl.waitFor({ state: "attached" });
+    const frame =
+      this.page.frame({ url: /razorpay/ }) ??
+      this.page.frames().find((f) => f.url().includes("razorpay"));
+    if (frame) {
+      await frame.waitForTimeout(5000);
+      await frame.fill(
+        "xpath=//input[@placeholder='Search for Banks']",
+        "State Bank of India",
+      );
+      await frame.waitForTimeout(5000);
+      await frame.click("xpath=(//span[contains(.,'State Bank of India')])[1]");
+      const popupPromise = this.page.context().waitForEvent("page");
+      await frame.click("xpath=//button[contains(.,'Continue & Pay')]");
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    } else {
+      const razorFrame = this.page.frameLocator(
+        "xpath=//iframe[@class='razorpay-checkout-frame']",
+      );
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=//input[@placeholder='Search for Banks']")
+        .fill("State Bank of India");
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=(//span[contains(.,'State Bank of India')])[1]")
+        .click();
+      const popupPromise = this.page.context().waitForEvent("page");
+      await razorFrame
+        .locator("xpath=//button[contains(.,'Continue & Pay')]")
+        .click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    }
   }
 }

@@ -15,6 +15,10 @@ function buildEnvBlock(prefix: string): Record<string, string> {
     [`${prefix}_NEW_ADMIN_USER_MOBILE`]: '9000000004', [`${prefix}_NEW_ADMIN_USER_OTP`]: '1234',
     [`${prefix}_BACKEND_USER_MOBILE`]: '9000000005', [`${prefix}_BACKEND_USER_OTP`]: '1234',
     [`${prefix}_EMI_USER_MOBILE`]: '9000000006', [`${prefix}_EMI_USER_OTP`]: '1234',
+    [`${prefix}_ADMIN_APPRAISER_MOBILE`]: '9000000011',
+    [`${prefix}_ADMIN_BM_MOBILE`]: '9000000012',
+    [`${prefix}_ADMIN_OPS_MOBILE`]: '9000000013',
+    [`${prefix}_ADMIN_PARTNER_MOBILE`]: '9000000014',
   };
 }
 
@@ -46,15 +50,22 @@ describe('loadEnv (multi-env)', () => {
     expect(() => loadEnv({ ...valid, DEFAULT_ENV: 'production' })).toThrow();
   });
 
-  it('fails when a UAT url is missing', () => {
-    const missing = { ...valid } as Record<string, string>;
+  // Only the targeted env's block is required (the other env's block is optional).
+  it('fails when a UAT url is missing and UAT is the targeted env', () => {
+    const missing = { ...valid, DEFAULT_ENV: 'uat' } as Record<string, string>;
     delete missing.UAT_BASE_URL_ADMIN;
     expect(() => loadEnv(missing)).toThrow(/UAT_BASE_URL_ADMIN/);
   });
 
-  it('fails when a TEST OTP is missing', () => {
+  it('fails when a TEST role mobile is missing and TEST is the targeted env', () => {
     const missing = { ...valid } as Record<string, string>;
-    delete missing.TEST_ADMIN_USER_OTP;
-    expect(() => loadEnv(missing)).toThrow(/TEST_ADMIN_USER_OTP/);
+    delete missing.TEST_ADMIN_APPRAISER_MOBILE;
+    expect(() => loadEnv(missing)).toThrow(/TEST_ADMIN_APPRAISER_MOBILE/);
+  });
+
+  it('does not require the inactive env block', () => {
+    const missing = { ...valid } as Record<string, string>;
+    delete missing.UAT_BASE_URL_ADMIN;
+    expect(() => loadEnv(missing)).not.toThrow();
   });
 });

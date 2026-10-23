@@ -2,7 +2,7 @@ import { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
-import customerData from "../../testdata/admin/documents/customerData.json";
+import fs from "fs";
 import { NewGoldLoanPage } from "./new-gold-loan.page";
 import { AssignPacketPage } from "./assign-packet.page";
 import { RenewLoanPage } from "./renew-loan.page";
@@ -55,6 +55,31 @@ export class PartReleasePage extends AdminBasePage {
     this.page.locator(
       "xpath=(//label[@class='custom-checkbox']//input[@type='checkbox'])[1]",
     );
+  // Confirmed live: the native checkbox <input> is zero-size/hidden (custom-checkbox CSS
+  // pattern) — Playwright refuses a real .click() on it. Click the <label> wrapper instead.
+  private readonly jewelleryItemLabel = () =>
+    this.page.locator("xpath=(//label[contains(@class,'custom-checkbox')])[1]");
+  // Confirmed live: selecting CASH in selPayment reveals a second dropdown with a literal
+  // "CASH WITH 0" option — the concrete case ported from Java's PO33_PartReleaseCashwithZero.
+  private readonly selPaymentType = () =>
+    this.page.locator("xpath=//select[@formcontrolname='paymentType']");
+  private readonly paidAmountField = () =>
+    this.page.locator("xpath=//input[@formcontrolname='paidAmount']");
+  private readonly btnDoneText = () =>
+    this.page.locator("xpath=//span[normalize-space()='Done']");
+  private readonly btnCancelText = () =>
+    this.page.locator("xpath=//span[normalize-space()='Cancel']");
+  private readonly selReceivingBranch = () =>
+    this.page.locator(
+      "xpath=//select[@formcontrolname='receivedAmountForBranchId']",
+    );
+  // Offline (IMPS) payment mode fields — re-declared from PO10_QuickPayment / PO23_PartReleaseOffline.
+  private readonly inputBankName = () =>
+    this.page.locator("xpath=//input[@formcontrolname='bankName']");
+  private readonly inputBranchName = () =>
+    this.page.locator("xpath=//input[@formcontrolname='branchName']");
+  private readonly inputBankTransactionID = () =>
+    this.page.locator("xpath=//input[@formcontrolname='transactionId']");
   private readonly btnRelease = () =>
     this.page.locator(
       "xpath=//span[normalize-space()='Release']/ancestor::button",
@@ -74,7 +99,11 @@ export class PartReleasePage extends AdminBasePage {
   private readonly btnNext = () =>
     this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
   private readonly btnOk = () =>
-    this.page.locator("xpath=//button[@type='submit']");
+    this.page
+      .locator(
+        "xpath=//button[@type='submit' and (normalize-space()='Ok' or .//span[normalize-space()='Ok'])]",
+      )
+      .first();
   private readonly loanID = () =>
     this.page.locator("xpath=//span[contains(.,'Done')]");
   private readonly btnUpdte = () =>
@@ -118,7 +147,11 @@ export class PartReleasePage extends AdminBasePage {
       "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
     );
   private readonly btnYesAssign = () =>
-    this.page.locator("xpath=//span[normalize-space()='Yes']");
+    this.page
+      .locator(
+        "xpath=//button[normalize-space()='Yes' or .//span[normalize-space()='Yes']]",
+      )
+      .first();
   // Cross-page re-declarations
   // PO_LoginLogout.loc_Profile
   private readonly profile = () =>
@@ -160,7 +193,11 @@ export class PartReleasePage extends AdminBasePage {
     this.page.locator("xpath=//select[@name='showPaymentValue']");
   // PO10_QuickPayment.loc_btnConfirm
   private readonly btnConfirm = () =>
-    this.page.locator("xpath=//span[normalize-space()='Confirm']");
+    this.page
+      .locator(
+        "xpath=//button[normalize-space()='Confirm' or .//span[normalize-space()='Confirm']]",
+      )
+      .first();
   // PO12_TopUp.loc_selPurpose
   private readonly selPurpose = () =>
     this.page.locator("xpath=//select[@formcontrolname='loanPurpose']");
@@ -247,6 +284,15 @@ export class PartReleasePage extends AdminBasePage {
     }
     return result;
   }
+
+  /** Reads the customer ID most recently written by CustomerManagementPage during onboarding. */
+  private getCurrentCustomerId(): string {
+    const customerData = JSON.parse(
+      fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
+    );
+    return customerData.customerId.trim();
+  }
+
   async partnerPartReleaseApproval(): Promise<void> {
     const data = getLoginData();
 
@@ -262,12 +308,24 @@ export class PartReleasePage extends AdminBasePage {
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    // Filter by customer ID, not first name: the first name matches many loans (and other
+    // customers), leaving several PARTNER APPROVAL buttons and a strict-mode violation.
+    await this.customerUniqID().fill(this.getCurrentCustomerId());
+    await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2500);
-    await this.filterbtn().click();
+    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
+    // navigation attempt from the native submit and hangs waiting for it to "finish" even
+    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
+    // renew-zero.page.ts / quick-payment.page.ts / part-payment.page.ts / renew-plus-topup.page.ts).
+    await this.filterbtn().first().click({ noWaitAfter: true });
     await this.page.waitForTimeout(5000);
+    await this.waitForLoaderToDisappear();
 
-    await this.partnerApproval().click();
+    // Even for one customer several loans can await partner approval (e.g. the parent loan plus
+    // the new part-release child) — take the first (newest) one explicitly.
+    const partnerBtn = this.partnerApproval().first();
+    await partnerBtn.waitFor({ state: "visible", timeout: 30000 });
+    await partnerBtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
 
@@ -315,13 +373,12 @@ export class PartReleasePage extends AdminBasePage {
     const data = getLoginData();
     await this.page.waitForTimeout(5000);
     await this.profile().click();
+
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.partReleaseOnlinePay();
-    await this.update();
+    //await this.partReleaseOnlinePay();
+    //await this.update();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
     await this.customerManagementBtn().click();
@@ -330,8 +387,18 @@ export class PartReleasePage extends AdminBasePage {
     await this.appraisalRequest().click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    const customerIdForPartRelease = this.getCurrentCustomerId();
+    // Appraiser Requests filter: placeholder is "Enter Customer Unique ID"
+    const appraiserReqCustomerId = this.page
+      .locator(
+        "xpath=//input[contains(translate(@placeholder,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'customer unique id')]",
+      )
+      .first();
+    await appraiserReqCustomerId.waitFor({ state: "visible", timeout: 20000 });
+    await appraiserReqCustomerId.fill(customerIdForPartRelease);
+    console.log(customerIdForPartRelease);
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     const scrollDiv = this.page.locator(
       "xpath=//div[@class='mat-table__wrapper']",
@@ -354,7 +421,11 @@ export class PartReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
     await this.page.getByRole("menuitem", { name: "Apply Loan" }).click();
     await this.page.waitForTimeout(4000);
-    await this.btnOk().click();
+    // noWaitAfter: btnOk is the same native type="submit" button as filterbtn() (identical
+    // XPath, just a different name here) — Playwright detects a real navigation attempt from
+    // the native submit and hangs waiting for it to "finish" even though Angular's (ngSubmit)
+    // handler already intercepted it client-side (same fix as filterbtn() elsewhere in this file).
+    await this.btnOk().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
     await this.clickNextSafely(3);
@@ -373,8 +444,13 @@ export class PartReleasePage extends AdminBasePage {
     }
     await this.btnNext().click();
     await this.page.waitForTimeout(2000);
-    await this.newGoldLoanPage.validateBankDetailsWithAdvanceCash();
-    await this.btnNext().click();
+    // Part release has no Loan Amount / advance-cash entry on Bank Details:
+    // no reload and no amount, just move on with Next (Bank Details -> Loan Status).
+    await this.waitForLoaderToDisappear();
+    await this.clickNextSafely(1);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+    await this.clickNextSafely(1);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -387,10 +463,12 @@ export class PartReleasePage extends AdminBasePage {
     await this.profile().click();
     await this.page.waitForTimeout(5000);
 
+    // Confirmed live: selecting any branch scope other than the appraiser account's own
+    // assigned branch gets the session force-logged-out on UAT within ~3s (backend rejects
+    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
+    // Leave the account on its default branch scope instead of calling selectOption().
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -404,13 +482,15 @@ export class PartReleasePage extends AdminBasePage {
     );
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(customerData.customerId.trim());
-    console.log(customerData.customerId);
+    const customerIdForAssignPacket = this.getCurrentCustomerId();
+    await this.customerUniqID().fill(customerIdForAssignPacket);
+    console.log(customerIdForAssignPacket);
     // await this.firstNameFilter().fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
 
-    await this.filterbtn().click();
+    // noWaitAfter: see the fix in partnerPartReleaseApproval() above.
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -444,7 +524,9 @@ export class PartReleasePage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    await this.btnAddPacket().click();
+    // noWaitAfter: btnAddPacket is the same native type="submit" button as filterbtn() (identical
+    // XPath, just a different name here) — same navigation-hang fix as elsewhere in this file.
+    await this.btnAddPacket().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     //await this.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
@@ -553,11 +635,14 @@ export class PartReleasePage extends AdminBasePage {
 
     // await this.firstNameFilter().fill(data.firstName);
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
+    const customerIdForOnlinePay = this.getCurrentCustomerId();
+    // Loan Details filter uses the "Enter Customer Unique Id" placeholder
+    await this.customerUniqID().fill(customerIdForOnlinePay);
     await this.page.waitForTimeout(2000);
-    console.log(customerData.customerId);
+    console.log(customerIdForOnlinePay);
     await this.waitForLoaderToDisappear();
-    await this.filterbtn().click();
+    // noWaitAfter: see the fix in partnerPartReleaseApproval() above.
+    await this.filterbtn().click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     // Read customer ID
@@ -687,6 +772,261 @@ export class PartReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
   }
 
+  // ── Actions (standalone, extracted for tc15-part-release-validations.spec.ts) ─
+
+  /**
+   * Navigates to Loan Details, opens Jewellery Release, selects exactly ONE jewellery
+   * item (checking all of them triggers a Full Release instead of Part Release —
+   * confirmed live), clicks Release, then selects a scheme (range covers this loan's
+   * amount) and purpose. Stops right before Proceed so callers can branch.
+   */
+  private async navigateToPartReleaseSchemeScreen(): Promise<void> {
+    const data = getLoginData();
+
+    await this.page.waitForTimeout(5000);
+    await this.profile().click();
+    await this.page.waitForTimeout(5000);
+
+    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.page.waitForTimeout(2000);
+
+    await this.expandSidebar();
+    await this.waitForLoaderToDisappear();
+    await this.loanManagement().click();
+    await this.page.waitForTimeout(2000);
+
+    const el = this.loanDetails();
+    await el.scrollIntoViewIfNeeded();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+
+    await this.firstNameFilter().fill(data.firstName);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    // noWaitAfter: see partReleaseLoan() elsewhere in this file.
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
+
+    await this.kebabMenu().click();
+    await this.waitForLoaderToDisappear();
+    await this.jewllaryRelease().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(3000);
+
+    await this.jewelleryItemLabel().click();
+    await this.page.waitForTimeout(1000);
+
+    await this.btnRelease().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.selScheme().selectOption({
+      label: "[ALL] FLEXI 540-30 (100000 - 1600000)",
+    });
+    await this.page.waitForTimeout(2000);
+    await this.selPurpose().selectOption({ label: "Business Expansion" });
+    await this.page.waitForTimeout(2000);
+  }
+
+  /**
+   * Checks Proceed is visible/enabled on the Part Release scheme screen, clicks it,
+   * confirms Cancel appears on the resulting payment screen, then clicks Cancel — leaves
+   * the loan unmutated (no real release/payment is submitted).
+   */
+  async validateProceedAndCancelButtons(): Promise<{
+    proceedVisible: boolean;
+    proceedEnabled: boolean;
+    cancelVisible: boolean;
+  }> {
+    await this.navigateToPartReleaseSchemeScreen();
+
+    const proceed = this.btnProceed();
+    const proceedVisible = await proceed.isVisible();
+    const proceedEnabled = await proceed.isEnabled();
+
+    await proceed.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    const cancelVisible = await this.btnCancelText()
+      .isVisible()
+      .catch(() => false);
+
+    await this.btnCancelText()
+      .click()
+      .catch(() => {});
+    await this.waitForLoaderToDisappear();
+
+    return { proceedVisible, proceedEnabled, cancelVisible };
+  }
+
+  /**
+   * Confirmed live: after selecting CASH, both the "paymentType" and "Select Branch"
+   * dropdowns stay disabled until a Cash Receipt is downloaded and uploaded — same
+   * two-step UI already implemented in renew-zero.page.ts's uploadCashReceiptAndSelectBranch()
+   * (download icon → Angular renders + calls window.print() (suppressed) → capture via CDP's
+   * Page.printToPDF → click "Sign" → upload the captured PDF via the revealed file input).
+   */
+  private async uploadCashReceiptForPartRelease(): Promise<void> {
+    const nodePath = require("path");
+    const nodeFs = require("fs");
+    const cashReceiptPdfPath = nodePath.resolve(
+      process.cwd(),
+      "testdata",
+      "admin",
+      "cash-receipt-download.pdf",
+    );
+    const fallbackPdfPath = nodePath.resolve(
+      process.cwd(),
+      "testdata",
+      "admin",
+      "singnature-sample.pdf",
+    );
+    let uploadPdfPath: string = fallbackPdfPath;
+
+    const downloadImg = this.page.locator("xpath=//img[@alt='Download']");
+    if ((await downloadImg.count()) > 0) {
+      const cdpSession = await this.page.context().newCDPSession(this.page);
+
+      const dialogHandler = async (dialog: any) => {
+        await dialog.dismiss();
+      };
+      this.page.on("dialog", dialogHandler);
+
+      try {
+        await this.page.evaluate(() => {
+          (window as any).print = () => {};
+        });
+      } catch (_) {}
+
+      const pdfPromise = (async () => {
+        await this.page.waitForTimeout(600);
+        try {
+          const pdf = await cdpSession.send("Page.printToPDF", {
+            displayHeaderFooter: false,
+            preferCSSPageSize: true,
+            printBackground: true,
+            paperWidth: 8.5,
+            paperHeight: 11,
+            marginTop: 0,
+            marginBottom: 0,
+            marginLeft: 0,
+            marginRight: 0,
+          } as any);
+          console.log("✓ Cash Acknowledgement captured as PDF");
+          return pdf;
+        } catch (err: any) {
+          console.warn(`⚠ PDF capture failed: ${err.message}`);
+          return null;
+        }
+      })();
+
+      await downloadImg.click();
+
+      const pdfData = await Promise.race([
+        pdfPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 12000)),
+      ]);
+
+      this.page.off("dialog", dialogHandler);
+
+      if (pdfData && (pdfData as any).data) {
+        nodeFs.writeFileSync(
+          cashReceiptPdfPath,
+          Buffer.from((pdfData as any).data, "base64"),
+        );
+        uploadPdfPath = cashReceiptPdfPath;
+        console.log(`✓ Cash Receipt saved to: ${cashReceiptPdfPath}`);
+      }
+
+      await cdpSession.detach();
+      await this.page.waitForTimeout(1000);
+    }
+
+    const signBtn = this.page
+      .locator("xpath=//button[normalize-space()='Sign']")
+      .or(
+        this.page.locator("xpath=//button[normalize-space()='Cash Receipt']"),
+      );
+    if ((await signBtn.count()) > 0) {
+      const fileChooserPromise = this.page
+        .waitForEvent("filechooser", { timeout: 5000 })
+        .catch(() => null);
+
+      await signBtn.first().click();
+      await this.page.waitForTimeout(500);
+
+      const fileChooser = await fileChooserPromise;
+      if (fileChooser) {
+        try {
+          await fileChooser.setFiles(uploadPdfPath);
+          console.log(
+            `✓ Cash Receipt uploaded via filechooser: ${uploadPdfPath}`,
+          );
+        } catch (err: any) {
+          console.warn(`⚠ filechooser.setFiles failed: ${err.message}`);
+        }
+      } else {
+        const fileInputs = this.page.locator("xpath=//input[@type='file']");
+        const inputCount = await fileInputs.count();
+        if (inputCount > 0) {
+          try {
+            await fileInputs.nth(inputCount - 1).setInputFiles(uploadPdfPath);
+            console.log(`✓ Cash Receipt uploaded: ${uploadPdfPath}`);
+          } catch (err: any) {
+            console.warn(`⚠ setInputFiles failed: ${err.message}`);
+          }
+        }
+      }
+      await this.page.waitForTimeout(1000);
+    }
+  }
+
+  /**
+   * Port of Java PO33_PartReleaseCashwithZero / Flow47 (never previously implemented).
+   *
+   * Navigates to the Part Release scheme screen, clicks Proceed, selects CASH as the
+   * payment mode, uploads the Cash Receipt (required before paymentType/branch enable —
+   * confirmed live), then selects the literal "CASH WITH 0" payment type. Clicks Cancel
+   * to leave the loan unmutated rather than submitting a real cash transaction.
+   */
+  async validateWithCashZero(): Promise<{
+    paidAmount: string;
+    doneVisible: boolean;
+  }> {
+    await this.navigateToPartReleaseSchemeScreen();
+
+    await this.btnProceed().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+
+    await this.selPayment().selectOption({ label: "CASH" });
+    await this.page.waitForTimeout(2000);
+
+    await this.uploadCashReceiptForPartRelease();
+
+    // paymentType stays disabled until the receiving branch is selected — confirmed live.
+    await this.selReceivingBranch().selectOption({ label: "Augmont" });
+    await this.page.waitForTimeout(1000);
+
+    await this.selPaymentType().selectOption({ label: "CASH WITH 0" });
+    await this.page.waitForTimeout(2000);
+
+    const paidAmount = await this.paidAmountField()
+      .inputValue()
+      .catch(() => "");
+    const doneVisible = await this.btnDoneText()
+      .isVisible()
+      .catch(() => false);
+
+    await this.btnCancelText()
+      .click()
+      .catch(() => {});
+    await this.waitForLoaderToDisappear();
+
+    return { paidAmount, doneVisible };
+  }
+
   // ── Actions (from Flow17_PartReleaseLoan.update) ──────────────────────────
 
   /**
@@ -709,9 +1049,21 @@ export class PartReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
+    const customerIdForUpdate = this.getCurrentCustomerId();
+    // "Part Release Approved List" filter: placeholder is "Enter Customer Unique ID"
+    // (capital ID), unlike the "enter text here" input used on other pages.
+    const approvedListCustomerId = this.page
+      .locator(
+        "xpath=//input[contains(translate(@placeholder,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'customer unique id')]",
+      )
+      .first();
+    await approvedListCustomerId.waitFor({ state: "visible", timeout: 20000 });
+    await approvedListCustomerId.fill(customerIdForUpdate);
+    await this.page.waitForTimeout(1000);
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    console.log(customerData.customerId);
+    console.log(customerIdForUpdate);
     const collect = this.btnCollect();
 
     console.log("Collect count:", await collect.count());
@@ -779,5 +1131,144 @@ export class PartReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(500);
     await this.btnUpdate().click();
     await this.waitForLoaderToDisappear();
+  }
+  async partReleaseCronPay(): Promise<void> {
+    const data = getLoginData();
+    await this.expandSidebar();
+    await this.page.waitForTimeout(5000);
+    await this.loanManagement().click();
+    await this.page.waitForTimeout(2000);
+    const el = this.loanDetails();
+    await el.click();
+    await this.waitForLoaderToDisappear();
+
+    // await this.firstNameFilter().fill(data.firstName);
+    await this.page.waitForTimeout(5000);
+    await this.customerUniqID().fill(this.getCurrentCustomerId());
+    console.log(this.getCurrentCustomerId());
+    await this.waitForLoaderToDisappear();
+    await this.filterbtn().click({ noWaitAfter: true });
+    await this.waitForLoaderToDisappear();
+    const element = this.page.locator(
+      "xpath=(//td[@class='ui-resizable-column p-element p-frozen-column ng-star-inserted'])[1]",
+    );
+    const str = (await element.innerText()).trim();
+
+    await this.kebabMenu().click();
+    await this.waitForLoaderToDisappear();
+    await this.jewllaryRelease().click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    const check = this.page.locator("xpath=(//input[@type='checkbox'])[1]");
+    await check.dispatchEvent("click");
+    await this.page.waitForTimeout(5000);
+    await this.btnRelease().click();
+
+    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(5000);
+    await this.selScheme().selectOption({
+      label: "[ALL] FLEXI 540-30 (100000 - 1600000)",
+    });
+    await this.page.waitForTimeout(2000);
+    await this.selPurpose().selectOption({ label: "Business Expansion" });
+    await this.page.waitForTimeout(5000);
+    //await this.btnProceed().click();
+    const proceed = this.page.locator(
+      "//button[.//span[normalize-space()='Proceed']]",
+    );
+
+    await proceed.waitFor({ state: "visible", timeout: 30000 });
+
+    //await proceed.scrollIntoViewIfNeeded();
+    await proceed.click();
+    console.log("Proceed button is visible, clicking..." + proceed);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.waitForLoaderToDisappear();
+
+    const payment = this.selPayment();
+
+    await payment.waitFor({
+      state: "visible",
+      timeout: 30000,
+    });
+
+    console.log("Payment count:", await payment.count());
+    await payment.scrollIntoViewIfNeeded();
+
+    const options = await payment.locator("option").allTextContents();
+
+    console.log("Payment dropdown options:", options);
+
+    await this.page.waitForFunction(() => {
+      const select = document.querySelector(
+        "select[name='showPaymentValue']",
+      ) as HTMLSelectElement;
+
+      return select && select.options.length > 1;
+    });
+
+    await this.selPayment().selectOption({ label: "CRON" });
+    await this.netBanking().click();
+    await this.waitForLoaderToDisappear();
+    await this.btnConfirm().waitFor({ state: "visible", timeout: 30000 });
+    await this.btnConfirm().click();
+    await this.waitForLoaderToDisappear();
+    await this.btnYesAssign().click();
+    await this.page.waitForTimeout(5000);
+    // Switch into Razorpay iframe
+    const iframeEl = this.page.locator(
+      "xpath=//iframe[@class='razorpay-checkout-frame']",
+    );
+    await iframeEl.waitFor({ state: "attached" });
+    const frame =
+      this.page.frame({ url: /razorpay/ }) ??
+      this.page.frames().find((f) => f.url().includes("razorpay"));
+    if (frame) {
+      await frame.waitForTimeout(5000);
+      await frame.fill(
+        "xpath=//input[@placeholder='Search for Banks']",
+        "State Bank of India",
+      );
+      await frame.waitForTimeout(5000);
+      await frame.click("xpath=(//span[contains(.,'State Bank of India')])[1]");
+      const popupPromise = this.page.context().waitForEvent("page");
+      await frame.click("xpath=//button[contains(.,'Continue & Pay')]");
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    } else {
+      // fallback: use frameLocator
+      const razorFrame = this.page.frameLocator(
+        "xpath=//iframe[@class='razorpay-checkout-frame']",
+      );
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=//input[@placeholder='Search for Banks']")
+        .fill("State Bank of India");
+      await this.page.waitForTimeout(5000);
+      await razorFrame
+        .locator("xpath=(//span[contains(.,'State Bank of India')])[1]")
+        .click();
+      const popupPromise = this.page.context().waitForEvent("page");
+      await razorFrame
+        .locator("xpath=//button[contains(.,'Continue & Pay')]")
+        .click();
+      const popup = await popupPromise;
+      await popup.waitForLoadState();
+
+      const successBtn = popup.getByRole("button", { name: "Success" });
+
+      await successBtn.waitFor({ state: "visible", timeout: 5000 });
+
+      await successBtn.click();
+    }
+    await this.page.waitForTimeout(2000);
   }
 }

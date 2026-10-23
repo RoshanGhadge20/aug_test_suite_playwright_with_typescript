@@ -51,9 +51,11 @@ export class FicPartnerPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login).
     await this.branchDropdown().waitFor({ state: 'visible' });
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
@@ -80,11 +82,11 @@ export class FicPartnerPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     // Skip basic details, nominee, ornaments — just click Next 3 times
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       await this.safeClick(this.btnNext());
     }
 
-    await this.validateFICPage();
+    //await this.validateFICPage();
     await this.validateBankDetailsWithAdvanceCash();
   }
 

@@ -1,7 +1,6 @@
 import path from 'path';
 import * as XLSX from 'xlsx';
 
-/** Admin test data workbook: `testdata/admin/admin-data.xlsx` */
 export const ADMIN_DATA_DIR = path.resolve(process.cwd(), 'testdata', 'admin');
 export const ADMIN_DATA_WORKBOOK = path.join(ADMIN_DATA_DIR, 'admin-data.xlsx');
 
@@ -29,10 +28,6 @@ function readSheetRows<T extends Record<string, unknown>>(
   });
 }
 
-/**
- * Returns all non-empty trimmed values in the given column of `sheetLogin`.
- * Throws if the header is not found in the sheet.
- */
 export function columnValues(field: string, filePath = ADMIN_DATA_WORKBOOK): string[] {
   const rows = readSheetRows<Record<string, unknown>>('sheetLogin', filePath);
   if (rows.length === 0) {
@@ -49,7 +44,6 @@ export function columnValues(field: string, filePath = ADMIN_DATA_WORKBOOK): str
     .filter((v) => v !== '');
 }
 
-/** Memoised per-field random pick — stable within a run, varies across runs. */
 const pickCache = new Map<string, string>();
 
 export function pickFieldValue(field: string, filePath = ADMIN_DATA_WORKBOOK): string {

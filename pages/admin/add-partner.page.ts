@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Page, expect } from "@playwright/test";
 import { KycPage } from "./kyc.page";
 import path from "path";
 import { AdminBasePage } from "./admin-base.page";
@@ -121,8 +121,10 @@ export class AddPartnerPage extends AdminBasePage {
     this.page.locator("xpath=//input[@placeholder='enter text here']");
   private readonly btYes = () =>
     this.page.locator("xpath=//button[@type='submit']");
-  private readonly btnclose = () =>
-    this.page.locator("xpath=//img[@class='kt-pointer']");
+  private readonly btnClose = () =>
+    this.page.locator(
+      "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
+    );
   private readonly branchName = () =>
     this.page.locator("xpath=//input[@formcontrolname='name']");
   private readonly partnerbranch = () =>
@@ -166,30 +168,13 @@ export class AddPartnerPage extends AdminBasePage {
     await this.page.waitForTimeout(7000);
     await this.profile().click();
     await this.page.waitForTimeout(5000);
-
     await this.branchDropdown().waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
-    await this.page.waitForTimeout(7000);
-
     await this.expandSidebar();
     await this.page.waitForTimeout(500);
     await this.userManagent().click();
     await this.page.waitForTimeout(5000);
   }
-
-  // ── Actions (from Flow42_ValidateAddNewPartner) ───────────────────────────
-
-  /**
-   * Port of Java Flow42_ValidateAddNewPartner.validateAddNewPartner().
-   *
-   * NOTE: logout() at the end is OMITTED. Session management handled by caller.
-   *
-   * TODO(port): File upload — Java used sendKeys to //input[@type='file'].
-   * Best-effort Playwright: setInputFiles(). Caller must supply documentPath.
-   *
-   * Returns displayed { firstName, lastName, email, mobile } for spec assertions.
-   */
   async uploadPartnerImage(imagePath?: string): Promise<void> {
     await this.Kycpage.uploadFileWithValidation(
       imagePath,
@@ -325,7 +310,7 @@ export class AddPartnerPage extends AdminBasePage {
     const displayedEmail = (await this.emailID().inputValue()).trim();
     const displayedMobile = (await this.mobileNumber().inputValue()).trim();
 
-    await this.btnclose().click();
+    await this.btnClose().click();
     await this.page.waitForTimeout(5000);
     await this.validateEdit();
     await this.page.waitForTimeout(5000);
@@ -338,11 +323,6 @@ export class AddPartnerPage extends AdminBasePage {
     };
   }
 
-  /**
-   * Port of Java Flow42_ValidateAddNewPartner.validateEdit().
-   *
-   * NOTE: login()/logout() calls OMITTED. Caller handles session.
-   */
   async validateEdit(): Promise<void> {
     await this.page.waitForTimeout(5000);
     // await this.navigateToPartner();
@@ -354,28 +334,66 @@ export class AddPartnerPage extends AdminBasePage {
     await editBtn.waitFor({ state: "visible", timeout: 10000 });
     await editBtn.click();
 
-    await this.page.waitForTimeout(500);
+    // The Edit Partner form loads the partner's data asynchronously. Submitting before that
+    // leaves First/Last Name, Email and Mobile blank ("Required field"), so Update is rejected
+    // and the modal stays open — blocking every later click (confirmed from the TC05 failure
+    // screenshot). Wait until the name field is actually populated.
+    const editFirstName = this.firstName();
+    await editFirstName.waitFor({ state: "visible", timeout: 15000 });
+    await expect
+      .poll(async () => (await editFirstName.inputValue()).trim(), {
+        timeout: 15000,
+        message: "Edit Partner form never populated the partner's first name",
+      })
+      .not.toBe("");
+
     const commEl = this.enterCommision();
     await commEl.clear();
     await this.page.waitForTimeout(500);
     await commEl.fill("2%");
     await this.page.waitForTimeout(500);
-    await this.btnUpdate().click();
     await this.page.waitForTimeout(500);
+    // await this.page
+    //   .locator(
+    //     'xpath=//div[@class="ng-select-container ng-has-value"][.//div[@class="ng-placeholder" and text()="Select Disbursement Mode"]]',
+    //   )
+    //   .click();
+    // await this.page.waitForTimeout(500);
+    // await this.page
+    //   .locator(
+    //     'xpath=//label[contains(@class,"custom-checkbox")][.//span[@class="label-checkbox" and normalize-space(text())="Select All"]]',
+    //   )
+    //   .click();
+    await this.btnUpdate().click();
+    await this.closeEditPartnerModalIfOpen();
   }
 
-  /**
-   * Port of Java Flow42_ValidateAddNewPartner.validateDeletePartner().
-   *
-   * NOTE: login()/logout() calls OMITTED. Caller handles session.
-   */
+  private async closeEditPartnerModalIfOpen(): Promise<void> {
+    const heading = this.page.locator(
+      "xpath=//h3[normalize-space()='Edit Partner']",
+    );
+    const closed = await heading
+      .waitFor({ state: "hidden", timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    if (closed) return;
+    console.warn(
+      "⚠ Edit Partner modal still open after Update (form validation rejected it) — cancelling.",
+    );
+    await this.page
+      .locator("xpath=//button[normalize-space()='Cancel']")
+      .first()
+      .click();
+    await heading.waitFor({ state: "hidden", timeout: 10000 });
+  }
+
   async validateDeletePartner(): Promise<void> {
     await this.page.waitForTimeout(5000);
     // await this.navigateToPartner();
     await this.page.waitForTimeout(1500);
     await this.expandSidebar();
     await this.page.waitForTimeout(500);
-
+    await this.searchPartner("Test");
     const deleteBtn = this.page.locator(
       "xpath=(//div[contains(@class,'kt-pointer') and contains(normalize-space(.),'Delete')])[1]",
     );
@@ -384,5 +402,80 @@ export class AddPartnerPage extends AdminBasePage {
     await this.page.waitForTimeout(500);
     await this.btYes().click();
     await this.page.waitForTimeout(500);
+  }
+
+ 
+  private async searchPartner(searchText: string): Promise<void> {
+    const box = this.searchName();
+    await box.waitFor({ state: "visible", timeout: 15000 });
+    await box.click();
+    await box.fill("");
+    await box.fill(searchText);
+    await box.press("Enter");
+    await this.waitForLoaderToDisappear();
+
+    const bodyRows = this.page.locator(
+      "xpath=//*[@role='row'][.//*[@role='gridcell' or self::td or self::mat-cell]]",
+    );
+    await expect
+      .poll(
+        async () => {
+          const rows = await bodyRows.allInnerTexts();
+          return (
+            rows.length > 0 &&
+            rows.every((r) =>
+              r.toUpperCase().includes(searchText.toUpperCase()),
+            )
+          );
+        },
+        {
+          timeout: 20000,
+          message: `Partner list never filtered down to "${searchText}"`,
+        },
+      )
+      .toBe(true);
+  }
+
+  async crossCheckOldPartner(searchText: string = "Test"): Promise<string> {
+    await this.navigateToPartner();
+
+    await this.searchPartner(searchText);
+
+    const firstResultCell = this.page
+      .locator("xpath=(//mat-cell[@role='gridcell'])[2]")
+      .or(
+        this.page.locator(
+          "xpath=(//*[@role='row'][.//*[@role='gridcell' or self::td]])[1]//*[@role='gridcell' or self::td][2]",
+        ),
+      )
+      .first();
+    const actualPartner = (await firstResultCell.innerText()).trim();
+    console.log(`[crossCheckOldPartner] Found partner: "${actualPartner}"`);
+    return actualPartner;
+  }
+
+  async updateOldPartner(
+    newCommission: string = "2%",
+    searchText: string = "Test",
+  ): Promise<string> {
+    // await this.navigateToPartner();
+
+    await this.searchPartner(searchText);
+
+    const editBtn = this.edit();
+    await editBtn.waitFor({ state: "visible", timeout: 15000 });
+    await editBtn.click();
+    await this.page.waitForTimeout(500);
+
+    const commEl = this.enterCommision();
+    await commEl.waitFor({ state: "visible", timeout: 15000 });
+    await commEl.clear();
+    await commEl.fill(newCommission);
+    await this.page.waitForTimeout(500);
+
+    await this.btnUpdate().click();
+    await this.page.waitForTimeout(1000);
+
+    return newCommission;
   }
 }

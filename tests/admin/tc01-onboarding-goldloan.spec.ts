@@ -1,4 +1,4 @@
-import { test } from "../../fixtures/admin.fixture";
+import { test, expect } from "../../fixtures/admin.fixture";
 import fs from "fs";
 test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
   test("customer onboarding through gold-loan disbursement", async ({
@@ -15,10 +15,25 @@ test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
     page,
     kycFilePaths,
   }) => {
-    // test.setTimeout(15 * 60_000); // long end-to-end chain
-
+    test.setTimeout(15 * 60_000);
     // await test.step("add customer", async () => {
+    //   test.setTimeout(15 * 60_000);
+    //   await loginAs("appraiser");
     //   await customerManagement.clickOnCustomerManagementButton();
+    // });
+    // await test.step("validate Apply KYC button", async () => {
+    //   test.setTimeout(15 * 60_000);
+    //   const { isDisplayed, isEnabled } = await kyc.validateApplyKycButton();
+    //   expect.soft(isDisplayed).toBe(true);
+    //   expect.soft(isEnabled).toBe(true);
+    // });
+
+    // await test.step("customer KYC - OVD Auto Aadhaar", async () => {
+    //   test.setTimeout(15 * 60_000);
+    //   await kyc.applyOvdWithAutoAadhaar(
+    //     "875302915562",
+    //     kycFilePaths.signaturePath,
+    //   );
     // });
     // await test.step("customer KYC", async () => {
     //   test.setTimeout(15 * 60_000);
@@ -28,35 +43,31 @@ test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
     //     kycFilePaths.aadhaarPath,
     //   );
     // });
-    // // await test.step('assign branch', async () => {
-    // //   await kyc.validateAssignBranch();
-    // // });
-    // await test.step("KYC approval (OPS)", async () => {
+    await test.step("KYC approval (OPS)", async () => {
+      test.setTimeout(15 * 60_000);
+      await loginAs("ops");
+      await kycApproval.performOpsRatingActions(kyc);
+    });
+    // await test.step("create packet", async () => {
     //   test.setTimeout(15 * 60_000);
-    //   await loginAs("ops");
-
-    //   await kycApproval.performOpsRatingActions(kyc);
+    //   await createPacket.validateNewPacket();
     // });
-    // // await test.step("create packet", async () => {
-    // //   test.setTimeout(15 * 60_000);
-    // //   await createPacket.validateNewPacket();
-    // // });
-    // await test.step("apply gold loan", async () => {
-    //   test.setTimeout(15 * 60_000);
-    //   await loginAs("appraiser");
-    //   await newGoldLoan.validateGoldLoan();
-    // });
-    // await test.step("assign packet", async () => {
-    //   test.setTimeout(15 * 60_000);
-    //   //await loginAs("admin");
-    //   const code = await assignPacket.createAndAssignPacket();
-    //   await page.waitForLoadState("networkidle");
-    //   await page.waitForTimeout(5000);
-    //   await loginAs("appraiser");
-    //   await assignPacket.validateAppraisalPacket(code);
-    // });
-    // await test.step('BM approval', async () => {
-    //   await loginAs('bm');
+    await test.step("apply gold loan", async () => {
+      test.setTimeout(15 * 60_000);
+      await loginAs("appraiser");
+      await newGoldLoan.validateGoldLoan();
+    });
+    await test.step("assign packet", async () => {
+      test.setTimeout(15 * 60_000);
+      await loginAs("admin");
+      const code = await assignPacket.createAndAssignPacket();
+      await page.waitForLoadState("networkidle");
+      await page.waitForTimeout(5000);
+      await loginAs("appraiser");
+      await assignPacket.validateAppraisalPacket(code);
+    });
+    // await test.step("BM approval", async () => {
+    //   await loginAs("bm");
     //   await bmApproval.validateBranchManager();
     // });
     await test.step("OPS approval", async () => {
