@@ -290,27 +290,47 @@ export class WithdrawAccountDetailPage extends BasePage {
       priceText.replace('₹', '').replace(/\/\s*gm?\b/i, '').replace(/,/g, '').trim()
     );
   }
-  async selectUpi(): Promise<string> {
-    const upiRegion = this.page.getByRole('region', { name: /UPI/i });
-
-    const upiText = upiRegion.locator('p').filter({ hasText: /@/ }).first();
-
+  /** First UPI ID in the list, verified or not — for flows that only need an ID (e.g. delete/re-add). */
+  async getFirstUpiId(): Promise<string> {
+    const upiText = this.page.getByRole('region', { name: /UPI/i }).locator('p').filter({ hasText: /@/ }).first();
     await expect(
       upiText,
       'No UPI account is available. Please add a UPI account before proceeding.'
     ).toBeVisible();
+    return (await upiText.textContent())?.trim() ?? '';
+  }
 
-    const upiId = (await upiText.textContent())?.trim() ?? '';
+  async selectUpi(): Promise<string> {
+    const upiRegion = this.page.getByRole('region', { name: /UPI/i });
+    const upiTexts = upiRegion.locator('p').filter({ hasText: /@/ });
 
-    console.log(`Selected UPI: ${upiId}`);
+    await expect(
+      upiTexts.first(),
+      'No UPI account is available. Please add a UPI account before proceeding.'
+    ).toBeVisible();
+
+    const cardOf = (text: Locator): Locator =>
+      text.locator('xpath=ancestor::div[contains(@class,"border") and contains(@class,"rounded-lg")][1]');
 
     // A UPI account that hasn't been verified yet renders as a `cursor-not-allowed` card with its
-    // own "VERIFY" button instead of the selectable `cursor-pointer` card the ancestor lookup
-    // below expects — confirmed live 2026-09-01 against the shared UAT customer's account.
-    // Verifying flips the card to selectable immediately; no OTP step is involved.
-    const card = upiText.locator(
-      'xpath=ancestor::div[contains(@class,"border") and contains(@class,"rounded-lg")][1]'
-    );
+    // own "VERIFY" button. On UAT (confirmed 2026-10-15) VERIFY for `success@razorpay` now fails
+    // with 422 "Wrong UPI ID", so prefer the first already-verified (selectable) card.
+    const count = await upiTexts.count();
+    for (let i = 0; i < count; i += 1) {
+      const card = cardOf(upiTexts.nth(i));
+      if (!/cursor-not-allowed/.test((await card.getAttribute('class')) ?? '')) {
+        const upiId = (await upiTexts.nth(i).textContent())?.trim() ?? '';
+        console.log(`Selected UPI: ${upiId}`);
+        await card.click();
+        return upiId;
+      }
+    }
+
+    // No verified UPI — fall back to verifying the first one.
+    const upiText = upiTexts.first();
+    const upiId = (await upiText.textContent())?.trim() ?? '';
+    console.log(`Selected UPI: ${upiId}`);
+    const card = cardOf(upiText);
     const verifyButton = card.getByRole('button', { name: 'VERIFY' });
     if (await verifyButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await verifyButton.click();

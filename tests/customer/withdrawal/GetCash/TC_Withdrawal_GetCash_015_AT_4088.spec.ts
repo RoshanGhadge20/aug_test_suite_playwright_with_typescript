@@ -1,6 +1,8 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
 
 const sipSelectionThreshold = 0.001;
+// UPI isn't offered for large withdrawals — pick a Gold SIP whose full balance is below this.
+const upiMaxSipAmount = 15000;
 
 test.describe('TC_Withdrawal_GetCash_015 @customer-flows', () => {
   test(
@@ -63,6 +65,7 @@ test.describe('TC_Withdrawal_GetCash_015 @customer-flows', () => {
           const goldSip = await withdrawsipPage.selectSipForWithdrawal(
             'Gold',
             sipSelectionThreshold,
+            upiMaxSipAmount,
           );
 
           console.log('Selected Gold SIP:', goldSip);

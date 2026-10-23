@@ -36,7 +36,8 @@ export class ShopSortPage extends BasePage {
   }
 
   private listingResultsHeader(categoryLabel: string): Locator {
-    return this.listingSection(categoryLabel).locator('div.flex.px-6.justify-between > div').first();
+    // Header row alignment class changed (justify-between -> justify-start); don't key on it.
+    return this.listingSection(categoryLabel).locator('div.flex.px-6 > div').first();
   }
 
   private listingSection(categoryLabel: string): Locator {
