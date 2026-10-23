@@ -2,28 +2,7 @@ import { Page } from '@playwright/test';
 import { AdminBasePage } from './admin-base.page';
 import { getLoginData } from '../../utils/data/admin-excel-data';
 
-/**
- * Port of Java: PO30_CPVAddAndAttach (locators) + Flow39_ValidateAddCPVAndAttachedWithNonArvogPartner
- *              + Flow51_ValidateAddCpvAndAttchedCpvWithArvogPartner (actions)
- *
- * Both flows share very similar structure. Key differences:
- *   - Flow39: Non-Arvog partner (delegates to Flow04_NewGoldLoan.validateFICPage() = ICICI).
- *   - Flow51: Arvog partner (ARVOG ARV10, scheme SCHEME_LTV84, loan 605000).
- *
- * Role split for both flows:
- *   1. Appraiser: KYC (already done via precondition), start new GL, appraiser requests, apply loan.
- *   2. Ops (after appraiser logout): create packet, update packet.
- *   3. Appraiser: assign packet, upload documents.
- *   4. BM: branch manager approval (existing PO via spec).
- *   5. Appraiser (again): upload more documents, save, done.
- *   6. Ops: ops approval.
- *   7. Arvog partner / Non-Arvog partner: approval and disbursement.
- *   8. Appraiser: packet submission, CPV attachment validation.
- *
- * File upload TODOs:
- *   - Multiple file inputs — Java sendKeys("C:\\..."). Playwright: setInputFiles() — guarded.
- *   All paths must be supplied via env vars for live runs.
- */
+
 export class CpvPage extends AdminBasePage {
   constructor(page: Page) { super(page); }
 
@@ -178,9 +157,9 @@ export class CpvPage extends AdminBasePage {
 
     // Basic details, nominee (Next x2), ornaments
     await this.selectFromDropdown(this.page.locator("xpath=//select[@formcontrolname='purpose']"), 'Business Expansion');
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
     await this.page.waitForTimeout(5000);
-    await this.safeClick(this.btnNext()); // nominee next
+    await this.safeClickLocal(this.btnNext()); // nominee next
     // Ornaments (reuse helper)
     await this.addOrnaments();
     // FIC page — Arvog
@@ -579,9 +558,9 @@ export class CpvPage extends AdminBasePage {
 
     // Basic details
     await this.selectFromDropdown(this.page.locator("xpath=//select[@formcontrolname='purpose']"), 'Business Expansion');
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
     await this.page.waitForTimeout(5000);
-    await this.safeClick(this.btnNext()); // nominee
+    await this.safeClickLocal(this.btnNext()); // nominee
     await this.addOrnaments();
     // FIC — Non-Arvog (ICICI/W0 scheme)
     await this.validateFICPage_nonArvog();
@@ -602,7 +581,7 @@ export class CpvPage extends AdminBasePage {
     await this.calculateBtn().dblclick();
     await this.calculateBtn().click();
     await this.page.waitForTimeout(3000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateFICPage_nonArvog(): Promise<void> {
@@ -617,7 +596,7 @@ export class CpvPage extends AdminBasePage {
     await this.calculateBtn().dblclick();
     await this.calculateBtn().click();
     await this.page.waitForTimeout(3000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
@@ -643,7 +622,7 @@ export class CpvPage extends AdminBasePage {
     await this.advanceCashField().clear();
     await this.advanceCashField().fill(numericValue);
     await this.page.waitForTimeout(4000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   // ── Private helpers ───────────────────────────────────────────────────────
@@ -699,7 +678,7 @@ export class CpvPage extends AdminBasePage {
 
     const nextButton = this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
     await nextButton.scrollIntoViewIfNeeded().catch(() => {});
-    await this.safeClick(nextButton);
+    await this.safeClickLocal(nextButton);
   }
 
   private async selectFromDropdown(locator: ReturnType<typeof this.page.locator>, label: string): Promise<void> {
@@ -707,7 +686,7 @@ export class CpvPage extends AdminBasePage {
     await locator.selectOption({ label });
   }
 
-  private async safeClick(locator: ReturnType<typeof this.page.locator>): Promise<void> {
+  private async safeClickLocal(locator: ReturnType<typeof this.page.locator>): Promise<void> {
     try {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.waitFor({ state: 'visible', timeout: 30000 });

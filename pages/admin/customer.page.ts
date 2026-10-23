@@ -1,29 +1,65 @@
-import { Page, expect } from '@playwright/test';
+import { Locator, Page } from '@playwright/test';
 
 export class CustomerPage {
   constructor(private page: Page) {}
 
-  // Locators
-  profile = this.page.locator("//img[@alt='profile']");
-  branchDropdown = this.page.locator('#branch');
-  arrow = this.page.locator("//your-arrow-xpath");
-  customer = this.page.locator("//your-customer-xpath");
-  allCustomer = this.page.locator("//your-all-customer-xpath");
-  addCustomer = this.page.locator("//your-add-customer-xpath");
 
-  leadSource = this.page.locator("//select[@formcontrolname='leadSource']");
-  firstName = this.page.locator("//input[@formcontrolname='firstName']");
-  lastName = this.page.locator("//input[@formcontrolname='lastName']");
-  mobileNumber = this.page.locator("//input[@formcontrolname='mobileNumber']");
-  sendOtp = this.page.locator("//button[contains(.,'Send OTP')]");
-  enterOtp = this.page.locator("//input[@formcontrolname='otp']");
-  verifyOtp = this.page.locator("//button[contains(.,'Verify')]");
+  get profile(): Locator {
+    return this.page.locator("//img[@alt='profile']");
+  }
+  get branchDropdown(): Locator {
+    return this.page.locator('#branch');
+  }
+  get arrow(): Locator {
+    return this.page.locator("//your-arrow-xpath");
+  }
+  get customer(): Locator {
+    return this.page.locator("//your-customer-xpath");
+  }
+  get allCustomer(): Locator {
+    return this.page.locator("//your-all-customer-xpath");
+  }
+  get addCustomer(): Locator {
+    return this.page.locator("//your-add-customer-xpath");
+  }
 
-  stateDropdown = this.page.locator("//select[@formcontrolname='stateId']");
-  cityDropdown = this.page.locator("//select[@formcontrolname='cityId']");
-  pinCode = this.page.locator("//input[@formcontrolname='pinCode']");
-  goldLoanDropdown = this.page.locator("//select[@formcontrolname='goldLoan']");
-  addButton = this.page.locator("//button[contains(.,'Add')]");
+  get leadSource(): Locator {
+    return this.page.locator("//select[@formcontrolname='leadSource']");
+  }
+  get firstName(): Locator {
+    return this.page.locator("//input[@formcontrolname='firstName']");
+  }
+  get lastName(): Locator {
+    return this.page.locator("//input[@formcontrolname='lastName']");
+  }
+  get mobileNumber(): Locator {
+    return this.page.locator("//input[@formcontrolname='mobileNumber']");
+  }
+  get sendOtp(): Locator {
+    return this.page.locator("//button[contains(.,'Send OTP')]");
+  }
+  get enterOtp(): Locator {
+    return this.page.locator("//input[@formcontrolname='otp']");
+  }
+  get verifyOtp(): Locator {
+    return this.page.locator("//button[contains(.,'Verify')]");
+  }
+
+  get stateDropdown(): Locator {
+    return this.page.locator("//select[@formcontrolname='stateId']");
+  }
+  get cityDropdown(): Locator {
+    return this.page.locator("//select[@formcontrolname='cityId']");
+  }
+  get pinCode(): Locator {
+    return this.page.locator("//input[@formcontrolname='pinCode']");
+  }
+  get goldLoanDropdown(): Locator {
+    return this.page.locator("//select[@formcontrolname='goldLoan']");
+  }
+  get addButton(): Locator {
+    return this.page.locator("//button[contains(.,'Add')]");
+  }
 
   async navigateToCustomerManagement(branchName: string) {
     await this.profile.click();

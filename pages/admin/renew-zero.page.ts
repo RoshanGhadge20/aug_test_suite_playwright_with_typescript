@@ -96,8 +96,8 @@ export class RenewZeroPage extends AdminBasePage {
     return "TXN-" + Math.random().toString(36).substring(2, 14).toUpperCase();
   }
 
-  /** Port of Flow33_RenewLoanWithCashZero.safeClick() — scroll+click with retry. */
-  private async safeClick(
+  /** Port of Flow33_RenewLoanWithCashZero.safeClickLocal() — scroll+click with retry. */
+  private async safeClickLocal(
     locator: () => import("@playwright/test").Locator,
   ): Promise<void> {
     const el = locator();

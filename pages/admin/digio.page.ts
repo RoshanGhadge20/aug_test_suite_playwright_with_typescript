@@ -328,9 +328,9 @@ export class DigioPage extends AdminBasePage {
     // Basic details, nominee, ornaments, FIC (Arvog), bank
     await this.page.locator("xpath=//select[@formcontrolname='purpose']").scrollIntoViewIfNeeded().catch(() => {});
     await this.page.locator("xpath=//select[@formcontrolname='purpose']").selectOption({ label: 'Business Expansion' });
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
     await this.page.waitForTimeout(5000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
     await this.addOrnamentsArvog();
     await this.validateFICPage_arvog();
     await this.validateBankDetailsAdvanceCash();
@@ -535,7 +535,7 @@ export class DigioPage extends AdminBasePage {
     await calcBtn.dblclick();
     await calcBtn.click();
     await this.page.waitForTimeout(3000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   private async validateBankDetailsAdvanceCash(): Promise<void> {
@@ -562,7 +562,7 @@ export class DigioPage extends AdminBasePage {
     await advCash.clear();
     await advCash.fill(numericValue);
     await this.page.waitForTimeout(4000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   private async addOrnamentsArvog(): Promise<void> {
@@ -613,12 +613,12 @@ export class DigioPage extends AdminBasePage {
 
     const nextButton = this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
     await nextButton.scrollIntoViewIfNeeded().catch(() => {});
-    await this.safeClick(nextButton);
+    await this.safeClickLocal(nextButton);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private async safeClick(locator: ReturnType<typeof this.page.locator>): Promise<void> {
+  private async safeClickLocal(locator: ReturnType<typeof this.page.locator>): Promise<void> {
     try {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.waitFor({ state: 'visible', timeout: 30000 });

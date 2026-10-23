@@ -138,7 +138,7 @@ export class PartnerLoanPage extends AdminBasePage {
     await this.purposeDropdown().scrollIntoViewIfNeeded().catch(() => {});
     await this.purposeDropdown().selectOption({ label: 'Business Expansion' });
     await this.btnNext().scrollIntoViewIfNeeded().catch(() => {});
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateNomineeDetails(): Promise<void> {
@@ -161,7 +161,7 @@ export class PartnerLoanPage extends AdminBasePage {
     await this.txtMobileNumber().clear();
     await this.txtMobileNumber().fill('7567201900');
     await this.page.waitForTimeout(2000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateOrnaments(): Promise<void> {
@@ -208,7 +208,7 @@ export class PartnerLoanPage extends AdminBasePage {
     }
 
     await this.btnNext().scrollIntoViewIfNeeded().catch(() => {});
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateFICPage(): Promise<void> {
@@ -225,7 +225,7 @@ export class PartnerLoanPage extends AdminBasePage {
     await this.calculateBtn().click();
     await this.page.waitForTimeout(3000);
 
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
@@ -255,7 +255,7 @@ export class PartnerLoanPage extends AdminBasePage {
     await this.advanceCashField().clear();
     await this.advanceCashField().fill(numericValue);
     await this.page.waitForTimeout(4000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -267,7 +267,7 @@ export class PartnerLoanPage extends AdminBasePage {
     await this.deductionWeight().fill(deductionWt.toFixed(1));
   }
 
-  private async safeClick(locator: ReturnType<typeof this.page.locator>): Promise<void> {
+  private async safeClickLocal(locator: ReturnType<typeof this.page.locator>): Promise<void> {
     try {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.waitFor({ state: 'visible', timeout: 30000 });

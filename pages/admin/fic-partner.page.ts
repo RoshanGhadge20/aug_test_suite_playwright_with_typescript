@@ -83,7 +83,7 @@ export class FicPartnerPage extends AdminBasePage {
 
     // Skip basic details, nominee, ornaments — just click Next 3 times
     for (let i = 0; i < 4; i++) {
-      await this.safeClick(this.btnNext());
+      await this.safeClickLocal(this.btnNext());
     }
 
     //await this.validateFICPage();
@@ -110,7 +110,7 @@ export class FicPartnerPage extends AdminBasePage {
       .catch(() => '');
 
     await this.page.waitForTimeout(3000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
@@ -140,12 +140,12 @@ export class FicPartnerPage extends AdminBasePage {
     await this.advanceCashField().clear();
     await this.advanceCashField().fill(numericValue);
     await this.page.waitForTimeout(4000);
-    await this.safeClick(this.btnNext());
+    await this.safeClickLocal(this.btnNext());
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
-  private async safeClick(locator: ReturnType<typeof this.page.locator>): Promise<void> {
+  private async safeClickLocal(locator: ReturnType<typeof this.page.locator>): Promise<void> {
     try {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
       await locator.waitFor({ state: 'visible', timeout: 30000 });
