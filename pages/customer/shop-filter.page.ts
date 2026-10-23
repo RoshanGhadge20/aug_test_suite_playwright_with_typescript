@@ -57,8 +57,35 @@ export class ShopFilterPage extends BasePage {
   async selectMetalWeight6To8Grams(): Promise<void> {
     await this.scrollUpToFilters();
     await this.page.getByText(ShopFilterPage.metalWeight6To8Label, { exact: true }).scrollIntoViewIfNeeded();
+    const countBefore = await this.readResultsCount();
     await this.metalWeight6To8Radio.click();
     await this.waitForListingReady();
+    // The listing keeps showing the previous results for ~2s before the filter applies.
+    await expect
+      .poll(() => this.readResultsCount(), { timeout: 10_000, intervals: [500, 1000, 2000] })
+      .not.toBe(countBefore)
+      .catch(() => {}); // count may legitimately be unchanged (e.g. filter re-applied)
+    await this.waitForResultsCountStable();
+  }
+
+  private async readResultsCount(): Promise<number> {
+    const text = ((await this.resultsText.textContent().catch(() => '')) ?? '').trim();
+    return Number(text.match(/(\d+)\s+results/i)?.[1] ?? -1);
+  }
+
+  /** Wait until the results count reads the same twice in a row (listing finished re-rendering). */
+  private async waitForResultsCountStable(expected?: number, timeoutMs = 20_000): Promise<void> {
+    let last = -2;
+    await expect
+      .poll(
+        async () => {
+          const current = await this.readResultsCount();
+          const stable = current === last && current >= 0 && (expected === undefined || current === expected);
+          last = current;
+          return stable;
+        },
+        { timeout: timeoutMs, intervals: [1000] })
+      .toBe(true);
   }
 
   async getFilteredProductCount(): Promise<number> {
@@ -71,18 +98,22 @@ export class ShopFilterPage extends BasePage {
   }
 
   /**
-   * Opens the card at `index`, retrying by re-resolving the locator if the listing re-renders
-   * (e.g. a live rate-ticker update recreating `*ngFor` nodes) and detaches the element mid-action.
+   * Opens the listing card whose image alt is `productName` (by name, not position — the
+   * listing briefly shows unfiltered results after Back, so an index can hit another product).
+   * Retries by re-resolving the locator if the listing re-renders and detaches the element.
    */
-  private async openProductCardAtIndex(index: number, attempts = 3): Promise<void> {
+  private async openProductCardByName(productName: string, attempts = 3): Promise<void> {
     await this.scrollUpToFilters();
     await this.waitForListingReady();
 
     for (let attempt = 1; ; attempt += 1) {
       try {
-        const card = this.listingProductCards().nth(index);
-        await card.scrollIntoViewIfNeeded();
-        await card.click();
+        // Click the product image itself — clicking the card's centre could land on a neighbour.
+        const image = this.listingProductCards()
+          .locator(`img[alt="${productName.replace(/"/g, '\\"')}"]`)
+          .first();
+        await image.scrollIntoViewIfNeeded();
+        await image.click();
         break;
       } catch (error) {
         if (attempt >= attempts) {
@@ -92,8 +123,11 @@ export class ShopFilterPage extends BasePage {
       }
     }
 
-    await this.page.locator('h2.line-clamp-2').first().waitFor({ state: 'visible', timeout: 15_000 });
-    console.log(`[Shop] Opened product card at index: ${index}`);
+    const heading = this.page.locator('h2.line-clamp-2').first();
+    await heading.waitFor({ state: 'visible', timeout: 15_000 });
+    const opened = ((await heading.textContent()) ?? '').trim();
+    console.log(`[Shop] Opened product: ${opened}`);
+    expect(opened, 'PDP opened for the expected listing product').toBe(productName);
   }
 
   async collectFilteredProductNames(): Promise<string[]> {
@@ -154,7 +188,7 @@ export class ShopFilterPage extends BasePage {
       const productName = productNames[i];
       console.log(`[Shop] Verifying product ${i + 1}/${productNames.length}: ${productName}`);
 
-      await this.openProductCardAtIndex(i);
+      await this.openProductCardByName(productName);
       const weightText = await shopPage.readProductWeightFromProperties();
       const grams = shopWeightGramsFromText(weightText);
       console.log(`[Shop] Product weight: ${grams}g (${weightText})`);
@@ -167,6 +201,13 @@ export class ShopFilterPage extends BasePage {
       expect(grams, `${productName} weight ${weightText}`).toBeLessThanOrEqual(maxGrams);
 
       await shopPage.returnToShopListing();
+      // Back from the PDP drops the listing filters — re-apply them before the next product.
+      await this.waitForResultsCountStable();
+      if ((await this.readResultsCount()) !== expectedCount) {
+        await this.selectPriceRange100To20000();
+        await this.selectMetalWeight6To8Grams();
+      }
+      await this.waitForResultsCountStable(expectedCount);
     }
   }
 }

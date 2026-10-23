@@ -36,6 +36,7 @@ import { WithdrawAccountDetailPage } from '../pages/customer/withdraw-accountdet
 import { WithdrawPamentPage } from   '../pages/customer/withdraw-payment.page';
 import { Withdrawsip } from '@pages/customer/withdraw-sip.page';
 import { GoalWiseSipPage } from '../pages/customer/goal-wise-sip.page';
+import { SendShagunPage } from '../pages/customer/send-shagun.page';
 
 type PageObjectFixtures = {
   customerLogin: CustomerLoginPage;
@@ -71,6 +72,7 @@ type PageObjectFixtures = {
   sellOldGoldInquiryPage: SellOldGoldInquiryPage;
   accountStatementPage: AccountStatementPage;
   goalWiseSipPage: GoalWiseSipPage;
+  sendShagunPage: SendShagunPage;
 
   // customerLogin: CustomerLoginPage;
   // businessLogin: BusinessLoginPage;
@@ -130,6 +132,7 @@ export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
   sellOldGoldInquiryPage: async ({ page }, use) => { await use(new SellOldGoldInquiryPage(page)); },
   accountStatementPage: async ({ page }, use) => { await use(new AccountStatementPage(page)); },
   goalWiseSipPage: async ({ page }, use) => { await use(new GoalWiseSipPage(page)); },
+  sendShagunPage: async ({ page }, use) => { await use(new SendShagunPage(page)); },
 
 
   shopEmiPurchaseChain009: async ({}, use) => {

@@ -24,8 +24,7 @@ export async function registerNewUser(
 
   await customerLogin.open();
   await customerLogin.enterMobileNumber(mobile);
-  await customerLogin.clickContinue();
-  await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+  await customerLogin.continueToOtp();
 
   await customerLogin.enterOtp(REGISTRATION_OTP);
   await customerLogin.clickVerifyOtp();

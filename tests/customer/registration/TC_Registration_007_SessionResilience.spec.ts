@@ -8,8 +8,7 @@ test.describe('TC_Registration_007 @regression @customer @registration', () => {
     const mobile = generateUnregisteredMobile();
     await customerLogin.open();
     await customerLogin.enterMobileNumber(mobile);
-    await customerLogin.clickContinue();
-    await page.waitForURL(/\/login\/verify-otp/i, { timeout: 20_000 });
+    await customerLogin.continueToOtp();
 
     await page.getByRole('button', { name: 'Back' }).click();
     await page.getByRole('button', { name: 'Go Back' }).click();

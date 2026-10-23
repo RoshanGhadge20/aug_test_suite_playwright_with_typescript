@@ -71,10 +71,12 @@ export class ShopPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
+    // UAT lists two "Gold Coin" sub-categories; the standard 999-purity coins (incl. the
+    // 0.1Gm test product) sit under the last one. `.last()` also works if only one remains.
     this.goldCoinCheckbox = page
       .getByText('Gold Coin', { exact: true })
       .locator('xpath=following-sibling::*[1]')
-      .first();
+      .last();
     this.uSilverSubcategoryCheckbox = page
       .getByText('USilver', { exact: true })
       .locator('xpath=following-sibling::*[1]')
@@ -125,11 +127,11 @@ export class ShopPage extends BasePage {
     await this.page.keyboard.press('Home');
     const productsHeading = this.page.getByRole('heading', { name: 'Products', level: 2 });
     await productsHeading.scrollIntoViewIfNeeded();
-    await this.page.getByText('Gold Coin', { exact: true }).scrollIntoViewIfNeeded().catch(() => {});
+    await this.page.getByText('Gold Coin', { exact: true }).first().scrollIntoViewIfNeeded().catch(() => {});
   }
 
   private async waitForShopFiltersReady(timeoutMs = 45_000): Promise<void> {
-    const goldCoin = this.page.getByText('Gold Coin', { exact: true });
+    const goldCoin = this.page.getByText('Gold Coin', { exact: true }).first();
     const productsHeading = this.page.getByRole('heading', { name: 'Products', level: 2 });
     await productsHeading.waitFor({ state: 'visible', timeout: 15_000 });
 
@@ -298,7 +300,7 @@ export class ShopPage extends BasePage {
   }
 
   async clickGoldCoinCheckbox(): Promise<void> {
-    await this.page.getByText('Gold Coin', { exact: true }).scrollIntoViewIfNeeded();
+    await this.page.getByText('Gold Coin', { exact: true }).last().scrollIntoViewIfNeeded();
     await this.goldCoinCheckbox.click();
     await this.page.locator('.p-blockui, .p-blockui-document').waitFor({ state: 'hidden', timeout: 30_000 }).catch(() => {});
     await this.resultsText.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {});

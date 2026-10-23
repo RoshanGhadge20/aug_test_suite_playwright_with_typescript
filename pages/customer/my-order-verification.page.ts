@@ -269,7 +269,9 @@ export class MyOrderVerificationPage extends BasePage {
       return false;
     }
 
-    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+    // My Orders always opens on BUY, which shows "No Record Found" while loading — only
+    // treat it as an empty SHOP list when SHOP is actually the selected tab.
+    if (await this.isShopNoRecordState()) {
       return true;
     }
 
@@ -294,7 +296,7 @@ export class MyOrderVerificationPage extends BasePage {
 
   /** True when shop rows have real data (not skeleton placeholders with empty Order Id / heading). */
   private async isShopOrderListHydrated(): Promise<boolean> {
-    if (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false)) {
+    if (await this.isShopNoRecordState()) {
       return true;
     }
 
@@ -323,6 +325,53 @@ export class MyOrderVerificationPage extends BasePage {
     return false;
   }
 
+  private async isShopNoRecordState(): Promise<boolean> {
+    return (
+      (await this.isTabNamedActive(/^SHOP$/i)) &&
+      (await this.noRecordLabel.isVisible({ timeout: 400 }).catch(() => false))
+    );
+  }
+
+  /** Full reload to force a fresh SHOP fetch — My Orders always reopens on BUY, so re-select SHOP. */
+  private async reloadOnShopTab(): Promise<void> {
+    await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+    await this.selectShopTab();
+  }
+
+  /**
+   * Select the SHOP tab without toggling it off. Confirmed on UAT: clicking SHOP while it is
+   * already active deselects every tab and empties the list, so click only when it isn't
+   * active, then verify the click took.
+   */
+  private async selectShopTab(): Promise<void> {
+    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
+    const blockUiHidden = () =>
+      this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await shopTab.waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
+    await shopTab.scrollIntoViewIfNeeded().catch(() => {});
+    await blockUiHidden();
+    // Right after navigation the tab bar may not have marked any tab active yet.
+    await expect
+      .poll(() => this.page.locator('button.aug-active').count(), { timeout: 5_000 })
+      .toBeGreaterThan(0)
+      .catch(() => {});
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      if (await this.isTabActive(shopTab)) {
+        return;
+      }
+      await shopTab.click({ force: true }).catch(() => {});
+      await blockUiHidden();
+      const active = await expect
+        .poll(() => this.isTabActive(shopTab), { timeout: 5_000 })
+        .toBe(true)
+        .then(() => true, () => false);
+      if (active) {
+        return;
+      }
+    }
+  }
+
   /** Wait until SHOP rows show product name + order id (not empty skeleton placeholders). */
   private async waitForShopOrderListHydrated(timeoutMs = 90_000): Promise<void> {
     const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
@@ -345,9 +394,9 @@ export class MyOrderVerificationPage extends BasePage {
             // the active tab clears the list instead of reloading it — a full page
             // reload is the only safe way to force a fresh fetch once active.
             if (await this.isTabActive(shopTab)) {
-              await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+              await this.reloadOnShopTab();
             } else {
-              await shopTab.click({ force: true }).catch(() => {});
+              await this.selectShopTab();
             }
             await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
           }
@@ -432,9 +481,9 @@ export class MyOrderVerificationPage extends BasePage {
       // click switches to it; if it's already active, a full page reload is the only
       // safe way to force a fresh fetch.
       if (await this.isTabActive(shopTab)) {
-        await this.page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+        await this.reloadOnShopTab();
       } else {
-        await shopTab.click({ force: true }).catch(() => {});
+        await this.selectShopTab();
       }
       await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {});
       await refreshResponse;
@@ -810,15 +859,7 @@ export class MyOrderVerificationPage extends BasePage {
   private async activateShopTab(): Promise<void> {
     // The order-type tabs are the app's own `<button class="aug-select-option">`
     // toggle group (no ARIA role) — never a native radio input.
-    const shopTab = this.page.getByRole('button', { name: /^SHOP$/i }).first();
-    await shopTab.scrollIntoViewIfNeeded();
-    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-    // Confirmed (manual testing): clicking SHOP a *second* time while it's already the
-    // active tab clears the list instead of reloading it. A single click is safe
-    // regardless of prior tab state — checking "already active" first isn't reliable
-    // right after navigation (the class can read stale), so just click once, always.
-    await shopTab.click({ force: true });
-    await this.page.locator('.p-blockui').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await this.selectShopTab();
     // Card containers (heading, "Order ID:", "View Detail") can render before their data
     // (product name, order id number, EMI tenure) actually populates — give it time,
     // especially for orders placed moments ago in the same test.
@@ -2820,6 +2861,9 @@ export class MyOrderVerificationPage extends BasePage {
     const gstin = pdfUtils.extractGstin(pdfText);
     const cin = pdfUtils.extractCin(pdfText);
     const netPayable = shopPdfUtils.extractShopNetPayable(pdfText);
+    if (Number.isNaN(netPayable)) {
+      console.log(`[Shop] Net payable not found in invoice PDF ${pdfUrl}\n${pdfText.slice(0, 1500)}`);
+    }
     const pdfHasOrderId = shopPdfUtils.shopPdfContainsOrderReference(pdfText, params.invoiceOrderId);
     const invoiceDateMissingInPdf = shopPdfUtils.isShopInvoiceDateMissingInPdf(pdfText);
     const gstDetails = shopPdfUtils.extractShopInvoiceGstDetails(pdfText);
