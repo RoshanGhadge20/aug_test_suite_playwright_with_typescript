@@ -80,15 +80,6 @@ export abstract class BasePage {
     await locator.click();
   }
 
-  async safeClick(
-    locator: Locator
-  ): Promise<void> {
-
-    await locator.click({
-      force: true
-    });
-  }
-
   async fill(
     locator: Locator,
     value: string
@@ -218,6 +209,20 @@ export abstract class BasePage {
       .toBeVisible();
   }
 
+  /** Strips ₹, commas and whitespace; returns 0 for unparseable input. */
+  protected parseAmount(value: string): number {
+    return Number(value.replace(/[₹,\s]/g, '')) || 0;
+  }
+
+  /** True when `value` is a non-empty string of digits (e.g. shop order id). */
+  protected isNumericId(value: string): boolean {
+    if (value.length === 0) return false;
+    for (const ch of value) {
+      if (ch < '0' || ch > '9') return false;
+    }
+    return true;
+  }
+
   // ==========================================
   // OTP METHODS
   // ==========================================
@@ -262,6 +267,8 @@ export abstract class BasePage {
 
     if (count === 1) {
 
+      await inputs.first().click();
+
       await inputs.first().fill(
         otp
       );
@@ -270,6 +277,8 @@ export abstract class BasePage {
     }
 
     for (let i = 0;i < otp.length &&i < count;i++) {
+
+      await inputs.nth(i).click();
 
       await inputs.nth(i).fill(
         otp[i]
