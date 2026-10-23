@@ -48,10 +48,10 @@ export class UnapprovalReasonPage extends AdminBasePage {
     await this.branchDropdown().selectOption({ label: data.branchName });
     await this.page.waitForTimeout(7000);
 
-    await this.arrow().click();
+    await this.expandSidebar();
     await this.page.waitForTimeout(1000);
 
-    const settingsEle = this.page.locator("xpath=//span[normalize-space()='Settings']");
+    const settingsEle = this.page.locator("xpath=//div[@id='kt_aside_menu']//span[normalize-space()='Settings']");
     await settingsEle.evaluate((el: any) => el.scrollIntoView(true));
     await this.page.waitForTimeout(2000);
     await this.jsClick(settingsEle);

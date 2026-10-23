@@ -1,7 +1,6 @@
 import path from 'path';
 import * as XLSX from 'xlsx';
 
-/** Admin test data workbook: `testdata/admin/admin-data.xlsx` */
 export const ADMIN_DATA_DIR = path.resolve(process.cwd(), 'testdata', 'admin');
 export const ADMIN_DATA_WORKBOOK = path.join(ADMIN_DATA_DIR, 'admin-data.xlsx');
 
@@ -29,10 +28,6 @@ function readSheetRows<T extends Record<string, unknown>>(
   });
 }
 
-/**
- * Returns all non-empty trimmed values in the given column of `sheetLogin`.
- * Throws if the header is not found in the sheet.
- */
 export function columnValues(field: string, filePath = ADMIN_DATA_WORKBOOK): string[] {
   const rows = readSheetRows<Record<string, unknown>>('sheetLogin', filePath);
   if (rows.length === 0) {
@@ -49,7 +44,6 @@ export function columnValues(field: string, filePath = ADMIN_DATA_WORKBOOK): str
     .filter((v) => v !== '');
 }
 
-/** Memoised per-field random pick — stable within a run, varies across runs. */
 const pickCache = new Map<string, string>();
 
 export function pickFieldValue(field: string, filePath = ADMIN_DATA_WORKBOOK): string {
@@ -89,5 +83,69 @@ export function getLoginData(filePath = ADMIN_DATA_WORKBOOK): AdminLoginData {
     ifsc:          pickFieldValue('IFSC', filePath),
     accountNumber: pickFieldValue('Account Number', filePath),
     partnerNumber: pickFieldValue('Partner User', filePath),
+  };
+}
+
+export interface InternalUserBranchData {
+  branchName:       string;
+  branchType:       string;
+  partnerName:      string;
+  address:          string;
+  state:            string;
+  city:             string;
+  pincode:          string;
+  auditor:          string;
+  bankName:         string;
+  bankBranchName:   string;
+  ifsc:             string;
+  acHolderName:     string;
+  acNumber:         string;
+  commission:       string;
+  searchBranchName: string;
+  oldUserCount:     string;
+}
+
+export interface PartnerBranchUserData {
+  state:       string;
+  city:        string;
+  pincode:     string;
+  emailDomain: string;
+}
+
+export function getPartnerBranchUserData(filePath = ADMIN_DATA_WORKBOOK): PartnerBranchUserData {
+  const rows = readSheetRows<Record<string, unknown>>('sheetPartnerBranchUser', filePath);
+  if (rows.length === 0) throw new Error('Sheet "sheetPartnerBranchUser" has no data rows');
+  const r = rows[0];
+  const str = (key: string) => String(r[key] ?? '').trim();
+  return {
+    state:       str('State'),
+    city:        str('City'),
+    pincode:     str('Pincode'),
+    emailDomain: str('EmailDomain'),
+  };
+}
+
+export function getInternalUserBranchData(filePath = ADMIN_DATA_WORKBOOK): InternalUserBranchData {
+  const rows = readSheetRows<Record<string, unknown>>('sheetInternalUserBranch', filePath);
+  if (rows.length === 0) throw new Error('Sheet "sheetInternalUserBranch" has no data rows');
+  const r = rows[0];
+  const str = (key: string) => String(r[key] ?? '').trim();
+  return {
+    branchName:       str('BranchName'),
+    branchType:       str('BranchType'),
+    partnerName:      str('PartnerName'),
+    address:          str('Address'),
+    state:            str('State'),
+    city:             str('City'),
+    pincode:          str('Pincode'),
+    auditor:          str('Auditor'),
+    bankName:         str('BankName'),
+    bankBranchName:   str('BankBranchName'),
+    ifsc:             str('IFSC'),
+    acHolderName:     str('ACHolderName'),
+    acNumber:         str('ACNumber'),
+    commission:       str('Commission'),
+    searchBranchName: str('SearchBranchName'),
+    oldUserCount:     str('OldUserCount'),
   };
 }

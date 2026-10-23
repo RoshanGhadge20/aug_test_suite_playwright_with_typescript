@@ -16,13 +16,13 @@
     "test:api:emi": "playwright test --project=api-emi",
     "test:smoke": "playwright test --grep @smoke",
     "test:regression": "playwright test --grep @regression",
-    "report:html": "playwright show-report reports/html",
     "test:unit": "SKIP_ENV_VALIDATION=true vitest run",
     "test:unit:watch": "SKIP_ENV_VALIDATION=true vitest",
     "api:dev": "tsx watch src/api/index.ts",
     "api:start": "node dist/api/index.js",
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "report:html": "playwright show-report reports/html"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +43,7 @@
     "@types/node": "^25.6.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
+    "dotenv": "^16.4.5",
     "pdf-parse": "^2.4.5",
     "supertest": "^7.2.2",
     "ts-node": "^10.9.2",

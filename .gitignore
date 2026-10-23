@@ -2,15 +2,20 @@ node_modules/
 dist/
 .env
 .env.local
-.env.email
+
+# Real personal documents used as local-only test fixtures (never commit — see
+# testdata/admin/documents/README.md). Wire the actual path via an env var instead.
+testdata/admin/documents/private/
 storage/*
 !storage/.gitkeep
 reports/*
 !reports/.gitkeep
-testdata/customer/userwisesip-results.xlsx
 playwright-report/
 test-results/
 *.log
 .DS_Store
 .vscode/
 coverage/
+
+.env.email
+testdata/customer/userwisesip-results.xlsx

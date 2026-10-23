@@ -1,4 +1,5 @@
 import { test as base } from '@playwright/test';
+import { AdminLoginPage } from '../pages/admin/login.page';
 import { CustomerLoginPage } from '../pages/customer/login.page';
 import { AddNewBankPage } from '../pages/customer/add-new-bank.page';
 import { BuyMetalPage } from '../pages/customer/buy-metal.page';
@@ -38,6 +39,7 @@ import { Withdrawsip } from '@pages/customer/withdraw-sip.page';
 import { GoalWiseSipPage } from '../pages/customer/goal-wise-sip.page';
 
 type PageObjectFixtures = {
+  adminLogin: AdminLoginPage;
   customerLogin: CustomerLoginPage;
   addNewBankPage: AddNewBankPage;
   productMenuPage: ProductMenuPage;
@@ -87,6 +89,7 @@ type CustomerShopFixtures = {
 };
 
 export const test = base.extend<PageObjectFixtures & CustomerShopFixtures>({
+  adminLogin: async ({ page }, use) => { await use(new AdminLoginPage(page)); },
   customerLogin: async ({ page }, use) => { await use(new CustomerLoginPage(page)); },
   addNewBankPage: async ({ page }, use) => { await use(new AddNewBankPage(page)); },
   productMenuPage: async ({ page }, use) => { await use(new ProductMenuPage(page)); },

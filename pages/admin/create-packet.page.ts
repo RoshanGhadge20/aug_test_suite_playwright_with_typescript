@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Locator, Page } from '@playwright/test';
 import { AdminBasePage } from './admin-base.page';
 
 /**
@@ -52,12 +52,13 @@ export class CreatePacketPage extends AdminBasePage {
     await this.profile().click();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login).
     await this.branchDropdown().waitFor({ state: 'visible' });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(7000);
 
-    await this.arrow().click();
+    await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.loanManagement().click();
     await this.waitForLoaderToDisappear();
@@ -73,7 +74,7 @@ export class CreatePacketPage extends AdminBasePage {
     await this.packetID().fill(packetCode);
     await this.waitForLoaderToDisappear();
 
-    await this.selBranch().selectOption({ label: 'Augmont' });
+    await this.selectOptionByLabel(this.selBranch(), 'Augmont');
 
     await this.btnNewpacket().click();
     await this.waitForLoaderToDisappear();
@@ -92,8 +93,8 @@ export class CreatePacketPage extends AdminBasePage {
     await this.btnEditPacket().click();
     await this.waitForLoaderToDisappear();
 
-    await this.selUsertype().selectOption({ label: 'Appraiser' });
-    await this.selAppraiserId().selectOption({ label: 'Priyanka Thorat' });
+    await this.selectOptionByLabel(this.selUsertype(), 'Appraiser');
+    await this.selectOptionByLabel(this.selAppraiserId(), 'Priyanka Thorat');
 
     await this.btnUpdate().click();
     await this.waitForLoaderToDisappear();
@@ -120,5 +121,40 @@ export class CreatePacketPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.btnYes().click();
     await this.waitForLoaderToDisappear();
+  }
+
+  /**
+   * Wait for a dropdown option to be populated before selecting it.
+   * This avoids Playwright timing out while the backend is still loading the option list.
+   */
+  private async selectOptionByLabel(locator: Locator, label: string, timeoutMs = 30_000): Promise<void> {
+    await locator.waitFor({ state: 'visible', timeout: timeoutMs });
+    const normalize = (value: string) => value.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+    const expected = normalize(label);
+
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const optionCount = await locator.locator('option').count();
+      const optionValue = await locator.locator('option').evaluateAll((options, expectedText) => {
+        const normalizeOption = (value: string) => value.replace(/\u00A0/g, ' ').replace(/\s+/g, ' ').trim();
+        const match = options.find((option: any) => normalizeOption(option.textContent ?? '') === expectedText);
+        return match ? String((match as any).value ?? '') : '';
+      }, expected);
+      if (optionValue) {
+        await locator.selectOption({ value: optionValue }, { timeout: timeoutMs });
+        return;
+      }
+      if (optionCount > 1) {
+        await this.page.waitForTimeout(500);
+        continue;
+      }
+      await this.page.waitForTimeout(500);
+    }
+
+    const availableOptions = (await locator.locator('option').allTextContents())
+      .map((text) => normalize(text))
+      .filter(Boolean)
+      .join(', ');
+    throw new Error(`Option '${label}' was not available in the dropdown. Available options: ${availableOptions || '(none)'}`);
   }
 }

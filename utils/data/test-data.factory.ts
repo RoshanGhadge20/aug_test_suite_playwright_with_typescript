@@ -43,6 +43,12 @@ export const TestDataFactory = {
   stamp(): string {
     return `_${randomUUID().slice(0, 8)}`;
   },
+  idNumber(length = 6): string {
+    let out = '';
+    for (let i = 0; i < length; i++) out += Math.floor(Math.random() * 10);
+    return out;
+  },
+
   /** Unique coupon code for admin API (e.g. SINa1b2c3d4). */
   couponCode(prefix = 'SIN'): string {
     return `${prefix}${randomUUID().replace(/-/g, '').slice(0, 8)}`;

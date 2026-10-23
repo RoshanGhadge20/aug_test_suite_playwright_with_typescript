@@ -90,12 +90,13 @@ export class BtRejectedLoanPage extends AdminBasePage {
     await this.profile().click();
     await this.page.waitForTimeout(5000);
 
+    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
+    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
+    // reject the session outright (403/401, forced redirect to /auth/login).
     await this.branchDropdown().waitFor({ state: 'visible' });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: 'Show All' });
-    await this.page.waitForTimeout(5000);
 
-    await this.arrow().click();
+    await this.expandSidebar();
     await this.page.waitForTimeout(500);
 
     await this.customerManagementBtn().click();

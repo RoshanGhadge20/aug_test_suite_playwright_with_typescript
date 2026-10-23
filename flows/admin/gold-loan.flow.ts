@@ -9,13 +9,7 @@ import { OpsApprovalPage } from '../../pages/admin/ops-approval.page';
 import { PartnerApprovalPage } from '../../pages/admin/partner-approval.page';
 import { PacketSubmissionPage } from '../../pages/admin/packet-submission.page';
 
-/**
- * Steps 5–11: create packet → gold loan → assign + appraise packet → BM → OPS → partner → submission.
- *
- * Assumes onboarding is already done and the session is currently logged in as OPS (as left
- * by onboardCustomerThroughKyc). Role switches are injected at the points where the Java flow
- * called loginWith*.
- */
+
 export async function applyAndDisburseLoan(page: Page): Promise<void> {
   const login = new AdminLoginPage(page);
   const createPacket = new CreatePacketPage(page);
@@ -26,7 +20,8 @@ export async function applyAndDisburseLoan(page: Page): Promise<void> {
   const partnerApproval = new PartnerApprovalPage(page);
   const packetSubmission = new PacketSubmissionPage(page);
 
-  // Step 5 — ops (no role switch; stays on OPS from kycApproval): create a new packet
+  // Step 5 — switch to admin: create a new packet
+  await login.loginAs('admin'); // Java line 78: loginWithAdmin() before createNewPacket
   await createPacket.validateNewPacket();
 
   // Step 6 — switch to appraiser: apply for a new Gold Loan
@@ -49,19 +44,14 @@ export async function applyAndDisburseLoan(page: Page): Promise<void> {
   await login.loginAs('ops');
   await opsApproval.opsAprroval();
 
-  // Step 10 — switch to partner: partner approval + disbursement
   await login.loginAs('partner');
   await partnerApproval.partnerAprroval();
 
-  // Step 11 — switch to appraiser: submit the packet
   await login.loginAs('appraiser');
   await packetSubmission.packetSubmission();
 }
 
-/**
- * Full TC01 happy-path: onboarding (steps 1–4) + loan apply/disburse (steps 5–11).
- * Reusable precondition for TC02–TC06.
- */
+
 export async function createDisbursedLoan(page: Page): Promise<void> {
   await onboardCustomerThroughKyc(page);
   await applyAndDisburseLoan(page);

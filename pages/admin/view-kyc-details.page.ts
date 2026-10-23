@@ -101,7 +101,7 @@ export class ViewKycDetailsPage extends AdminBasePage {
     const randomAddress = this.randomAddress();
 
     await this.page.waitForTimeout(5000);
-    await this.arrow().click();
+    await this.expandSidebar();
     await this.customerManagementBtn().click();
     await this.waitForLoaderToDisappear();
     await this.allCustomers().click();
@@ -244,7 +244,7 @@ export class ViewKycDetailsPage extends AdminBasePage {
     await this.branchDropdown().selectOption({ label: 'Show All' });
     await this.page.waitForTimeout(5000);
 
-    await this.arrow().click();
+    await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.kycDetails().click();
     await this.waitForLoaderToDisappear();
