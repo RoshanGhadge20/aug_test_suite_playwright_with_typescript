@@ -1,4 +1,4 @@
-import { createMultipleWalletGiftCoupons } from '../../../../utils/api/create-wallet-gift-coupon';
+import { createMultipleWalletGiftCoupons } from '../../../../api-services/admin/create-wallet-gift-coupon';
 
 import { test, expect } from '@playwright/test';
 

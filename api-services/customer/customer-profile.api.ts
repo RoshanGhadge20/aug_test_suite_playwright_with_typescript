@@ -1,5 +1,5 @@
 import type { APIResponse } from '@playwright/test';
-import type { CustomerApiClient } from '../../utils/api/customer-api-client';
+import type { CustomerApiClient } from '../core/customer-api-client';
 import { CUSTOMER_ENDPOINTS } from './customer-endpoints';
 
 /** Authenticated (token + signature) customer profile calls. */

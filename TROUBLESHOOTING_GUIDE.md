@@ -453,7 +453,7 @@ TEST LAYER:
 UTILITY LAYER:
   utils/data/*                  ← Test data helpers
   utils/logger/*                ← Logging
-  utils/api/*                   ← API helpers
+  api-services/*                ← API helpers (core/, customer/, admin/)
 
 OUTPUT LAYER:
   reports/html/                 ← HTML reports

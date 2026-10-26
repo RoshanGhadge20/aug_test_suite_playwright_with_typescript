@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { KycDigiKycPage } from '../../pages/customer/kyc-digi-kyc.page';
-import { removeEkycRecord } from '../../utils/api/ekyc-api';
+import { removeEkycRecord } from '../../api-services/admin/ekyc-api';
 import { TestDataFactory } from '../../utils/data/test-data.factory';
 import {
   ALREADY_REGISTERED_PAN,

@@ -1,6 +1,6 @@
 // import { test, expect } from '@playwright/test';
 import { expect, test } from '../../../../fixtures/base.fixture';
-import { getOrderByUniqueId,adminCancelOrder,AdminCancelOrderRequest } from '../../../../utils/api/order-status-api';
+import { getOrderByUniqueId,adminCancelOrder,AdminCancelOrderRequest } from '../../../../api-services/admin/order-status-api';
 import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 import type { ShopBillingAddressDetails } from '../../../../pages/customer/shop-checkout.page';
 import type { MyOrderShopCardDetails } from '../../../../pages/customer/my-order-verification.page';

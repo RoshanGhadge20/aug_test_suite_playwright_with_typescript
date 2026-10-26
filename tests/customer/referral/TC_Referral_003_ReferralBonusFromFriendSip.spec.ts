@@ -7,7 +7,7 @@ import {
   ALREADY_REGISTERED_PAN_DOB,
 } from '../test-data/registration-data';
 import { getSipFlowsDataset, parseSipMetalType, parseSipFrequencyType } from '../../../utils/data/customer-excel-data';
-import { removeEkycRecord } from '../../../utils/api/ekyc-api';
+import { removeEkycRecord } from '../../../api-services/admin/ekyc-api';
 import { TestDataFactory } from '../../../utils/data/test-data.factory';
 import { refreshCustomerStorageState } from '../helpers/customer-session.helpers';
 

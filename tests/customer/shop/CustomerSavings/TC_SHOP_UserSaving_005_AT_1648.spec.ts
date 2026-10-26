@@ -4,7 +4,7 @@ import { getTargetEnv } from '../../../../config/environments';
 
 import { panelCreds } from '../../../../config/urls';
 
-import { createWalletGiftCoupon } from '../../../../utils/api/create-wallet-gift-coupon';
+import { createWalletGiftCoupon } from '../../../../api-services/admin/create-wallet-gift-coupon';
 
 import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 

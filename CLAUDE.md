@@ -68,7 +68,7 @@ One project per panel + per API service. Key wiring:
 
 ### Authentication — two completely separate mechanisms
 - **UI auth** = storage state. `auth-setup` performs an OTP login once and persists cookies/localStorage per `<env>/<panel>`; specs reuse it.
-- **API auth** = bearer token via `authedRequest` fixture (`fixtures/api.fixture.ts` → `utils/api/api-auth.ts`). It POSTs `mobile` to `/api/v1/auth/send-otp`, then `{mobile, otp}` to `/api/v1/auth/verify-otp`, extracts the token at JSON path `data.token`, and caches it **5 minutes per worker** keyed by `env:service:mobile`.
+- **API auth** = bearer token via `authedRequest` fixture (`fixtures/api.fixture.ts` → `api-services/core/api-auth.ts`). It POSTs `mobile` to `/api/v1/auth/send-otp`, then `{mobile, otp}` to `/api/v1/auth/verify-otp`, extracts the token at JSON path `data.token`, and caches it **5 minutes per worker** keyed by `env:service:mobile`.
 - **All logins are OTP-based with a fixed "backdoor" OTP** that the test/uat environments accept (configured per user via `*_USER_OTP`). There are no passwords.
 
 ### Page Objects (`pages/`)
@@ -88,7 +88,7 @@ Express app assembled in `server.ts`: `express.json` → public `health.routes` 
 - **Tags** live in the `test.describe` title. Every test should carry a suite tag (`@smoke` / `@regression`) and a scope tag (`@admin`/`@customer`/`@business`/`@new-admin`/`@api`); optional feature tags `@users`/`@loans`/`@emi`. Filter via `--grep`/`--grep-invert` or the `grep` field on `POST /api/runs`. See README "Test conventions" for the full table.
 - **Path aliases** are defined in `tsconfig.json` (`@config/*`, `@pages/*`, `@fixtures/*`, `@utils/*`, `@api/*`) — note specs currently use relative imports; both work.
 - **Writing an API test:** `import { apiTest as test, expect } from '../../../fixtures/api.fixture'` and use the `authedRequest` context for authenticated calls.
-- **Customer-app API TCs** (cp.<env> backend, PIN login + HMAC signature) use a layered structure: `utils/api/customer-api-client.ts` (plumbing: login, signed get/post, `relogin()`) → `api-services/customer/` (endpoint paths in `customer-endpoints.ts`, one `*.api.ts` service class per feature, response types in `customer.types.ts`) → `fixtures/customer-api.fixture.ts` (worker-shared `customerApi` + per-feature service fixtures) → `tests/api/backend/customer/<feature>.spec.ts` (serial, titles prefixed `TC_CustApi_<Feature>_NNN`). Run with `npm run test:api:customer`. The admin-side helpers in `utils/api/` (coupons, order-status, ekyc) are intentionally left as-is.
+- **Customer-app API TCs** (cp.<env> backend, PIN login + HMAC signature) use a layered structure: `api-services/core/customer-api-client.ts` (plumbing: login, signed get/post, `relogin()`) → `api-services/customer/` (endpoint paths in `customer-endpoints.ts`, one `*.api.ts` service class per feature, response types in `customer.types.ts`) → `fixtures/customer-api.fixture.ts` (worker-shared `customerApi` + per-feature service fixtures) → `tests/api/backend/customer/<feature>.spec.ts` (serial, titles prefixed `TC_CustApi_<Feature>_NNN`). Run with `npm run test:api:customer`. All API code lives under `api-services/`: `core/` (auth, HMAC signatures, customer client), `customer/` (customer-app services) and `admin/` (backend-admin helpers: coupons, order-status, ekyc). `utils/` holds only generic helpers. Path alias: `@services/*`.
 - Reports/artifacts go to `reports/` (gitignored). Per-run API artifacts go to `reports/runs/<id>/`.
 
 ## Gotchas / known rough edges

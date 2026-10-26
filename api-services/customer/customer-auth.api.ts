@@ -1,5 +1,5 @@
 import type { APIRequestContext, APIResponse } from '@playwright/test';
-import { pinLoginPayload, type CustomerPinLogin } from '../../utils/api/customer-api-client';
+import { pinLoginPayload, type CustomerPinLogin } from '../core/customer-api-client';
 import { CUSTOMER_APP_HEADERS, CUSTOMER_ENDPOINTS } from './customer-endpoints';
 
 /**

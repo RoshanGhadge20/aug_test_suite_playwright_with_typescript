@@ -6,7 +6,7 @@ import {
   REGISTRATION_OTP,
   DEFAULT_TEST_PIN,
 } from '../test-data/registration-data';
-import { removeEkycRecord } from '../../../utils/api/ekyc-api';
+import { removeEkycRecord } from '../../../api-services/admin/ekyc-api';
 import { logValidation } from '../helpers/customer-alt-user.helpers';
 import { TestDataFactory } from '../../../utils/data/test-data.factory';
 

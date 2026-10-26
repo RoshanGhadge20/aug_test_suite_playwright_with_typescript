@@ -1,6 +1,6 @@
 import { test, expect } from '../../../../fixtures/base.fixture';
 import { ShopEmiPage } from '../../../../pages/customer/shop-emi.page';
-import { createWalletGiftCoupon } from '../../../../utils/api/create-wallet-gift-coupon';
+import { createWalletGiftCoupon } from '../../../../api-services/admin/create-wallet-gift-coupon';
 import { getShopDataset } from '../../../../utils/data/customer-excel-data';
 import type { ShopCartPriceDetailsWithCoupon } from '../../../../pages/customer/shop-cart.page';
 

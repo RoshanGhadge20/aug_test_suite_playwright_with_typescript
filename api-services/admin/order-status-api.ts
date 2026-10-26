@@ -1,6 +1,6 @@
 import { request as pwRequest } from '@playwright/test';
-import { getBackendAdminToken } from './backend-admin-auth';
-import { signedBackendHeadersFullUrl } from './backend-api-signature-fullurl'
+import { getBackendAdminToken } from '../core/backend-admin-auth';
+import { signedBackendHeadersFullUrl } from '../core/backend-api-signature-fullurl'
 
 const ORDER_STATUS_PATH = '/api/order/all-order-status';
 const BASE_URL = 'https://emi-backend-api.gfau.augmont.com';

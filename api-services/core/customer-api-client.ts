@@ -2,7 +2,7 @@ import { request as pwRequest, type APIRequestContext, type APIResponse } from '
 import { env } from '../../config/env';
 import { apiUrl, panelCreds } from '../../config/urls';
 import { getTargetEnv, type EnvName } from '../../config/environments';
-import { CUSTOMER_APP_HEADERS, CUSTOMER_ENDPOINTS } from '../../api-services/customer/customer-endpoints';
+import { CUSTOMER_APP_HEADERS, CUSTOMER_ENDPOINTS } from '../customer/customer-endpoints';
 import { extractToken } from './api-auth';
 import { signedBackendHeaders } from './backend-api-signature';
 

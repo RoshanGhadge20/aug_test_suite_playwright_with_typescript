@@ -1,9 +1,9 @@
 import { request as pwRequest } from '@playwright/test';
 import { apiUrl } from '../../config/urls';
 import { getTargetEnv } from '../../config/environments';
-import { TestDataFactory } from '../data/test-data.factory';
-import { getBackendAdminToken } from './backend-admin-auth';
-import { signedBackendHeaders } from './backend-api-signature';
+import { TestDataFactory } from '../../utils/data/test-data.factory';
+import { getBackendAdminToken } from '../core/backend-admin-auth';
+import { signedBackendHeaders } from '../core/backend-api-signature';
 
 const COUPONS_PATH = '/api/coupons';
 const DEFAULT_ALLOWED_MODULES = ['buy', 'emi'];

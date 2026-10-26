@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractToken, TokenCache } from '../../utils/api/api-auth';
+import { extractToken, TokenCache } from '../../api-services/core/api-auth';
 
 describe('extractToken', () => {
   it('reads top-level field', () => {

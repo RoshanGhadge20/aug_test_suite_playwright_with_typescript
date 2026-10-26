@@ -9,7 +9,7 @@ import {
   ALREADY_REGISTERED_PAN_DOB,
 } from '../test-data/registration-data';
 import { logValidation } from '../helpers/customer-alt-user.helpers';
-import { removeEkycRecord } from '../../../utils/api/ekyc-api';
+import { removeEkycRecord } from '../../../api-services/admin/ekyc-api';
 import { TestDataFactory } from '../../../utils/data/test-data.factory';
 
 test.use({ storageState: { cookies: [], origins: [] } });

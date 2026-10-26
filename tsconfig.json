@@ -17,7 +17,8 @@
       "@pages/*": ["./pages/*"],
       "@fixtures/*": ["./fixtures/*"],
       "@utils/*": ["./utils/*"],
-      "@api/*": ["./src/api/*"]
+      "@api/*": ["./src/api/*"],
+      "@services/*": ["./api-services/*"]
     }
   },
   "include": ["src/**/*", "tests/**/*", "pages/**/*", "fixtures/**/*", "flows/**/*", "api-services/**/*", "setup/**/*", "config/**/*", "utils/**/*", "test/**/*", "playwright.config.ts", "vitest.config.ts"],

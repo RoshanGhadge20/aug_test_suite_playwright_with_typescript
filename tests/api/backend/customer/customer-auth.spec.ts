@@ -1,5 +1,5 @@
 import { customerApiTest as test, expect } from '../../../../fixtures/customer-api.fixture';
-import { customerPinCreds } from '../../../../utils/api/customer-api-client';
+import { customerPinCreds } from '../../../../api-services/core/customer-api-client';
 import { CUSTOMER_APP_HEADERS, CUSTOMER_ENDPOINTS } from '../../../../api-services/customer/customer-endpoints';
 import type { PersonalInfoResponse, PinLoginResponse } from '../../../../api-services/customer/customer.types';
 import { TestDataFactory } from '../../../../utils/data/test-data.factory';

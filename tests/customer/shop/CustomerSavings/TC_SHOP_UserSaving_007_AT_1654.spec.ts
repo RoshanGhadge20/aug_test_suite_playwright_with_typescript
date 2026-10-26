@@ -2,7 +2,7 @@ import { test,expect } from '../../../../fixtures/base.fixture';
 import { getShopTc011Dataset } from '../../../../utils/data/customer-excel-data';
 import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 import type { MyOrderShopCardDetails } from '../../../../pages/customer/my-order-verification.page';
-import { getOrderByUniqueId,adminCancelOrder,AdminCancelOrderRequest } from '../../../../utils/api/order-status-api';
+import { getOrderByUniqueId,adminCancelOrder,AdminCancelOrderRequest } from '../../../../api-services/admin/order-status-api';
 import {
   loginAltCustomerWithGoldSetup,
   restoreDefaultCustomerSession,

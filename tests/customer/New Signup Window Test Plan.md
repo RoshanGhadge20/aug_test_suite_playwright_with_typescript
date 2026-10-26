@@ -360,7 +360,7 @@ Covered inline per-field in §4 tables. Summary of the two validation UX classes
 | `/api/customer/app/config-detail`, `/api/customer/app/gold-rate`, `/api/digital-gold/rates`, etc. | GET | App bootstrap / dashboard load | 200 — use `page.waitForResponse()` as a sync point, not as functional assertions (out of this feature's scope) |
 | *(KARZA hand-off)* | — | Never fires client-side until "Proceed for PAN Verification" | Assert **no** network call is made merely by opening the modal — regression-guards against an accidental early redirect |
 
-Recommend wiring these via the project's existing `authedRequest`/`apiAuthConfig` pattern (`fixtures/api.fixture.ts`, `utils/api/api-auth.ts`) for any pure-API-level registration tests, separate from the UI-driven specs.
+Recommend wiring these via the project's existing `authedRequest`/`apiAuthConfig` pattern (`fixtures/api.fixture.ts`, `api-services/core/api-auth.ts`) for any pure-API-level registration tests, separate from the UI-driven specs.
 
 ## 12. Database Validation Points
 

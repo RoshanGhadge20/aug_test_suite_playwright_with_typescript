@@ -1,6 +1,6 @@
 import { test as base, APIRequestContext } from '@playwright/test';
 import type { ApiService } from '../config/constants';
-import { createAuthedApiContext } from '../utils/api/api-auth';
+import { createAuthedApiContext } from '../api-services/core/api-auth';
 
 type ApiFixtures = {
   apiService: ApiService;

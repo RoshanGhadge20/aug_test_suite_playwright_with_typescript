@@ -1,5 +1,5 @@
 import { test as base } from '@playwright/test';
-import { CustomerApiClient } from '../utils/api/customer-api-client';
+import { CustomerApiClient } from '../api-services/core/customer-api-client';
 import { CustomerAuthApi } from '../api-services/customer/customer-auth.api';
 import { CustomerProfileApi } from '../api-services/customer/customer-profile.api';
 
