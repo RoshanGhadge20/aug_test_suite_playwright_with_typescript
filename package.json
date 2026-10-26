@@ -14,6 +14,7 @@
     "test:api": "playwright test --project=api-backend --project=api-emi",
     "test:api:backend": "playwright test --project=api-backend",
     "test:api:emi": "playwright test --project=api-emi",
+    "test:api:customer": "playwright test --project=api-backend tests/api/backend/customer",
     "test:smoke": "playwright test --grep @smoke",
     "test:regression": "playwright test --grep @regression",
     "test:unit": "cross-env SKIP_ENV_VALIDATION=true vitest run",

@@ -34,6 +34,7 @@ function envBlockShape(prefix: 'TEST' | 'UAT', required: boolean): z.ZodRawShape
     [`${prefix}_ADMIN_USER_OTP`]: nonEmpty.optional(),
     [`${prefix}_CUSTOMER_USER_MOBILE`]: nonEmpty.optional(),
     [`${prefix}_CUSTOMER_USER_OTP`]: nonEmpty.optional(),
+    [`${prefix}_CUSTOMER_USER_PIN`]: nonEmpty.optional(),
     [`${prefix}_BUSINESS_USER_MOBILE`]: nonEmpty.optional(),
     [`${prefix}_BUSINESS_USER_OTP`]: nonEmpty.optional(),
     [`${prefix}_NEW_ADMIN_USER_MOBILE`]: nonEmpty.optional(),
@@ -104,6 +105,7 @@ type EnvBlockKeys<Prefix extends string> =
   | `${Prefix}_ADMIN_INACTIVE_USER_PASSWORD`
   | `${Prefix}_CUSTOMER_USER_MOBILE`
   | `${Prefix}_CUSTOMER_USER_OTP`
+  | `${Prefix}_CUSTOMER_USER_PIN`
   | `${Prefix}_BUSINESS_USER_MOBILE`
   | `${Prefix}_BUSINESS_USER_OTP`
   | `${Prefix}_NEW_ADMIN_USER_MOBILE`

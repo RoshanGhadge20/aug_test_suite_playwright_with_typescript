@@ -88,6 +88,7 @@ Express app assembled in `server.ts`: `express.json` → public `health.routes` 
 - **Tags** live in the `test.describe` title. Every test should carry a suite tag (`@smoke` / `@regression`) and a scope tag (`@admin`/`@customer`/`@business`/`@new-admin`/`@api`); optional feature tags `@users`/`@loans`/`@emi`. Filter via `--grep`/`--grep-invert` or the `grep` field on `POST /api/runs`. See README "Test conventions" for the full table.
 - **Path aliases** are defined in `tsconfig.json` (`@config/*`, `@pages/*`, `@fixtures/*`, `@utils/*`, `@api/*`) — note specs currently use relative imports; both work.
 - **Writing an API test:** `import { apiTest as test, expect } from '../../../fixtures/api.fixture'` and use the `authedRequest` context for authenticated calls.
+- **Customer-app API TCs** (cp.<env> backend, PIN login + HMAC signature) use a layered structure: `utils/api/customer-api-client.ts` (plumbing: login, signed get/post, `relogin()`) → `api-services/customer/` (endpoint paths in `customer-endpoints.ts`, one `*.api.ts` service class per feature, response types in `customer.types.ts`) → `fixtures/customer-api.fixture.ts` (worker-shared `customerApi` + per-feature service fixtures) → `tests/api/backend/customer/<feature>.spec.ts` (serial, titles prefixed `TC_CustApi_<Feature>_NNN`). Run with `npm run test:api:customer`. The admin-side helpers in `utils/api/` (coupons, order-status, ekyc) are intentionally left as-is.
 - Reports/artifacts go to `reports/` (gitignored). Per-run API artifacts go to `reports/runs/<id>/`.
 
 ## Gotchas / known rough edges

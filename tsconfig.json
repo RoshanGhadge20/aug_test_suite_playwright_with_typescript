@@ -20,6 +20,6 @@
       "@api/*": ["./src/api/*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*", "pages/**/*", "fixtures/**/*", "flows/**/*", "setup/**/*", "config/**/*", "utils/**/*", "test/**/*", "playwright.config.ts", "vitest.config.ts"],
+  "include": ["src/**/*", "tests/**/*", "pages/**/*", "fixtures/**/*", "flows/**/*", "api-services/**/*", "setup/**/*", "config/**/*", "utils/**/*", "test/**/*", "playwright.config.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "reports", "storage"]
 }
