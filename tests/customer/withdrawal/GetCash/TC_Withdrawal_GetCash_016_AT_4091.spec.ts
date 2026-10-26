@@ -132,7 +132,8 @@ test.describe('TC_Withdrawal_GetCash_016 @customer-flows', () => {
           console.log(`[${TC_016(5)}] Error toast message:`, errorToast.message);
 
           expect(errorToast.title).toBe('Error');
-          expect(errorToast.message).toBe('You dont have enough quantity for transaction');
+          // Live copy uses a typographic apostrophe ("don’t").
+          expect(errorToast.message).toBe('You don’t have enough quantity for transaction');
 
           console.log('URL after Proceed on zero-balance vault:', page.url());
 

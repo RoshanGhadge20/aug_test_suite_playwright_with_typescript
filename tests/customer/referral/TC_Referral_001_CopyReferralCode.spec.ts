@@ -1,9 +1,13 @@
 import { test, expect } from '../../../fixtures/base.fixture';
 import { existingKycVerifiedCustomerCreds } from '../test-data/registration-data';
+import { refreshCustomerStorageState } from '../helpers/customer-session.helpers';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe('TC_Referral_001 @regression @customer @referral', () => {
+  // Logs in as the main customer, which kills the shared auth-setup session — re-save it.
+  test.afterEach(async ({ browser }) => refreshCustomerStorageState(browser));
+
   test('Copying the referral code from My Profile shows a copy-success message', async ({
     page,
     customerLogin,

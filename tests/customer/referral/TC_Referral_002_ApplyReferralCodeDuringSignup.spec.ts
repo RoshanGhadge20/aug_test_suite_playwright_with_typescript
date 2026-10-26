@@ -5,10 +5,14 @@ import {
   DEFAULT_TEST_PIN,
   existingKycVerifiedCustomerCreds,
 } from '../test-data/registration-data';
+import { refreshCustomerStorageState } from '../helpers/customer-session.helpers';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe('TC_Referral_002 @regression @customer @referral', () => {
+  // Logs in as the main customer, which kills the shared auth-setup session — re-save it.
+  test.afterEach(async ({ browser }) => refreshCustomerStorageState(browser));
+
   test('A new signup applying the referral code increments the referrer\'s total referral count', async ({
     page,
     customerLogin,

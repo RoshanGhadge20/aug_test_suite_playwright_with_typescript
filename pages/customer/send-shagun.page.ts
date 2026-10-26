@@ -49,7 +49,8 @@ export class SendShagunPage extends BasePage {
     name: 'Enter a name',
     nameMinLength: 'Enter at least 3 characters',
     amount: 'Enter an amount',
-    mobileRequired: "Enter the receiver's mobile number",
+    // Live copy uses a typographic apostrophe (U+2019), not ASCII '.
+    mobileRequired: 'Enter the receiver’s mobile number',
     mobileInvalid: 'Enter a valid 10-digit mobile number',
     shagunNotFound: 'Shagun not found.',
     selfGift: 'You can not send Shagun to self.',
@@ -97,7 +98,8 @@ export class SendShagunPage extends BasePage {
 
   // ---- review ----
   readonly reviewHeading = () => this.page.getByRole('heading', { name: 'Review Your Shagun' });
-  readonly acceptTermsLabel = () => this.page.locator('label', { hasText: "I've read and accepted the Terms & Conditions." });
+  // Live copy uses a typographic apostrophe ("I’ve") — match either.
+  readonly acceptTermsLabel = () => this.page.locator('label', { hasText: /I['’]ve read and accepted the Terms & Conditions\./ });
   readonly acceptTermsCheckbox = () => this.page.locator('#acceptTerms');
   /** PrimeNG error toast, e.g. "You can not send Shagun to self." after Review → Continue. */
   readonly errorToast = () => this.page.locator('.p-toast-message-error');
@@ -118,7 +120,7 @@ export class SendShagunPage extends BasePage {
   // ---- receiver: claim (/order-transfer/claim?code=<ID>) ----
   readonly claimLinkFor = (shagunId: string) => this.page.locator(`a[href*="/order-transfer/claim?code=${shagunId}"]`);
   readonly claimButton = () => this.page.getByRole('button', { name: 'Claim Shagun', exact: true });
-  readonly claimReceivedHeading = () => this.page.getByRole('heading', { name: "You've Received a Shagun!" });
+  readonly claimReceivedHeading = () => this.page.getByRole('heading', { name: /^You['’]ve Received a Shagun!$/ });
   readonly claimSuccessHeading = () => this.page.getByRole('heading', { name: 'Gold Claimed Successfully!' });
   readonly alreadyClaimedHeading = () => this.page.getByRole('heading', { name: 'Shagun Already Claimed' });
   readonly sayThanksButton = (senderName: string) => this.page.getByRole('button', { name: `Say Thanks to ${senderName}` });
@@ -391,9 +393,11 @@ export class SendShagunPage extends BasePage {
     const labels = ['Valid till', "Receiver's Number", "Sender's Number", 'Message to', 'Status', 'Shagun ID', 'Created on'];
     const out: Record<string, string> = {};
     for (const label of labels) {
-      const box = this.page.locator('div.rounded-xl, div.rounded-2xl, div.border').filter({ hasText: label }).last();
+      // Live copy may use a typographic apostrophe ("Receiver’s") — match either, report under the ASCII key.
+      const labelText = new RegExp(label.replace("'", "['’]"));
+      const box = this.page.locator('div.rounded-xl, div.rounded-2xl, div.border').filter({ hasText: labelText }).last();
       if (!(await box.isVisible().catch(() => false))) continue;
-      const parts = (await box.innerText()).split('\n').map((s) => s.trim()).filter(Boolean);
+      const parts = (await box.innerText()).split('\n').map((s) => s.trim().replace(/’/g, "'")).filter(Boolean);
       const labelIdx = parts.findIndex((p) => p.startsWith(label));
       if (labelIdx >= 0 && parts[labelIdx + 1]) out[label] = parts[labelIdx + 1];
     }

@@ -7,6 +7,8 @@ import type { ShopBillingAddressDetails } from '../../../../pages/customer/shop-
 import type { MyOrderShopCardDetails } from '../../../../pages/customer/my-order-verification.page';
 
 test.describe('TC_SHOP_UserSaving_003 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test('TC_SHOP_UserSaving_003|AT-1646 - Shop EMI 6 Months: full down payment by User Savings', async ({
     shopPage,
     shopCartPage,

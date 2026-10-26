@@ -109,6 +109,10 @@ export default defineConfig({
         baseURL: panelUrl("customer", targetEnv),
         storageState: storageStateIfExists(targetEnv, "customer"),
       },
+      // The UAT customer account allows one active session; a spec that logs in again kills the
+      // shared storageState session for every other worker. Run customer specs one at a time.
+      workers: 1,
+      fullyParallel: false,
       dependencies: ["auth-setup"],
       testMatch: /tests\/customer\/.*\.spec\.ts/,
     },

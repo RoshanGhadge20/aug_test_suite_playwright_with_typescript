@@ -64,7 +64,7 @@ test.describe('TC_UserWiseSip_035 @regression @customer @userwisesip', () => {
       // Same transient post-KYC redirect as TC_032/033/034 — settle before driving Gold Plus.
       await page.waitForTimeout(3_000);
       await subscribeToGoldPlusWithEmi(page, {
-        weightTab: '10gm',
+        weightTab: '10 g',
         emiTenure: '3 months',
         contactNumber: buyMetalDataset.contactNumber,
         bankName: buyMetalDataset.netbankingBankName,

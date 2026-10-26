@@ -67,7 +67,10 @@ test.describe('TC_GBSIP_SpecialOnes_Positive_Monthly @regression @customer @goal
         monthlyAmount = await goalWiseSipPage.getComputedSipAmount();
         console.log('[TC_GBSIP_SpecialOnes_008_Monthly] Computed Monthly SIP amount:', monthlyAmount);
 
-        const sipStartDate = new Date();
+        // A Monthly goal SIP starts on the 1st of next month (same as the Home/Education specs);
+        // the app divides the budget over the months from then — e.g. Nov 2026 → Jun 2028 = 19.
+        const today = new Date();
+        const sipStartDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
         const goalEndDate = new Date(specialDate.year, specialDate.month - 1, specialDate.day);
         numberOfDays = Math.round((goalEndDate.getTime() - sipStartDate.getTime()) / (1000 * 60 * 60 * 24));
         numberOfMonths =

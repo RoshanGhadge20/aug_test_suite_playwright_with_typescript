@@ -53,8 +53,13 @@ export class AccountStatementPage extends BasePage {
     return this.comboboxes().nth(1);
   }
 
+  /** PrimeNG renamed the Dropdown overlay `.p-dropdown-panel` to `.p-select-overlay`; match either. */
+  private dropdownPanels(): Locator {
+    return this.page.locator('.p-select-overlay, .p-dropdown-panel');
+  }
+
   private async closeAnyOpenDropdownPanel(): Promise<void> {
-    const openPanel = this.page.locator('.p-dropdown-panel').first();
+    const openPanel = this.dropdownPanels().first();
     if (await openPanel.isVisible({ timeout: 500 }).catch(() => false)) {
       await this.page.keyboard.press('Escape');
       await openPanel.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
@@ -67,7 +72,7 @@ export class AccountStatementPage extends BasePage {
     await this.closeAnyOpenDropdownPanel();
     await combobox.scrollIntoViewIfNeeded();
     await combobox.click();
-    const panel = this.page.locator('.p-dropdown-panel').last();
+    const panel = this.dropdownPanels().last();
     await panel.waitFor({ state: 'visible', timeout: 10_000 });
     return panel;
   }

@@ -14,6 +14,8 @@ const TC006_COUPON_AMOUNT = 100;
 const TC006_GOLD_SETUP_AMOUNT = '500';
 
 test.describe('TC_SHOP_UserSaving_006 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test.describe('TC_SHOP_UserSaving_006 alt customer session', () => {
     test.use({ storageState: { cookies: [], origins: [] } });
 

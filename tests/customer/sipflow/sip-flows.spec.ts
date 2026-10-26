@@ -17,8 +17,8 @@ const bankDetails = {
   accountType: dataset.AccountType,
 };
 
-// Dashboard SIP card shows the plan amount with western grouping, e.g. "SIP: ₹100,000/weekly".
-const sipDashboardAmount = (amount: string): string => Number(amount).toLocaleString('en-US');
+// Dashboard SIP card shows the plan amount with Indian grouping, e.g. "SIP: ₹1,00,000/weekly".
+const sipDashboardAmount = (amount: string): string => Number(amount).toLocaleString('en-IN');
 const sipDashboardStatus = dataset.SIPStatus;
 
 test.describe('customer SIP flows @customer-flows', () => {

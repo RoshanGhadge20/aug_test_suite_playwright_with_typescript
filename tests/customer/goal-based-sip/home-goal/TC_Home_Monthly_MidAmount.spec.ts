@@ -68,6 +68,13 @@ test.describe('TC_GBSIP_Home_Monthly_MidAmount @regression @customer @goalwisesi
       await test.step('Select Monthly frequency and push the SIP-amount slider into the ₹15,000-₹99,999 mid-range', async () => {
         await goalWiseSipPage.selectFrequency(frequency);
         expect(await goalWiseSipPage.getSelectedFrequency()).toBe(frequency);
+        // The frequency popover can stay open after the pick and intercept clicks on `+`
+        // (confirmed live 2026-10-26) — close it before touching the slider.
+        const frequencyPopover = page.getByRole('dialog').filter({ has: page.locator('p-radiobutton') });
+        if (await frequencyPopover.isVisible()) {
+          await page.keyboard.press('Escape');
+          await expect(frequencyPopover).toBeHidden({ timeout: 5_000 });
+        }
 
         const defaultAmount = await goalWiseSipPage.getComputedSipAmount();
         console.log('[TC_GBSIP_Home_Monthly_MidAmount] Default computed Monthly SIP amount:', defaultAmount);

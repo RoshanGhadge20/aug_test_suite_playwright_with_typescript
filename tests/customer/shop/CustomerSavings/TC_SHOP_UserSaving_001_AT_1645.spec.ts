@@ -4,6 +4,8 @@ import type { ShopProductDetails } from '../../../../pages/customer/shop.page';
 import type { ShopBillingAddressDetails } from '../../../../pages/customer/shop-checkout.page';
 
 test.describe('TC_SHOP_UserSaving_001 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test('TC_SHOP_UserSaving_001|AT-1645 - Shop gold coin flow fully paid payment by saving-spotorder', async ({
     dashboardPage,
     shopPage,

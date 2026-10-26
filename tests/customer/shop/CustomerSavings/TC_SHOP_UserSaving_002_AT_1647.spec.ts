@@ -5,6 +5,8 @@ import type { ShopBillingAddressDetails } from '../../../../pages/customer/shop-
 import { loginAltCustomerWithGoldSetup } from '../../helpers/customer-alt-user.helpers';
 
 test.describe('TC_SHOP_UserSaving_002 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test.use({ storageState: { cookies: [], origins: [] } });
   test('TC_SHOP_UserSaving_002|AT-1647 - Verify end-to-end Shop product purchase using User Saving and Net Banking(Spot order) AT-1647', async ({
     shopPage,

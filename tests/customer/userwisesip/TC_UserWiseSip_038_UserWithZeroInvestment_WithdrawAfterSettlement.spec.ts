@@ -1,7 +1,9 @@
 import * as fs from 'fs';
+import type { Page } from '@playwright/test';
 import { test, expect } from '../../../fixtures/base.fixture';
 import { CustomerLoginPage } from '../../../pages/customer/login.page';
 import { logSegment } from './userwisesip.helpers';
+import { REGISTRATION_OTP } from '../test-data/registration-data';
 import {
   PENDING_WITHDRAWAL_STATE_PATH,
   SETTLEMENT_WAIT_MS,
@@ -10,6 +12,31 @@ import {
 } from './tc010-pending-withdrawal';
 
 test.use({ storageState: { cookies: [], origins: [] } });
+
+/**
+ * TC010's first login can skip PIN setup (see TC_Registration_002), leaving the account with no
+ * PIN — then /login sends an OTP instead of showing the PIN field (confirmed live 2026-10-26 for
+ * 6627018729). Try the PIN login; if it ended up on the OTP screen, finish via OTP there (setting
+ * the PIN if asked). Don't restart the login — a second OTP request right away doesn't open the
+ * OTP screen (confirmed live).
+ */
+async function loginReturningUser(page: Page, customerLogin: CustomerLoginPage, mobile: string): Promise<void> {
+  try {
+    await customerLogin.loginWithExistingPin(mobile, TEST_PIN);
+  } catch (err) {
+    if (!/\/login\/verify-otp/i.test(page.url())) throw err;
+    console.log(`[TC_UserWiseSip_038] ${mobile} has no PIN — logging in via OTP instead.`);
+    await customerLogin.enterOtp(REGISTRATION_OTP);
+    await customerLogin.clickVerifyOtp();
+    await page.waitForURL((url) => !/\/login\/verify-otp/i.test(url.pathname), { timeout: 20_000 });
+    if (/\/login\/verify-pin/i.test(page.url())) {
+      await customerLogin.enterNewPin(TEST_PIN, TEST_PIN);
+      await customerLogin.clickProceed();
+    }
+    if (!/\/dashboard/i.test(page.url())) await page.goto('/dashboard');
+    await page.waitForURL(/\/dashboard(?:\/|$|\?)/i, { timeout: 30_000 });
+  }
+}
 
 const USER_TYPE = 'User with Zero Investment';
 const DESCRIPTION =
@@ -67,7 +94,7 @@ test.describe('TC_UserWiseSip_038 @regression @customer @userwisesip', () => {
       // "Enter 6 digit security pin" field directly on /login (confirmed live), not the OTP screen.
       const customerLogin = new CustomerLoginPage(page);
       await customerLogin.open();
-      await customerLogin.loginWithExistingPin(mobile, TEST_PIN);
+      await loginReturningUser(page, customerLogin, mobile);
     });
 
     await test.step('TC_UserWiseSip_038_3 | Withdraw the full Gold Vault balance (same pattern as TC_Withdrawal_GetCash_014)', async () => {
@@ -79,7 +106,7 @@ test.describe('TC_UserWiseSip_038 @regression @customer @userwisesip', () => {
         await page.waitForTimeout(2_000);
         if (/\/login(?:\/|$|\?)/i.test(page.url())) {
           await page.goto('/login');
-          await customerLogin.loginWithExistingPin(mobile, TEST_PIN);
+          await loginReturningUser(page, customerLogin, mobile);
         }
       };
 

@@ -34,7 +34,7 @@ test.describe('TC_UserWiseSip_032 @regression @customer @userwisesip', () => {
       // completed, the same class of transient redirect BuyMetalPage already retries around.
       await page.waitForTimeout(3_000);
       await subscribeToGoldPlusWithEmi(page, {
-        weightTab: '10gm',
+        weightTab: '10 g',
         emiTenure: '3 months',
         contactNumber: dataset.contactNumber,
         bankName: dataset.netbankingBankName,

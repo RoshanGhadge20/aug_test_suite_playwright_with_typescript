@@ -9,6 +9,8 @@ function computeTc004CouponAmount(availableSavings: number, emiInitialPayment: n
 }
 
 test.describe('TC_SHOP_UserSaving_004 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test('TC_SHOP_UserSaving_004|AT-1650 - EMI product: coupon + User Savings, down payment < savings, coupon < savings (TC001 product)', async ({
     shopPage,
     shopCartPage,

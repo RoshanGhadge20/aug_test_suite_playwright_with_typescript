@@ -9,6 +9,7 @@ import {
 import { getSipFlowsDataset, parseSipMetalType, parseSipFrequencyType } from '../../../utils/data/customer-excel-data';
 import { removeEkycRecord } from '../../../utils/api/ekyc-api';
 import { TestDataFactory } from '../../../utils/data/test-data.factory';
+import { refreshCustomerStorageState } from '../helpers/customer-session.helpers';
 
 const dataset = getSipFlowsDataset();
 const sipData = {
@@ -32,6 +33,9 @@ const bankDetails = {
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe('TC_Referral_003 @regression @customer @referral', () => {
+  // Logs in as the main customer, which kills the shared auth-setup session — re-save it.
+  test.afterEach(async ({ browser }) => refreshCustomerStorageState(browser));
+
   test('A referred friend starting a SIP credits the referrer\'s Pending / Total Earned amounts', async ({
     page,
     customerLogin,

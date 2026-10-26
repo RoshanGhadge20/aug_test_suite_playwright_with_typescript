@@ -4,6 +4,7 @@ import { digitalGoldRatesUrl, panelCreds } from '../../config/urls';
 import { getTargetEnv } from '../../config/environments';
 import { getBuyMetalDataset } from '../../utils/data/customer-excel-data';
 import * as pdfUtils from '../../utils/pdf-utils';
+import { refreshCustomerStorageState } from './helpers/customer-session.helpers';
 
 const dataset = getBuyMetalDataset();
 
@@ -103,21 +104,6 @@ async function fetchDigitalMetalSpotRates(page: Page): Promise<DigitalMetalSpotR
   return parsed;
 }
 
-/** Clear cookies + web storage so a fresh OTP/PIN login can replace the project storageState session. */
-async function clearCustomerBrowserStorage(page: Page): Promise<void> {
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => {
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch {
-      /* ignore */
-    }
-  });
-  await page.context().clearCookies();
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(500);
-}
 
 test.describe('customer buy metal flows @customer-flows', () => {
   test.beforeEach(async ({ page }, testInfo) => {
@@ -129,6 +115,11 @@ test.describe('customer buy metal flows @customer-flows', () => {
     if (/\/login(?:\/|$|\?)/i.test(url) || /\/kyc(?:\/|$|\?)/i.test(url)) {
       throw new Error(`Customer session is not valid (${url}). Run: npx playwright test --project=auth-setup`);
     }
+  });
+
+  // TC_005 logs in again as the customer, which kills the shared auth-setup session — re-save it.
+  test.afterEach(async ({ browser }, testInfo) => {
+    if (/TC_005|TC005/i.test(testInfo.title)) await refreshCustomerStorageState(browser);
   });
 
   test('TC_001-Buy Gold one-time using Netbanking + cancel + re-purchase flow', async ({
@@ -595,8 +586,10 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
       console.log(
         `[${TC005(1)}] Logging in as ${mobile} using ${getTargetEnv().toUpperCase()} customer OTP (same for all users on this env).`,
       );
-      await clearCustomerBrowserStorage(page);
-      await customerLogin.login(mobile, otp);
+      // A single storage clear can bounce /login straight back to /dashboard (confirmed live
+      // 2026-10-26) — retry until the mobile-entry form shows, then log in from there.
+      await customerLogin.logoutAndReturnToMobileEntry();
+      await customerLogin.loginWithExistingPin(mobile, otp);
       await page.goto('/dashboard');
       await page.waitForLoadState('domcontentloaded');
       const url = await waitAndRetryIfKycRedirect(page, '/dashboard');
@@ -705,17 +698,22 @@ expect(amount).toBeCloseTo(expectedAmount, 2);
         `[${TC005(5)}] razorpay raw=${razorpayAmountRaw} normalized=${razorpayAmountNormalized} expected=${expectedAmount}`,
       );
       expect(Math.abs(razorpayAmountNormalized - expectedAmount)).toBeLessThanOrEqual(1);
+      // Buy-now Razorpay helpers (same as buymetal/buy-metal.spec.ts). The shop-checkout ones
+      // closed Razorpay without the demo-bank Success step, so no order was created (confirmed live 2026-10-26).
       await paymentPage.fillContactNumber(dataset.contactNumber);
-      await paymentPage.clickRazorpayContinue();
-      await paymentPage.selectNetbanking();
-      await paymentPage.completeNetbankingPayment('HDFC Bank');
+      await paymentPage.clickRazorpayContinueBuyNow();
+      await paymentPage.selectNetbankingBuyNow();
+      await paymentPage.completeNetbankingPaymentBuyNow('HDFC Bank');
     });
 
     await test.step('TC005_6 | Read purchased quantity from My Orders', async () => {
       logSub(6, 'Read purchased quantity from My Orders');
       await page.goto('/my-orders');
       await expect(page).toHaveURL(/my-orders/);
-      await myOrderVerificationPage.waitForOrderRow();
+      // The top row isn't necessarily this purchase — other specs (Shagun, SIPs) add orders to the
+      // same account — so pick the row whose narration has the quantity just bought.
+      const qtyPattern = `${String(uiQuantity).replace('.', '\\.')}\\d*\\s*gm?\\b`;
+      await myOrderVerificationPage.waitForOrderRowByText(qtyPattern);
       const qty = await myOrderVerificationPage.getNarrationQuantity();
       purchasedQuantity = qty ?? 0;
       logValidation(`${TC005(6)} Order quantity`, qty, uiQuantity);

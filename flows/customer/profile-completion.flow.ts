@@ -43,8 +43,9 @@ export async function completeProfileEmailAndGender(
   // (kyc-digi-kyc.page.ts). The form briefly re-renders right after OTP submission (confirmed
   // live: the dropdown's wrapper can still carry `.p-disabled` for a moment) — settle first.
   await page.locator('div.p-blockui[aria-busy="true"]').waitFor({ state: 'hidden', timeout: 15_000 }).catch(() => {});
-  const genderDropdown = page.locator('div.p-dropdown').filter({ visible: true }).first();
-  await expect(genderDropdown).not.toHaveClass(/p-disabled/, { timeout: 15_000 });
+  // PrimeNG renamed `div.p-dropdown` to `p-select`; match the role instead (live: combobox "Enter Gender").
+  const genderDropdown = page.getByRole('combobox', { name: /gender/i }).filter({ visible: true }).first();
+  await expect(genderDropdown).toBeEnabled({ timeout: 15_000 });
   await genderDropdown.click();
   const genderOption = page.locator('li[role="option"]').first();
   await genderOption.waitFor({ state: 'visible', timeout: 10_000 });

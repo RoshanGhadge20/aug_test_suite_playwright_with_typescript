@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { PaymentPage } from '../../pages/customer/payment.page';
 
 export interface GoldPlusSubscriptionOptions {
-  /** Weight tab on /gold-plus, e.g. '10gm'. */
+  /** Weight chip on /gold-plus, e.g. '10 g' (live label; was '10gm'). */
   weightTab: string;
   /** EMI tenure — matches the row's real `label[for]`/input `id`, e.g. '3 months' (confirmed live). */
   emiTenure: string;
@@ -29,16 +29,13 @@ export async function subscribeToGoldPlusWithEmi(
   await page.getByText(options.weightTab, { exact: true }).click();
   await page.getByRole('button', { name: /^Proceed$/i }).click();
 
-  // "Choose your EMI plan" modal — each row is a real <label for="3 months"> wrapping both the
-  // label text and the price (confirmed live via the actual markup), with a p-radiobutton hidden
-  // native input behind it. Clicking the label is the standard way to trigger a `for`-linked
-  // input, and matches the same label[for] pattern already used for the shop "Same as Billing
-  // Address" checkbox elsewhere in this suite.
+  // "Choose your EMI plan" modal — each row is a radio named "<tenure> ₹<amount>/month", e.g.
+  // "3 months ₹43,624.44/month" (confirmed live 2026-10-26; the old <label for="3 months"> is gone).
   const emiDialog = page.getByRole('dialog', { name: /Choose your EMI plan/i });
   await emiDialog.waitFor({ state: 'visible', timeout: 10_000 });
-  const tenureLabel = emiDialog.locator(`label[for="${options.emiTenure}"]`);
-  await tenureLabel.waitFor({ state: 'visible', timeout: 10_000 });
-  await tenureLabel.click();
+  const tenureRadio = emiDialog.getByRole('radio', { name: new RegExp(`^${options.emiTenure}\\b`, 'i') });
+  await tenureRadio.waitFor({ state: 'visible', timeout: 10_000 });
+  await tenureRadio.click();
   // Scoped to the dialog — the page behind it still has its own "Proceed" button, so an
   // unscoped locator matches two elements (confirmed live).
   await emiDialog.getByRole('button', { name: /^Proceed$/i }).click();

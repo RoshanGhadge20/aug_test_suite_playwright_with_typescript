@@ -10,6 +10,8 @@ import {
 let shopOrder: MyOrderShopCardDetails;
 
 test.describe('TC_SHOP_UserSaving_007 @customer-flows', () => {
+  // TEMP: User Savings is disabled in the customer UI (2026-10-26). Remove this skip once it is re-enabled.
+  test.skip(true, 'User Savings is temporarily disabled in the UI');
   test.use({ storageState: { cookies: [], origins: [] } });
   test('TC_SHOP_UserSaving_007|AT-1654 - Verify end-to-end cancellation Shop product purchase using User Saving and Net Banking(Spot order)', async ({
     page,
