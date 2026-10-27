@@ -39,3 +39,14 @@ export function signedBackendHeaders(
     'Content-Type': 'application/json',
   };
 }
+
+/** Signature header alone, for calls made before login (no token yet) — e.g. customer send-otp. */
+export function signatureOnlyHeaders(
+  method: string,
+  path: string,
+  body?: Record<string, unknown>,
+): Record<string, string> {
+  const secret = backendHmacKey();
+  if (!secret) throw new Error('Set UAT_BACKEND_HMAC_KEY in .env (Postman HMAC_SECRET)');
+  return { signature: computeBackendApiSignature(method, path, body, secret), 'Content-Type': 'application/json' };
+}

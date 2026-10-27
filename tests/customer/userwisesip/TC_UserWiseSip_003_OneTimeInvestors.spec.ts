@@ -16,6 +16,15 @@ test.describe('TC_UserWiseSip_003 @regression @customer @userwisesip', () => {
 
     let mobile = '';
 
+    // A "Verify your email anytime" popup appears after KYC and blocks the Buy Gold button (UAT,
+    // 2026-10-27). Its ✕ is the dialog's only button without text; Escape is the fallback.
+    const emailNudge = page.getByRole('dialog').filter({ hasText: /verify your email anytime/i });
+    await page.addLocatorHandler(emailNudge, async () => {
+      const close = emailNudge.getByRole('button').filter({ hasNotText: /\S/ }).first();
+      if (await close.isVisible().catch(() => false)) await close.click();
+      else await page.keyboard.press('Escape');
+    });
+
     await test.step('TC_UserWiseSip_003_1 | Register with a unique, unregistered mobile number', async () => {
       ({ mobile } = await registerNewUser(page));
     });

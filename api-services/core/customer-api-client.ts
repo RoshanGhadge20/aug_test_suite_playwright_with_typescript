@@ -4,7 +4,7 @@ import { apiUrl, panelCreds } from '../../config/urls';
 import { getTargetEnv, type EnvName } from '../../config/environments';
 import { CUSTOMER_APP_HEADERS, CUSTOMER_ENDPOINTS } from '../customer/customer-endpoints';
 import { extractToken } from './api-auth';
-import { signedBackendHeaders } from './backend-api-signature';
+import { signatureOnlyHeaders, signedBackendHeaders } from './backend-api-signature';
 
 export interface CustomerPinLogin {
   mobileNumber: string;
@@ -24,6 +24,51 @@ export function customerPinCreds(envName: EnvName = getTargetEnv()): CustomerPin
 
 export function pinLoginPayload(creds: CustomerPinLogin) {
   return { pin: creds.pin, verifyByPin: true, mobileNumber: creds.mobileNumber, deviceId: null };
+}
+
+/**
+ * Gives a customer without a PIN (fresh registrations never reach the app's set-PIN screen) the PIN
+ * in `creds`, the way the app does on first login: OTP login → add-pin. No-op when a PIN exists.
+ * Needed because PIN login for a customer with no PIN hangs (504) instead of failing (UAT, 2026-10-27).
+ * The OTP is the env's backdoor one; UAT allows one send-otp per mobile per minute. The pre-login
+ * calls must be signed too — unsigned, send-otp answers 200 with an empty body and sends nothing.
+ */
+export async function ensureCustomerPin(
+  creds: CustomerPinLogin,
+  envName: EnvName = getTargetEnv(),
+): Promise<void> {
+  const ctx = await pwRequest.newContext({
+    baseURL: apiUrl('api-backend', envName),
+    extraHTTPHeaders: { ...CUSTOMER_APP_HEADERS, Accept: 'application/json' },
+  });
+  try {
+    const { mobileNumber, pin } = creds;
+    const post = (path: string, data: Record<string, unknown>) =>
+      ctx.post(path, { data, headers: signatureOnlyHeaders('POST', path, data) });
+
+    const check = await post(CUSTOMER_ENDPOINTS.checkDevicePin, { mobileNumber });
+    if (!check.ok()) throw new Error(`check-device-pin failed: ${check.status()} ${await check.text()}`);
+    if ((await check.json()).pinExists) return;
+
+    const type = 'customerSignIn';
+    const sent = await post(CUSTOMER_ENDPOINTS.sendLoginOtp, { captcha: '', value: '', mobileNumber, type });
+    if (!sent.ok()) throw new Error(`customer-send-otp failed: ${sent.status()} ${await sent.text()}`);
+    const { referenceCode } = await sent.json();
+
+    const otp = panelCreds('customer', envName).otp;
+    const verified = await post(CUSTOMER_ENDPOINTS.verifyLoginOtp, { otp, mobileNumber, referenceCode, isCustomer: true, type });
+    if (!verified.ok()) throw new Error(`verify-customer-login failed: ${verified.status()} ${await verified.text()}`);
+    const token = extractToken(await verified.json(), 'token');
+
+    const body = { pin, renterPin: pin, template: '', isQuestionAsk: false };
+    const added = await ctx.post(CUSTOMER_ENDPOINTS.addPin, {
+      data: body,
+      headers: signedBackendHeaders(token, 'POST', CUSTOMER_ENDPOINTS.addPin, body),
+    });
+    if (!added.ok()) throw new Error(`add-pin failed: ${added.status()} ${await added.text()}`);
+  } finally {
+    await ctx.dispose();
+  }
 }
 
 /**

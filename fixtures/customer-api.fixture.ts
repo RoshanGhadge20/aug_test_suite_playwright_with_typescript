@@ -1,7 +1,9 @@
 import { test as base } from '@playwright/test';
 import { CustomerApiClient } from '../api-services/core/customer-api-client';
 import { CustomerAuthApi } from '../api-services/customer/customer-auth.api';
+import { CustomerPaymentApi } from '../api-services/customer/customer-payment.api';
 import { CustomerProfileApi } from '../api-services/customer/customer-profile.api';
+import { CustomerQuickSaveSipApi } from '../api-services/customer/customer-quick-save-sip.api';
 
 type CustomerApiWorkerFixtures = {
   customerApi: CustomerApiClient;
@@ -10,6 +12,8 @@ type CustomerApiWorkerFixtures = {
 type CustomerApiTestFixtures = {
   customerAuthApi: CustomerAuthApi;
   customerProfileApi: CustomerProfileApi;
+  customerPaymentApi: CustomerPaymentApi;
+  customerQuickSaveSipApi: CustomerQuickSaveSipApi;
 };
 
 /**
@@ -33,6 +37,12 @@ export const customerApiTest = base.extend<CustomerApiTestFixtures, CustomerApiW
   },
   customerProfileApi: async ({ customerApi }, use) => {
     await use(new CustomerProfileApi(customerApi));
+  },
+  customerPaymentApi: async ({ customerApi }, use) => {
+    await use(new CustomerPaymentApi(customerApi));
+  },
+  customerQuickSaveSipApi: async ({ customerApi }, use) => {
+    await use(new CustomerQuickSaveSipApi(customerApi));
   },
 });
 

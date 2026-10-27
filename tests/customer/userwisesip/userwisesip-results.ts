@@ -38,8 +38,22 @@ export function recordSegmentResult(
   const dataRows = rows.slice(1).filter((row) => row[0] !== tc);
   dataRows.push([tc, userType, description, mobile, extra ?? '', new Date().toISOString()]);
 
-  workbook.Sheets[SHEET_NAME] = XLSX.utils.aoa_to_sheet([HEADERS, ...dataRows]);
+  const updated = XLSX.utils.aoa_to_sheet([HEADERS, ...dataRows]);
+  // writeFile only emits sheets listed in SheetNames — an existing workbook without this sheet
+  // (e.g. one holding only GoalWiseSip) would otherwise drop the row silently.
+  if (workbook.SheetNames.includes(SHEET_NAME)) workbook.Sheets[SHEET_NAME] = updated;
+  else XLSX.utils.book_append_sheet(workbook, updated, SHEET_NAME);
 
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
   XLSX.writeFile(workbook, RESULTS_WORKBOOK);
+}
+
+/** Mobile number last recorded for `tc` in userwisesip-results.xlsx, or undefined if it has no row. */
+export function getRecordedMobile(tc: string): string | undefined {
+  if (!fs.existsSync(RESULTS_WORKBOOK)) return undefined;
+  const sheet = XLSX.readFile(RESULTS_WORKBOOK).Sheets[SHEET_NAME];
+  if (!sheet) return undefined;
+  const rows = XLSX.utils.sheet_to_json<(string | number)[]>(sheet, { header: 1 });
+  const row = rows.slice(1).find((r) => r[0] === tc);
+  return row?.[3] ? String(row[3]) : undefined;
 }
