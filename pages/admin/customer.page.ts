@@ -1,64 +1,54 @@
-import { Locator, Page } from '@playwright/test';
+import { Locator, Page } from "@playwright/test";
 
 export class CustomerPage {
-  constructor(private page: Page) {}
+  private readonly profile: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly arrow: Locator;
+  private readonly customer: Locator;
+  private readonly allCustomer: Locator;
+  private readonly addCustomer: Locator;
+  private readonly leadSource: Locator;
+  private readonly firstName: Locator;
+  private readonly lastName: Locator;
+  private readonly mobileNumber: Locator;
+  private readonly sendOtp: Locator;
+  private readonly enterOtp: Locator;
+  private readonly verifyOtp: Locator;
+  private readonly stateDropdown: Locator;
+  private readonly cityDropdown: Locator;
+  private readonly pinCode: Locator;
+  private readonly goldLoanDropdown: Locator;
+  private readonly addButton: Locator;
 
-
-  get profile(): Locator {
-    return this.page.locator("//img[@alt='profile']");
-  }
-  get branchDropdown(): Locator {
-    return this.page.locator('#branch');
-  }
-  get arrow(): Locator {
-    return this.page.locator("//your-arrow-xpath");
-  }
-  get customer(): Locator {
-    return this.page.locator("//your-customer-xpath");
-  }
-  get allCustomer(): Locator {
-    return this.page.locator("//your-all-customer-xpath");
-  }
-  get addCustomer(): Locator {
-    return this.page.locator("//your-add-customer-xpath");
-  }
-
-  get leadSource(): Locator {
-    return this.page.locator("//select[@formcontrolname='leadSource']");
-  }
-  get firstName(): Locator {
-    return this.page.locator("//input[@formcontrolname='firstName']");
-  }
-  get lastName(): Locator {
-    return this.page.locator("//input[@formcontrolname='lastName']");
-  }
-  get mobileNumber(): Locator {
-    return this.page.locator("//input[@formcontrolname='mobileNumber']");
-  }
-  get sendOtp(): Locator {
-    return this.page.locator("//button[contains(.,'Send OTP')]");
-  }
-  get enterOtp(): Locator {
-    return this.page.locator("//input[@formcontrolname='otp']");
-  }
-  get verifyOtp(): Locator {
-    return this.page.locator("//button[contains(.,'Verify')]");
-  }
-
-  get stateDropdown(): Locator {
-    return this.page.locator("//select[@formcontrolname='stateId']");
-  }
-  get cityDropdown(): Locator {
-    return this.page.locator("//select[@formcontrolname='cityId']");
-  }
-  get pinCode(): Locator {
-    return this.page.locator("//input[@formcontrolname='pinCode']");
-  }
-  get goldLoanDropdown(): Locator {
-    return this.page.locator("//select[@formcontrolname='goldLoan']");
-  }
-  get addButton(): Locator {
-    return this.page.locator("//button[contains(.,'Add')]");
+  constructor(private readonly page: Page) {
+    this.profile = this.page.locator("//img[@alt='profile']");
+    this.branchDropdown = this.page.locator("#branch");
+    this.arrow = this.page.locator("//your-arrow-xpath");
+    this.customer = this.page.locator("//your-customer-xpath");
+    this.allCustomer = this.page.locator("//your-all-customer-xpath");
+    this.addCustomer = this.page.locator("//your-add-customer-xpath");
+    this.leadSource = this.page.locator(
+      "//select[@formcontrolname='leadSource']",
+    );
+    this.firstName = this.page.locator("//input[@formcontrolname='firstName']");
+    this.lastName = this.page.locator("//input[@formcontrolname='lastName']");
+    this.mobileNumber = this.page.locator(
+      "//input[@formcontrolname='mobileNumber']",
+    );
+    this.sendOtp = this.page.locator("//button[contains(.,'Send OTP')]");
+    this.enterOtp = this.page.locator("//input[@formcontrolname='otp']");
+    this.verifyOtp = this.page.locator("//button[contains(.,'Verify')]");
+    this.stateDropdown = this.page.locator(
+      "//select[@formcontrolname='stateId']",
+    );
+    this.cityDropdown = this.page.locator(
+      "//select[@formcontrolname='cityId']",
+    );
+    this.pinCode = this.page.locator("//input[@formcontrolname='pinCode']");
+    this.goldLoanDropdown = this.page.locator(
+      "//select[@formcontrolname='goldLoan']",
+    );
+    this.addButton = this.page.locator("//button[contains(.,'Add')]");
   }
 
   async navigateToCustomerManagement(branchName: string) {
@@ -78,18 +68,14 @@ export class CustomerPage {
   }
 
   async selectLead(leadName: string) {
-    const options = await this.leadSource.locator('option').allTextContents();
+    const options = await this.leadSource.locator("option").allTextContents();
 
     if (options.includes(leadName)) {
       await this.leadSource.selectOption({ label: leadName });
     } else {
       // fallback
       for (const option of options) {
-        if (
-          option.trim() &&
-          option !== '-- Select --' &&
-          option !== 'Select'
-        ) {
+        if (option.trim() && option !== "-- Select --" && option !== "Select") {
           await this.leadSource.selectOption({ label: option });
           break;
         }
@@ -113,7 +99,7 @@ export class CustomerPage {
 
     await this.sendOtp.click();
 
-    await this.enterOtp.fill('1234');
+    await this.enterOtp.fill("1234");
 
     await this.verifyOtp.click();
 
@@ -128,7 +114,7 @@ export class CustomerPage {
     await this.pinCode.fill(pin);
 
     await this.goldLoanDropdown.selectOption({
-      label: 'Gold Loan',
+      label: "Gold Loan",
     });
 
     await this.addButton.click();
@@ -137,18 +123,14 @@ export class CustomerPage {
   generateRandomMobile(): string {
     const firstDigit = Math.floor(Math.random() * 4) + 6;
 
-    const remainingDigits = Math.floor(
-      Math.random() * 1000000000
-    )
+    const remainingDigits = Math.floor(Math.random() * 1000000000)
       .toString()
-      .padStart(9, '0');
+      .padStart(9, "0");
 
     return `${firstDigit}${remainingDigits}`;
   }
 
   generateRandomPin(): string {
-    return Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 }

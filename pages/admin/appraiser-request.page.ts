@@ -21,76 +21,94 @@ import { panelUrl } from "../../config/urls";
  *     Caller must inject loginAs('ops') before calling validateAppraiserRequest().
  */
 export class AppraiserRequestPage extends AdminBasePage {
-  constructor(page: Page) {
-    super(page);
-  }
-
-  // ── Locators (from PO17_AppraiserRequestPage) ────────────────────────────
-
+  // ── Locators (from PO17_AppraiserRequestPage + cross-page re-declarations) ─
   // Original was a hardcoded //mat-row[13]//mat-cell[12]//div[2]//button[1] positional path —
   // fragile against any change in row order/count. Confirmed live (raw HTML dump of the
   // Appraiser Requests / Lead Management > New Requests table) that every actionable row's
   // button reads exactly "Update Appraiser", so match on that instead of position.
-  private readonly btnUpadateAppraiser = () =>
-    this.page.locator(
-      "xpath=//mat-row//button[normalize-space()='Update Appraiser']",
-    );
+  private readonly btnUpadateAppraiser: Locator;
   // Same formcontrolname is reused by both the request-creation dialog (Start New Gold Loan)
   // and the Update Appraiser dialog — confirmed live via raw HTML dumps of both.
-  private readonly btnAppraiserName = () =>
-    this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
+  private readonly btnAppraiserName: Locator;
   // Internal Branch (Start New Gold Loan creation dialog only) — confirmed live via raw HTML
   // dump: formcontrolname='internalBranchId'.
-  private readonly internalBranchId = () =>
-    this.page.locator("xpath=//select[@formcontrolname='internalBranchId']");
-  private readonly moduleIdCreate = () =>
-    this.page.locator("xpath=//select[@formcontrolname='moduleId']");
+  private readonly internalBranchId: Locator;
+  private readonly moduleIdCreate: Locator;
   // "Update" submit button inside the Update Appraiser dialog (component is literally named
   // <kt-assign-appraiser> — confirmed live it's the same feature as "Assign Appraiser", just
   // labeled "Update" here). The original port selected an appraiser but never clicked this —
   // the selection was never actually saved.
-  private readonly btnUpdateSubmit = () =>
-    this.page.locator("xpath=//button[normalize-space()='Update']");
-
+  private readonly btnUpdateSubmit: Locator;
   // Cross-page re-declarations
-  private readonly profile = () =>
-    this.page.locator(
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly customerManagementBtn: Locator;
+  private readonly allCustomers: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly startNewGL: Locator;
+  private readonly btnAdd: Locator;
+  private readonly appraisalRequest: Locator;
+  private readonly textField: Locator;
+  private readonly scrollableTable: Locator;
+
+  constructor(page: Page) {
+    super(page);
+    this.btnUpadateAppraiser = this.page.locator(
+      "xpath=//mat-row//button[normalize-space()='Update Appraiser']",
+    );
+    this.btnAppraiserName = this.page.locator(
+      "xpath=//select[@formcontrolname='appraiserId']",
+    );
+    this.internalBranchId = this.page.locator(
+      "xpath=//select[@formcontrolname='internalBranchId']",
+    );
+    this.moduleIdCreate = this.page.locator(
+      "xpath=//select[@formcontrolname='moduleId']",
+    );
+    this.btnUpdateSubmit = this.page.locator(
+      "xpath=//button[normalize-space()='Update']",
+    );
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  private readonly customerManagementBtn = () =>
-    this.page.locator(
+    this.customerManagementBtn = this.page.locator(
       "xpath=(//span[normalize-space()='Customer Management'])[1]",
     );
-  private readonly allCustomers = () =>
-    this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly kebabMenu = () =>
-    this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
-  private readonly startNewGL = () =>
-    this.page.locator(
+    this.allCustomers = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.kebabMenu = this.page.locator(
+      "xpath=(//button[.//mat-icon[text()='more_vert']])[1]",
+    );
+    this.startNewGL = this.page.locator(
       "xpath=//button[normalize-space()='Start New Gold Loan']",
     );
-  private readonly btnAdd = () =>
-    this.page.locator(
+    this.btnAdd = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly appraisalRequest = () =>
-    this.page.locator("xpath=//span[normalize-space()='Appraiser Requests']");
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
-  private readonly scrollableTable = () =>
-    this.page.locator("xpath=//div[@class='mat-table__wrapper']");
+    this.appraisalRequest = this.page.locator(
+      "xpath=//span[normalize-space()='Appraiser Requests']",
+    );
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
+    this.scrollableTable = this.page.locator(
+      "xpath=//div[@class='mat-table__wrapper']",
+    );
+  }
 
   // ── Actions ──────────────────────────────────────────────────────────────
 
@@ -101,63 +119,63 @@ export class AppraiserRequestPage extends AdminBasePage {
   async validateAppraiserRequest(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.branchDropdown().waitFor({ state: "visible" });
-    await this.branchDropdown().selectOption({ label: "Show All" });
+    await this.branchDropdown.waitFor({ state: "visible" });
+    await this.branchDropdown.selectOption({ label: "Show All" });
     await this.page.waitForTimeout(5000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.customerManagementBtn().click();
+    await this.customerManagementBtn.click();
     await this.waitForLoaderToDisappear();
-    await this.allCustomers().click();
-    await this.firstNameFilter().fill(data.firstName);
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    await this.allCustomers.click();
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-
-    await this.kebabMenu().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
-    await this.startNewGL().click();
-    await this.waitForLoaderToDisappear();
-    await this.btnAdd().click();
     await this.page.waitForTimeout(5000);
 
-    await this.appraisalRequest().click();
+    await this.kebabMenu.click();
+    await this.waitForLoaderToDisappear();
+    await this.startNewGL.click();
+    await this.waitForLoaderToDisappear();
+    await this.btnAdd.click();
+    await this.page.waitForTimeout(5000);
+
+    await this.appraisalRequest.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(data.firstName);
+    await this.textField.fill(data.firstName);
 
     // Scroll table horizontally then back (Actions.scrollLeft/sendKeys.HOME equivalent)
-    await this.scrollableTable().click();
-    await this.scrollableTable().evaluate((el) => {
+    await this.scrollableTable.click();
+    await this.scrollableTable.evaluate((el) => {
       (el as any).scrollLeft = (el as any).scrollWidth;
     });
     await this.page.waitForTimeout(3000);
-    await this.scrollableTable().click();
-    await this.scrollableTable().evaluate((el) => {
+    await this.scrollableTable.click();
+    await this.scrollableTable.evaluate((el) => {
       (el as any).scrollLeft = 0;
     });
     await this.page.waitForTimeout(3000);
 
     await this.clickFirstAvailableUpdateAppraiser();
     await this.waitForLoaderToDisappear();
-    await this.btnAppraiserName().waitFor({ state: "visible" });
+    await this.btnAppraiserName.waitFor({ state: "visible" });
     await this.selectOptionByPartialLabel(
-      this.btnAppraiserName(),
+      this.btnAppraiserName,
       "Priyanka Thorat",
     );
 
     // The original port stopped here — it selected an appraiser but never submitted, so the
     // change was never actually saved. Confirmed live via raw HTML dump: the dialog's submit
     // button reads "Update".
-    await this.btnUpdateSubmit().click();
+    await this.btnUpdateSubmit.click();
     await this.waitForLoaderToDisappear();
   }
 
@@ -168,7 +186,7 @@ export class AppraiserRequestPage extends AdminBasePage {
    * so scan candidates instead of assuming the first match is usable.
    */
   private async clickFirstAvailableUpdateAppraiser(): Promise<void> {
-    const buttons = this.btnUpadateAppraiser();
+    const buttons = this.btnUpadateAppraiser;
     const count = await buttons.count();
     for (let i = 0; i < count; i++) {
       try {
@@ -216,27 +234,23 @@ export class AppraiserRequestPage extends AdminBasePage {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await this.page.waitForTimeout(5000);
-        await this.profile().click();
+        await this.profile.click();
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(5000);
 
-        await this.branchDropdown().waitFor({ state: "visible" });
+        await this.branchDropdown.waitFor({ state: "visible" });
         await this.page.waitForTimeout(2000);
 
         await this.expandSidebar();
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(500);
-        await this.jsClick(this.customerManagementBtn());
+        await this.jsClick(this.customerManagementBtn);
         await this.waitForLoaderToDisappear();
-        if (
-          !(await this.allCustomers()
-            .isVisible()
-            .catch(() => false))
-        ) {
-          await this.jsClick(this.customerManagementBtn());
+        if (!(await this.allCustomers.isVisible().catch(() => false))) {
+          await this.jsClick(this.customerManagementBtn);
           await this.waitForLoaderToDisappear();
         }
-        await this.jsClick(this.allCustomers());
+        await this.jsClick(this.allCustomers);
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(2000);
         return;
@@ -265,35 +279,35 @@ export class AppraiserRequestPage extends AdminBasePage {
     const data = getLoginData();
     await this.navigateToAllCustomers();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.startNewGL().click();
+    await this.startNewGL.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
     // Confirmed live: options read "<Branch Name> (<City>)" (e.g. "Augmont (Mumbai City)",
     // "Dadar (Mumbai City)") — never the bare branch name Playwright's exact-label match
     // needs. Resolve the full label by substring match first.
-    await this.selectOptionByPartialLabel(this.internalBranchId(), branchLabel);
+    await this.selectOptionByPartialLabel(this.internalBranchId, branchLabel);
     await this.page.waitForTimeout(500);
     await this.selectOptionByPartialLabel(
-      this.btnAppraiserName(),
+      this.btnAppraiserName,
       appraiserLabel,
     );
     await this.page.waitForTimeout(500);
-    await this.moduleIdCreate()
+    await this.moduleIdCreate
       .selectOption({ label: "Gold Loan" })
       .catch(() => {});
     await this.page.waitForTimeout(500);
 
-    await this.btnAdd().click();
+    await this.btnAdd.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
     await this.page.keyboard.press("Escape").catch(() => {});
@@ -314,13 +328,13 @@ export class AppraiserRequestPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
 
-    const searchBox = this.textField();
+    const searchBox = this.textField;
     if (await searchBox.count()) {
       await searchBox.fill(searchText);
       await this.page.waitForTimeout(2000);
     }
 
-    const buttons = this.btnUpadateAppraiser();
+    const buttons = this.btnUpadateAppraiser;
     const count = await buttons.count();
     let rowText = "";
     let clicked = false;
@@ -344,14 +358,14 @@ export class AppraiserRequestPage extends AdminBasePage {
       );
     }
 
-    await this.btnAppraiserName().waitFor({ state: "visible" });
+    await this.btnAppraiserName.waitFor({ state: "visible" });
     await this.selectOptionByPartialLabel(
-      this.btnAppraiserName(),
+      this.btnAppraiserName,
       appraiserLabel,
     );
     await this.page.waitForTimeout(500);
 
-    await this.btnUpdateSubmit().click();
+    await this.btnUpdateSubmit.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
 

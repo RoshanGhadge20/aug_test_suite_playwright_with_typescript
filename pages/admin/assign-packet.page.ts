@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import { documentPath } from "../../config/urls";
@@ -6,41 +6,129 @@ import { existsSync } from "fs";
 import { resolve } from "path";
 import { expect } from "@playwright/test";
 
-/**
- * Port of Java: PO05_AssignPacket (locators) + Flow05_AssignPacket (actions)
- *
- * Cross-page locator notes:
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `branchDropdown` is an inline locator from Flow05.
- *   - `loanManagement` re-declares PO_Common.loc_loanManagement / PO03.loc_loanManagement (same XPath).
- *   - `firstNameFilter` re-declares PO01_KycSel.loc_firstName (same XPath).
- *   - `filterbtn` re-declares PO01_KycSel.loc_filterbtn (same XPath).
- *   - `packetID` re-declares PO03_CreateNewPacket.loc_packetID (same XPath).
- *   - `selBranchPacket` re-declares PO03_CreateNewPacket.loc_selBranch (same XPath).
- *   - `btnNewpacket` re-declares PO03_CreateNewPacket.loc_btnNewpacket (same XPath).
- *   - `barCode` re-declares PO03_CreateNewPacket.loc_barCode (same XPath).
- *   - `btnAddPacketPO03` re-declares PO03_CreateNewPacket.loc_btnAddPacket (same XPath).
- *   - `btnEditPacket` re-declares PO03_CreateNewPacket.loc_btnEditPacket (same XPath).
- *   - `selUsertype` re-declares PO03_CreateNewPacket.loc_selUsertype (same XPath).
- *   - `btnUpdatePO03` re-declares PO03_CreateNewPacket.loc_btnUpdate (same XPath).
- *   - `imgCamera` re-declares inline camera button from Flow05.
- *
- * Omitted loginWith* calls:
- *   - Flow05_AssignPacket.validatePackets() called Flow_LoginLogout.loginWithAppraiser() mid-flow —
- *     OMITTED. Role switching must be handled by the caller via loginAs('appraiser').
- *
- * File upload TODOs:
- *   - validatePackets(): Three document uploads via sendKeys to (//input[@type='file'])[1/2/3] and
- *     a 6th input by index. Best-effort Playwright: setInputFiles(). Caller must supply documentPath.
- *     Flagged DONE_WITH_CONCERNS — paths must be wired from test config/env vars.
- */
 export class AssignPacketPage extends AdminBasePage {
-  /** Ring buffer of the most recent API responses — dumped when the session is found logged out. */
   private recentApi: string[] = [];
+  private readonly AssignPacket: Locator;
+  private readonly selectPacket: Locator;
+  private readonly btnAddPacket: Locator;
+  private readonly ornamenttype: Locator;
+  private readonly btnSave: Locator;
+  private readonly btnYes: Locator;
+  private readonly btnUploadDocuments: Locator;
+  private readonly btnDigitalSign: Locator;
+  private readonly btnSave1: Locator;
+  private readonly selLead: Locator;
+  private readonly btnDone: Locator;
+  private readonly btnDownloadCashDeclaration: Locator;
+  private readonly btnDownloadReceipt: Locator;
+  private readonly checkbox: Locator;
+  private readonly cashReceiptNumber: Locator;
+  private readonly consumptionSupporting: Locator;
+  private readonly fieldCkyc: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly packetID: Locator;
+  private readonly selBranchPacket: Locator;
+  private readonly btnNewpacket: Locator;
+  private readonly barCode: Locator;
+  private readonly btnAddPacketPO03: Locator;
+  private readonly btnEditPacket: Locator;
+  private readonly selUsertype: Locator;
+  private readonly btnUpdatePO03: Locator;
+  private readonly selAppraiserId: Locator;
+  private readonly imgCamera: Locator;
 
   constructor(page: Page) {
     super(page);
+    this.AssignPacket = this.page.locator(
+      "xpath=(//button[@ng-reflect-klass='red-button'][normalize-space()='Assign Packet'])[1]",
+    );
+    this.selectPacket = this.page.locator(
+      "xpath=//select[@formcontrolname='packetId']",
+    );
+    this.btnAddPacket = this.page.locator("xpath=//button[@type='submit']");
+    this.ornamenttype = this.page.locator(
+      "xpath=//span[@class='ng-arrow-wrapper']",
+    );
+    this.btnSave = this.page.locator("xpath=//span[contains(.,'Save')]");
+    this.btnYes = this.page.locator("xpath=//button[normalize-space()='Yes']");
+    this.btnUploadDocuments = this.page.locator(
+      "xpath=(//button[normalize-space(text())='UPLOAD DOCUMENTS'])[1]",
+    );
+    this.btnDigitalSign = this.page.locator("xpath=");
+    this.btnSave1 = this.page.locator(
+      "xpath=//kt-button[@ng-reflect-value='save']//button[@type='button']",
+    );
+    this.selLead = this.page.locator(
+      "xpath=//select[@formcontrolname='leadConverterId']",
+    );
+    this.btnDone = this.page.locator("xpath=//span[contains(.,'Done')]");
+    this.btnDownloadCashDeclaration = this.page.locator(
+      "xpath=//span[normalize-space(text())='Download Cash Declaration']",
+    );
+    this.btnDownloadReceipt = this.page.locator(
+      "xpath=//span[normalize-space(text())='Download Cash Receipt']",
+    );
+    this.checkbox = this.page.locator(
+      "xpath=//label[contains(@class,'custom-checkbox')][contains(normalize-space(.),'Select All')]",
+    );
+    this.cashReceiptNumber = this.page.locator(
+      "xpath=//input[@formcontrolname='receiptNumber']",
+    );
+    this.consumptionSupporting = this.page.locator(
+      "xpath=//i[@class='fas fa-file-upload']",
+    );
+    this.fieldCkyc = this.page.locator("xpath=//input[@placeholder='C-KYC00']");
+    this.profile = this.page.locator(
+      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
+    );
+    this.arrow = this.page.locator(
+      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
+    );
+    this.branchDropdown = this.page.locator(
+      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
+    );
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.packetID = this.page.locator(
+      "xpath=//input[@formcontrolname='packetUniqueId']",
+    );
+    this.selBranchPacket = this.page.locator(
+      "xpath=//select[@formcontrolname='internalUserBranch']",
+    );
+    this.btnNewpacket = this.page.locator(
+      "xpath=//div[@class='mat-slide-toggle-bar mat-slide-toggle-bar-no-side-margin']",
+    );
+    this.barCode = this.page.locator(
+      "xpath=//input[@formcontrolname='barcodeNumber']",
+    );
+    this.btnAddPacketPO03 = this.page.locator(
+      "xpath=//span[normalize-space()='Add']",
+    );
+    this.btnEditPacket = this.page.locator(
+      "xpath=(//div[@class='kt-pointer ng-star-inserted'])[1]",
+    );
+    this.selUsertype = this.page.locator(
+      "xpath=//select[@formcontrolname='userType']",
+    );
+    this.btnUpdatePO03 = this.page.locator(
+      "xpath=//span[normalize-space()='Update']",
+    );
+    this.selAppraiserId = this.page.locator(
+      "xpath=//select[@formcontrolname='appraiserId']",
+    );
+    this.imgCamera = this.page.locator(
+      "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
+    );
     page.on("response", (res) => {
       const req = res.request();
       if (req.resourceType() !== "xhr" && req.resourceType() !== "fetch")
@@ -51,120 +139,6 @@ export class AssignPacketPage extends AdminBasePage {
       if (this.recentApi.length > 25) this.recentApi.shift();
     });
   }
-
-  // ── Locators (from PO05_AssignPacket) ─────────────────────────────────────
-
-  private readonly AssignPacket = () =>
-    this.page.locator(
-      "xpath=(//button[@ng-reflect-klass='red-button'][normalize-space()='Assign Packet'])[1]",
-    );
-  private readonly selectPacket = () =>
-    this.page.locator("xpath=//select[@formcontrolname='packetId']");
-  private readonly btnAddPacket = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly ornamenttype = () =>
-    this.page.locator("xpath=//span[@class='ng-arrow-wrapper']");
-  private readonly btnSave = () =>
-    this.page.locator("xpath=//span[contains(.,'Save')]");
-  // Confirmed live via DOM dump: "Yes" confirmation dialogs in this app render as a real
-  // <button normalize-space()='Yes'>, not a <span> — matches the already-working pattern
-  // in digio.page.ts's btnYesSave(). The old //span[contains(.,'Yes')] locator is both the
-  // wrong element type and a loose contains() match, prone to hitting unrelated stray text.
-  private readonly btnYes = () =>
-    this.page.locator("xpath=//button[normalize-space()='Yes']");
-  private readonly btnUploadDocuments = () =>
-    this.page.locator(
-      "xpath=(//button[normalize-space(text())='UPLOAD DOCUMENTS'])[1]",
-    );
-  private readonly btnDigitalSign = () => this.page.locator("xpath=");
-  private readonly btnSave1 = () =>
-    this.page.locator(
-      "xpath=//kt-button[@ng-reflect-value='save']//button[@type='button']",
-    );
-  private readonly selLead = () =>
-    this.page.locator("xpath=//select[@formcontrolname='leadConverterId']");
-  private readonly btnDone = () =>
-    this.page.locator("xpath=//span[contains(.,'Done')]");
-  private readonly btnDownloadCashDeclaration = () =>
-    this.page.locator(
-      "xpath=//span[normalize-space(text())='Download Cash Declaration']",
-    );
-  private readonly btnDownloadReceipt = () =>
-    this.page.locator(
-      "xpath=//span[normalize-space(text())='Download Cash Receipt']",
-    );
-  // NOTE: class attribute is actually "custom-checkbox ng-star-inserted" — use contains(), not an
-  // exact @class= match, or Angular's appended ng-star-inserted class breaks the match entirely.
-  private readonly checkbox = () =>
-    this.page.locator(
-      "xpath=//label[contains(@class,'custom-checkbox')][contains(normalize-space(.),'Select All')]",
-    );
-  private readonly cashReceiptNumber = () =>
-    this.page.locator("xpath=//input[@formcontrolname='receiptNumber']");
-  private readonly consumptionSupporting = () =>
-    this.page.locator("xpath=//i[@class='fas fa-file-upload']");
-  private readonly fieldCkyc = () =>
-    this.page.locator("xpath=//input[@placeholder='C-KYC00']");
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
-      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
-    );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
-      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
-    );
-  // Inline branch dropdown from Flow05
-  private readonly branchDropdown = () =>
-    this.page.locator(
-      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
-    );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO03_CreateNewPacket.loc_packetID
-  private readonly packetID = () =>
-    this.page.locator("xpath=//input[@formcontrolname='packetUniqueId']");
-  // PO03_CreateNewPacket.loc_selBranch
-  private readonly selBranchPacket = () =>
-    this.page.locator("xpath=//select[@formcontrolname='internalUserBranch']");
-  // PO03_CreateNewPacket.loc_btnNewpacket
-  private readonly btnNewpacket = () =>
-    this.page.locator(
-      "xpath=//div[@class='mat-slide-toggle-bar mat-slide-toggle-bar-no-side-margin']",
-    );
-  // PO03_CreateNewPacket.loc_barCode
-  private readonly barCode = () =>
-    this.page.locator("xpath=//input[@formcontrolname='barcodeNumber']");
-  // PO03_CreateNewPacket.loc_btnAddPacket
-  private readonly btnAddPacketPO03 = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add']");
-  // PO03_CreateNewPacket.loc_btnEditPacket
-  private readonly btnEditPacket = () =>
-    this.page.locator("xpath=(//div[@class='kt-pointer ng-star-inserted'])[1]");
-  // PO03_CreateNewPacket.loc_selUsertype
-  private readonly selUsertype = () =>
-    this.page.locator("xpath=//select[@formcontrolname='userType']");
-  // PO03_CreateNewPacket.loc_btnUpdate
-  private readonly btnUpdatePO03 = () =>
-    this.page.locator("xpath=//span[normalize-space()='Update']");
-  // Inline appraiser dropdown from Flow05
-  private readonly selAppraiserId = () =>
-    this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
-  // Inline camera button from Flow05
-  private readonly imgCamera = () =>
-    this.page.locator(
-      "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
-    );
 
   public async uploadFileWithValidation(
     filePath: string | undefined,
@@ -177,7 +151,6 @@ export class AssignPacketPage extends AdminBasePage {
       return;
     }
 
-    // Resolve relative paths from project root
     const resolvedPath =
       filePath.startsWith("/") || filePath.match(/^[A-Z]:/)
         ? filePath
@@ -212,11 +185,8 @@ export class AssignPacketPage extends AdminBasePage {
       console.log(`↗ Uploading ${description}: ${resolvedPath}`);
       const targetInput = fileInput.nth(fileInputIndex);
 
-      // Ensure the input is in the DOM and ready
       await targetInput.waitFor({ state: "attached" });
       console.log(`  → File input at index ${fileInputIndex} is ready`);
-
-      // Attempt upload with error details
       await targetInput.setInputFiles(resolvedPath);
       console.log(`✓ ${description} uploaded successfully`);
 
@@ -234,25 +204,20 @@ export class AssignPacketPage extends AdminBasePage {
     }
   }
 
-  // ── Upload Documents tab: label-based slots ───────────────────────────────
-  // Layout (confirmed from the New Loan → Upload Documents screenshot): each slot is a label, a
-  // "Select File" textbox showing the chosen filename, an Attach button (the real file input) and
-  // a preview image. Labels: Gold Loan Application*, Loan Agreement Copy*, Pawn Ticket/Copy of
-  // Pledge*, Gold Loan Deposit Receipt*, Form 97, Aadhar Card with OSV*, Pan Card with OSV*;
-  // plus Cash Receipt (Download button), KFS* (Upload KFS button) and Consumption Supporting.
-
-  private slotLabel = (label: string) =>
-    `(//*[contains(normalize-space(text()),'${label}')])[1]`;
+  private slotLabelVisible = (label: string) =>
+    this.page
+      .locator(`xpath=//*[contains(normalize-space(text()),'${label}')]`)
+      .filter({ visible: true })
+      .first();
   private slotFileInput = (label: string) =>
-    this.page.locator(
-      `xpath=${this.slotLabel(label)}/following::input[@type='file'][1]`,
+    this.slotLabelVisible(label).locator(
+      "xpath=following::input[@type='file'][1]",
     );
   private slotFilenameBox = (label: string) =>
-    this.page.locator(
-      `xpath=${this.slotLabel(label)}/following::input[not(@type='file') and not(@type='hidden')][1]`,
+    this.slotLabelVisible(label).locator(
+      "xpath=following::input[not(@type='file') and not(@type='hidden')][1]",
     );
 
-  /** Filename currently shown for a slot ('' when nothing is attached). */
   private async slotFilename(label: string): Promise<string> {
     return (
       (await this.slotFilenameBox(label)
@@ -261,11 +226,6 @@ export class AssignPacketPage extends AdminBasePage {
     ).trim();
   }
 
-  /**
-   * True if a real (non-placeholder) preview image follows the slot's label. Needed because slots
-   * attached earlier in the flow (Aadhaar / PAN with OSV come from KYC) show a preview but an
-   * EMPTY "Select File" box (confirmed from the Upload Documents screenshot).
-   */
   private async slotHasPreview(label: string): Promise<boolean> {
     return this.page
       .evaluate((text) => {
@@ -284,10 +244,7 @@ export class AssignPacketPage extends AdminBasePage {
             start.compareDocumentPosition(img) &
             Node.DOCUMENT_POSITION_FOLLOWING,
         );
-        // ONLY the slot's own image (the first one after its label). Looking at the next few
-        // images made "Gold Loan Application" / "Gold Loan Deposit Receipt" look filled because
-        // the NEXT slots' previews (Loan Agreement, Form 97, Aadhaar…) matched, so they were
-        // never uploaded.
+
         const own = after[0];
         return (
           !!own &&
@@ -299,18 +256,16 @@ export class AssignPacketPage extends AdminBasePage {
       .catch(() => false);
   }
 
-  /** Slots pre-attached by the KYC flow: they show a preview but an empty "Select File" box. */
   private static readonly PREVIEW_ONLY_SLOTS = /OSV/i;
 
   private async slotIsFilled(label: string): Promise<boolean> {
     if (await this.slotFilename(label)) return true;
-    // Every other slot shows its filename once attached, so a preview image alone proves nothing.
+
     return AssignPacketPage.PREVIEW_ONLY_SLOTS.test(label)
       ? this.slotHasPreview(label)
       : false;
   }
 
-  /** Attaches `filePath` to the slot unless it already shows a file. Returns true if it uploaded. */
   private async uploadSlotIfEmpty(
     label: string,
     filePath: string,
@@ -319,15 +274,22 @@ export class AssignPacketPage extends AdminBasePage {
       console.log(`✓ ${label}: already attached`);
       return false;
     }
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForLoadState("networkidle").catch(() => {});
+    const labelEl = this.slotLabelVisible(label);
+    await labelEl.waitFor({ state: "visible", timeout: 15000 }).catch(() => {});
+    await labelEl.scrollIntoViewIfNeeded().catch(() => {});
     const input = this.slotFileInput(label);
     if (!(await input.count())) {
-      console.warn(`⚠ ${label}: no file input found — skipped`);
-      return false;
+      throw new Error(
+        `${label}: slot not found on the Upload Documents tab (no visible label, or no file input after it).`,
+      );
     }
     const info = await input
       .first()
       .evaluate((el: any) => ({
-        name: el.getAttribute("formcontrolname") || el.name || el.id || "(none)",
+        name:
+          el.getAttribute("formcontrolname") || el.name || el.id || "(none)",
         accept: el.accept || "(any)",
         disabled: el.disabled,
       }))
@@ -339,9 +301,6 @@ export class AssignPacketPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
     this.assertStillLoggedIn(`uploading "${label}"`);
-
-    // setInputFiles only works if the page's change handler picked it up. Verify the slot really
-    // shows the file now; if not, retry through the slot's own "Attach" button + file chooser.
     const attached = async () => {
       for (let i = 0; i < 6; i++) {
         if (await this.slotIsFilled(label)) return true;
@@ -353,11 +312,11 @@ export class AssignPacketPage extends AdminBasePage {
       console.log(`✓ ${label}: attached`);
       return true;
     }
-    console.warn(`⚠ ${label}: not attached after setInputFiles — retrying via the Attach button.`);
-    const attachBtn = this.page
-      .locator(
-        `xpath=${this.slotLabel(label)}/following::button[normalize-space()='Attach'][1]`,
-      )
+    console.warn(
+      `⚠ ${label}: not attached after setInputFiles — retrying via the Attach button.`,
+    );
+    const attachBtn = this.slotLabelVisible(label)
+      .locator("xpath=following::button[normalize-space()='Attach'][1]")
       .first();
     try {
       await attachBtn.scrollIntoViewIfNeeded();
@@ -386,8 +345,6 @@ export class AssignPacketPage extends AdminBasePage {
         (toast ? ` Page message: ${toast.trim()}` : ""),
     );
   }
-
-  /** Throws a clear error naming the step if the app bounced the session to the login page. */
   private assertStillLoggedIn(step: string): void {
     if (/\/auth\/|login/i.test(this.page.url())) {
       throw new Error(
@@ -397,10 +354,6 @@ export class AssignPacketPage extends AdminBasePage {
     }
   }
 
-  /**
-   * Checks every attachment slot on the Upload Documents tab and the downloaded Cash Receipt,
-   * logs a table, and throws listing anything required that is still missing.
-   */
   public async verifyDocumentsAttached(): Promise<void> {
     const slots: { label: string; required: boolean }[] = [
       { label: "Gold Loan Application", required: true },
@@ -428,7 +381,6 @@ export class AssignPacketPage extends AdminBasePage {
       if (!filled && required) missing.push(label);
     }
 
-    // Cash Receipt: the page only offers a Download button, so verify the PDF we generated.
     const { existsSync, statSync } = require("fs") as typeof import("fs");
     const receipt = this.lastCashReceiptPath;
     if (receipt && existsSync(receipt) && statSync(receipt).size > 0) {
@@ -455,12 +407,6 @@ export class AssignPacketPage extends AdminBasePage {
     }
   }
 
-  /**
-   * Save is rejected with "cash receipt attachment is required" if it is pressed before the
-   * receipt upload has finished (confirmed from the TC02 video). Wait until the Cash Receipt slot
-   * shows the attachment ("Remove Cash Receipt"); if it never does, attach the PDF we generated
-   * through the slot's "Upload Cash Receipt" button (a file chooser) and wait again.
-   */
   public async ensureCashReceiptAttached(): Promise<void> {
     this.assertStillLoggedIn("waiting for the Cash Receipt to attach");
     const attached = this.page
@@ -500,7 +446,6 @@ export class AssignPacketPage extends AdminBasePage {
     );
   }
 
-  /** Clicks the Cash Receipt slot's "Upload Cash Receipt" button and attaches `filePath` via its file chooser. */
   private async uploadCashReceiptViaButton(filePath: string): Promise<void> {
     const uploadBtn = this.page
       .locator("xpath=//button[normalize-space()='Upload Cash Receipt']")
@@ -518,7 +463,6 @@ export class AssignPacketPage extends AdminBasePage {
     await this.page.waitForTimeout(1000);
   }
 
-  /** Path of the Cash Receipt PDF most recently generated by downloadAndUploadCashReceipt(). */
   public lastCashReceiptPath: string | null = null;
 
   public async downloadAndUploadCashReceipt(): Promise<void> {
@@ -527,13 +471,11 @@ export class AssignPacketPage extends AdminBasePage {
     try {
       console.log("Starting Cash Receipt download and upload...");
 
-      // Create CDP session to handle print-to-PDF without dialog
       const cdpSession = await this.page.context().newCDPSession(this.page);
 
       try {
         console.log("Clicking Download Cash Receipt button...");
 
-        // Set up dialog handler to immediately dismiss any print dialogs
         const dialogHandler = async (dialog: any) => {
           console.log(
             `Dialog detected and dismissed: ${dialog.type()} - ${dialog.message()}`,
@@ -542,10 +484,6 @@ export class AssignPacketPage extends AdminBasePage {
         };
         this.page.on("dialog", dialogHandler);
 
-        // Suppress print dialog via page evaluation
-
-        // Wait for print preview to potentially appear
-        // Prevent window.print from opening system print dialog
         try {
           await this.page.addInitScript(() => {
             (globalThis as any).print = () => {
@@ -564,9 +502,7 @@ export class AssignPacketPage extends AdminBasePage {
           console.log(`Print override setup note: ${err.message}`);
         }
 
-        // Set up to capture the PDF via CDP (non-blocking)
         const pdfPromise = (async () => {
-          // Wait for page to stabilize
           await this.page.waitForTimeout(600);
 
           try {
@@ -589,11 +525,7 @@ export class AssignPacketPage extends AdminBasePage {
             return null;
           }
         })();
-
-        // Click the button to trigger print
-        await this.btnDownloadReceipt().click();
-
-        // Wait for PDF to be generated
+        await this.btnDownloadReceipt.click();
         const pdfData = (await Promise.race([
           pdfPromise,
           new Promise((_, reject) =>
@@ -604,7 +536,6 @@ export class AssignPacketPage extends AdminBasePage {
           ),
         ])) as any;
 
-        // Remove dialog handler
         this.page.off("dialog", dialogHandler);
 
         if (!pdfData || !pdfData.data) {
@@ -612,7 +543,6 @@ export class AssignPacketPage extends AdminBasePage {
           return;
         }
 
-        // Convert base64 PDF data to file
         const buffer = Buffer.from(pdfData.data, "base64");
         const filePath = require("path").join(
           require("os").tmpdir(),
@@ -622,10 +552,6 @@ export class AssignPacketPage extends AdminBasePage {
 
         this.lastCashReceiptPath = filePath;
         console.log(`✓ Cash Receipt saved to: ${filePath}`);
-
-        // Upload through the Cash Receipt slot's own "Upload Cash Receipt" button. The old code
-        // used the 7th <input type=file> by index, which on this tab is the "Pan Card with OSV"
-        // slot (images only) — hence the "invalid file format" error on the PDF receipt.
         try {
           await this.uploadCashReceiptViaButton(filePath);
         } catch (err: any) {
@@ -634,7 +560,6 @@ export class AssignPacketPage extends AdminBasePage {
       } catch (err: any) {
         console.warn(`⚠ Cash Receipt process failed: ${err.message}`);
       } finally {
-        // Detach CDP session
         try {
           await cdpSession.detach();
         } catch (err: any) {
@@ -646,20 +571,13 @@ export class AssignPacketPage extends AdminBasePage {
     }
   }
 
-  /**
-   * Download Cash Declaration file and re-upload it to the form
-   */
   public async downloadAndUploadCashDeclaration(): Promise<void> {
     try {
       console.log("Starting Cash Declaration download and upload...");
-
-      // Create CDP session to handle print-to-PDF without dialog
       const cdpSession = await this.page.context().newCDPSession(this.page);
 
       try {
         console.log("Clicking Download Cash Declaration button...");
-
-        // Set up dialog handler to immediately dismiss any print dialogs
         const dialogHandler = async (dialog: any) => {
           console.log(
             `Dialog detected and dismissed: ${dialog.type()} - ${dialog.message()}`,
@@ -667,9 +585,6 @@ export class AssignPacketPage extends AdminBasePage {
           await dialog.dismiss();
         };
         this.page.on("dialog", dialogHandler);
-
-        // Suppress print dialog via page evaluation
-        // Prevent window.print from opening system print dialog
         try {
           await this.page.addInitScript(() => {
             (globalThis as any).print = () => {
@@ -688,9 +603,7 @@ export class AssignPacketPage extends AdminBasePage {
           console.log(`Print override setup note: ${err.message}`);
         }
 
-        // Set up to capture the PDF via CDP (non-blocking)
         const pdfPromise = (async () => {
-          // Wait for page to stabilize
           await this.page.waitForTimeout(600);
 
           try {
@@ -714,10 +627,8 @@ export class AssignPacketPage extends AdminBasePage {
           }
         })();
 
-        // Click the button to trigger print
-        await this.btnDownloadCashDeclaration().click();
+        await this.btnDownloadCashDeclaration.click();
 
-        // Wait for PDF to be generated
         const pdfData = (await Promise.race([
           pdfPromise,
           new Promise((_, reject) =>
@@ -728,7 +639,6 @@ export class AssignPacketPage extends AdminBasePage {
           ),
         ])) as any;
 
-        // Remove dialog handler
         this.page.off("dialog", dialogHandler);
 
         if (!pdfData || !pdfData.data) {
@@ -736,7 +646,6 @@ export class AssignPacketPage extends AdminBasePage {
           return;
         }
 
-        // Convert base64 PDF data to file
         const buffer = Buffer.from(pdfData.data, "base64");
         const filePath = require("path").join(
           require("os").tmpdir(),
@@ -746,11 +655,8 @@ export class AssignPacketPage extends AdminBasePage {
 
         console.log(`✓ Cash Declaration saved to: ${filePath}`);
 
-        // Find and upload to the cash declaration file input (if exists)
         const fileInputs = this.page.locator("xpath=//input[@type='file']");
         const inputCount = await fileInputs.count();
-
-        // Try to upload to the next remaining input slot
         if (inputCount > 7) {
           try {
             const declarationInput = fileInputs.nth(7);
@@ -775,7 +681,6 @@ export class AssignPacketPage extends AdminBasePage {
       } catch (err: any) {
         console.warn(`⚠ Cash Declaration process failed: ${err.message}`);
       } finally {
-        // Detach CDP session
         try {
           await cdpSession.detach();
         } catch (err: any) {
@@ -838,10 +743,6 @@ export class AssignPacketPage extends AdminBasePage {
         }
       })();
 
-      // A kt-language-dropdown element intercepts pointer events over this button live on UAT
-      // (confirmed: Playwright's actionability retry log shows it sitting on top) — force-click
-      // via jsClick() rather than a plain .click(), the same fix used elsewhere in this codebase
-      // for pointer-interception issues.
       await this.jsClick(
         this.page.locator("xpath=//button[normalize-space()='Print']").first(),
       );
@@ -909,29 +810,19 @@ export class AssignPacketPage extends AdminBasePage {
     }
   }
 
-  /**
-   * Phase A — port of Java Flow05_AssignPacket.validatePackets() lines 32–79.
-   *
-   * Creates a new packet, assigns it to the appraiser role, then returns the
-   * generated packet code so the caller can pass it to validateAppraisalPacket()
-   * after switching roles.
-   *
-   * NOTE: loginWithAppraiser() (Java line 80) is OMITTED here.
-   * The caller must call loginAs('appraiser') before invoking validateAppraisalPacket().
-   */
   async createAndAssignPacket(): Promise<string> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
 
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
     await this.page.locator("xpath=//span[normalize-space()='Packet']").click();
     await this.waitForLoaderToDisappear();
@@ -944,33 +835,33 @@ export class AssignPacketPage extends AdminBasePage {
 
     const packetCode = this.getRandomAPacketCode();
     await this.page.waitForTimeout(1500);
-    await this.packetID().fill(packetCode);
+    await this.packetID.fill(packetCode);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.selectPacketBranch("Augmont");
-    await this.btnNewpacket().click();
+    await this.btnNewpacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.barCode().fill(packetCode);
+    await this.barCode.fill(packetCode);
     await this.waitForLoaderToDisappear();
-    await this.barCode().click();
+    await this.barCode.click();
     await this.waitForLoaderToDisappear();
-    await this.btnAddPacketPO03().click();
+    await this.btnAddPacketPO03.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.jsClick(this.btnEditPacket());
+    await this.jsClick(this.btnEditPacket);
     await this.page.waitForTimeout(5000);
 
-    await this.selUsertype().selectOption({ label: "Appraiser" });
+    await this.selUsertype.selectOption({ label: "Appraiser" });
     await this.page.waitForTimeout(5000);
-    // await this.selAppraiserId().selectOption({ label: 'Priyanka Thorat' });
+    // await this.selAppraiserId.selectOption({ label: 'Priyanka Thorat' });
     await this.page.waitForTimeout(5000);
-    await expect(this.selAppraiserId()).toBeEnabled();
-    await this.selAppraiserId().selectOption({ value: "2717" });
-    await this.selAppraiserId().dispatchEvent("change");
-    await this.btnUpdatePO03().click();
+    await expect(this.selAppraiserId).toBeEnabled();
+    await this.selAppraiserId.selectOption({ value: "2717" });
+    await this.selAppraiserId.dispatchEvent("change");
+    await this.btnUpdatePO03.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     return packetCode;
@@ -1127,16 +1018,16 @@ export class AssignPacketPage extends AdminBasePage {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
 
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
 
     const appliedLoan = this.page.locator(
@@ -1145,41 +1036,39 @@ export class AssignPacketPage extends AdminBasePage {
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.jsClick(this.filterbtn());
+    await this.jsClick(this.filterbtn);
     await this.page.waitForTimeout(2000);
-    await this.AssignPacket().click();
+    await this.AssignPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(7000);
 
-    await this.selectPacket().click();
+    await this.selectPacket.click();
     await this.waitForLoaderToDisappear();
     const code = packetCode.trim();
 
-    const options = await this.selectPacket()
-      .locator("option")
-      .allTextContents();
+    const options = await this.selectPacket.locator("option").allTextContents();
 
     console.log("Packet Code:", code);
     console.log("Dropdown Options:", options);
 
-    await this.selectPacket().selectOption({
+    await this.selectPacket.selectOption({
       label: `${code} (${code})`,
     });
     await this.page.waitForTimeout(5000);
 
-    await this.ornamenttype().click();
+    await this.ornamenttype.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    await this.checkbox().click();
+    await this.checkbox.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    await this.btnAddPacket().click();
+    await this.btnAddPacket.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(2000);
@@ -1228,13 +1117,13 @@ export class AssignPacketPage extends AdminBasePage {
 
     await this.page.waitForTimeout(2000);
 
-    await this.btnSave().click();
+    await this.btnSave.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.btnYes().click();
+    await this.btnYes.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    const uploadDocsBtn = this.btnUploadDocuments();
+    const uploadDocsBtn = this.btnUploadDocuments;
     await uploadDocsBtn.waitFor({ state: "visible", timeout: 15000 });
     await uploadDocsBtn.evaluate((el) =>
       el.scrollIntoView({ block: "center" }),
@@ -1281,7 +1170,7 @@ export class AssignPacketPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
 
     const ckycNumber = this.generateRandomCKYC();
-    await this.fieldCkyc().fill(ckycNumber);
+    await this.fieldCkyc.fill(ckycNumber);
     await this.page.waitForTimeout(5000);
 
     const saveBtn = this.page.locator(
@@ -1296,14 +1185,14 @@ export class AssignPacketPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
     await this.waitForLoaderToDisappear();
 
-    // await this.btnYes().waitFor({ state: "visible", timeout: 5000 });
-    // await expect(this.btnYes()).toBeEnabled({ timeout: 5000 }); // add this
-    // await this.btnYes().click({ trial: true }); // dry-run actionability check without clicking
-    // await this.btnYes().click();
+    // await this.btnYes.waitFor({ state: "visible", timeout: 5000 });
+    // await expect(this.btnYes).toBeEnabled({ timeout: 5000 }); // add this
+    // await this.btnYes.click({ trial: true }); // dry-run actionability check without clicking
+    // await this.btnYes.click();
     // await this.page
     //   .locator('kt-button button.submit[type="submit"]', { hasText: "Yes" })
     //   .click();
-    await this.btnYes().click({ force: true });
+    await this.btnYes.click({ force: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -1325,7 +1214,7 @@ export class AssignPacketPage extends AdminBasePage {
       console.log("Visible:", await dropdownEle.first().isVisible());
     }
     await this.page.waitForTimeout(2000);
-    await this.btnDone().click();
+    await this.btnDone.click();
     await this.waitForLoaderToDisappear();
   }
 
@@ -1335,7 +1224,7 @@ export class AssignPacketPage extends AdminBasePage {
    * real option. Never touches the header profile branch dropdown (forces a logout on UAT).
    */
   private async selectPacketBranch(branchName: string): Promise<void> {
-    const select = this.selBranchPacket();
+    const select = this.selBranchPacket;
     await select.waitFor({ state: "visible", timeout: 30000 });
 
     let options: { value: string; text: string }[] = [];

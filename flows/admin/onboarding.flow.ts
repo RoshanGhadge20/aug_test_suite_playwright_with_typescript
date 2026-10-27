@@ -29,22 +29,12 @@ export async function onboardCustomerThroughKyc(
   // Start from whatever the fixture seeded (admin) and switch into appraiser for the onboarding flow.
   await login.loginAs("appraiser");
 
-  // Step 1 — appraiser: navigate to Customer Management and add a customer
   await customerManagement.clickOnCustomerManagementButton();
 
-  // Step 2 — appraiser: perform full KYC (PAN → address → personal → review)
-  // ClickonKyc chains addressandIdentity(), ValidatePersonalDetails(), reviewAndSubmit() internally.
-  // Upload params were previously omitted entirely, so uploadFileWithValidation() always
-  // no-op'd ("upload skipped") even though .env has TEST_/UAT_PAN_CARD_PATH etc. configured —
-  // wire them through via getKycFilePaths().
   const { panCardPath, aadhaarPath, signaturePath } = getKycFilePaths();
   await page.waitForTimeout(5000);
   await kyc.ClickonKyc(panCardPath, signaturePath, aadhaarPath);
 
-  // Step 3 — appraiser: assign branch to the OPS team
-  // await kyc.validateAssignBranch();
-
-  // Step 4 — switch to OPS, then approve KYC (delegates reviewAndSubmit to kycPage)
   await page.waitForTimeout(5000);
   await login.loginAs("ops");
   await kycApproval.performOpsRatingActions(kyc);

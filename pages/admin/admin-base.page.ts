@@ -2,16 +2,18 @@ import { Page, Locator } from "@playwright/test";
 import { BasePage } from "../shared/base.page";
 
 export abstract class AdminBasePage extends BasePage {
+  // App loading spinner (see waitForLoaderToDisappear).
+  private readonly spinner: Locator;
+
   constructor(page: Page) {
     super(page);
+    this.spinner = this.page.locator("//div[contains(@class,'spinner')]");
   }
 
   /** Port of Java BrowserInitialize.waitForLoaderToDisappear() — app spinner. */
   async waitForLoaderToDisappear(timeout = 60000) {
-    const spinner = this.page.locator("//div[contains(@class,'spinner')]");
-
-    if (await spinner.count()) {
-      await spinner.first().waitFor({
+    if (await this.spinner.count()) {
+      await this.spinner.first().waitFor({
         state: "hidden",
         timeout,
       });
@@ -35,17 +37,6 @@ export abstract class AdminBasePage extends BasePage {
 
     await this.waitForLoaderToDisappear();
   }
-
-  /**
-   * Expands the sidebar when it is collapsed off-screen (headless mode after fresh login).
-   * The sidebar toggle (.kt-aside__brand-tools) is positioned outside the viewport when
-   * the sidebar is collapsed, so a regular click() fails. JS click bypasses this.
-   */
-  /**
-   * Expands the sidebar when it is off-screen (headless mode after fresh login).
-   * Adds `kt-aside--on` to the body (same as clicking the hamburger toggle) and
-   * removes minimize classes so all sidebar menu items slide into the viewport.
-   */
   async expandSidebar(): Promise<void> {
     await this.page.evaluate(() => {
       document.body.classList.add("kt-aside--on");

@@ -1,59 +1,67 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 
 export class AddLeadPage extends AdminBasePage {
+  private readonly Masters: Locator;
+  private readonly LeadSource: Locator;
+  private readonly AddLeadSource: Locator;
+  private readonly LeadName: Locator;
+  private readonly BtnAdd: Locator;
+  private readonly btnEdit: Locator;
+  private readonly btnUpdate: Locator;
+  private readonly btnDelete: Locator;
+  private readonly btnYes: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly AdminSetting: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO40_AddLeadAndEdit) ──────────────────────────────────
-
-  private readonly Masters = () =>
-    this.page.locator("xpath=//span[normalize-space()='Masters']");
-  private readonly LeadSource = () =>
-    this.page.locator("xpath=//span[normalize-space()='Lead Source']");
-  private readonly AddLeadSource = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add Lead Source']");
-  private readonly LeadName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='leadName']");
-  private readonly BtnAdd = () =>
-    this.page.locator(
+    this.Masters = this.page.locator(
+      "xpath=//span[normalize-space()='Masters']",
+    );
+    this.LeadSource = this.page.locator(
+      "xpath=//span[normalize-space()='Lead Source']",
+    );
+    this.AddLeadSource = this.page.locator(
+      "xpath=//span[normalize-space()='Add Lead Source']",
+    );
+    this.LeadName = this.page.locator(
+      "xpath=//input[@formcontrolname='leadName']",
+    );
+    this.BtnAdd = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly btnEdit = () =>
-    this.page.locator("xpath=(//span[contains(text(),'Edit')])[1]");
-  private readonly btnUpdate = () =>
-    this.page.locator(
+    this.btnEdit = this.page.locator(
+      "xpath=(//span[contains(text(),'Edit')])[1]",
+    );
+    this.btnUpdate = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly btnDelete = () =>
-    this.page.locator(
+    this.btnDelete = this.page.locator(
       "xpath=(//span[@class='kt-pointer text-danger ng-star-inserted'][normalize-space()='Delete'])[1]",
     );
-  private readonly btnYes = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-
-  // Cross-page re-declarations
-  private readonly profile = () =>
-    this.page.locator(
+    this.btnYes = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
-  private readonly AdminSetting = () =>
-    this.page.locator("xpath=//span[normalize-space()='Admin Settings']");
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+    this.AdminSetting = this.page.locator(
+      "xpath=//span[normalize-space()='Admin Settings']",
+    );
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async navigateToLeadSource(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
+    await this.profile.click();
 
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
@@ -65,9 +73,9 @@ export class AddLeadPage extends AdminBasePage {
     await this.jsClick(settingsEle);
 
     await this.page.waitForTimeout(1000);
-    await this.AdminSetting().click();
-    await this.Masters().click();
-    await this.LeadSource().click();
+    await this.AdminSetting.click();
+    await this.Masters.click();
+    await this.LeadSource.click();
   }
 
   async validateAddLeadWithEdit(): Promise<{
@@ -76,26 +84,26 @@ export class AddLeadPage extends AdminBasePage {
   }> {
     await this.navigateToLeadSource();
 
-    await this.AddLeadSource().click();
-    await this.LeadName().fill("Test");
-    const addBtn = this.BtnAdd();
+    await this.AddLeadSource.click();
+    await this.LeadName.fill("Test");
+    const addBtn = this.BtnAdd;
     const isDisplayed = await addBtn.isVisible();
     const isEnabled = await addBtn.isEnabled();
     await addBtn.click();
 
     await this.page.waitForTimeout(3000);
 
-    const editBtn = this.btnEdit();
+    const editBtn = this.btnEdit;
     await this.jsClick(editBtn);
-    await this.LeadName().fill("Demo");
-    await this.btnUpdate().click();
+    await this.LeadName.fill("Demo");
+    await this.btnUpdate.click();
     await this.page.waitForTimeout(3000);
 
-    const deleteBtn = this.btnDelete();
+    const deleteBtn = this.btnDelete;
     await deleteBtn.evaluate((el: any) => el.scrollIntoView(true));
     await this.page.waitForTimeout(3000);
     await deleteBtn.click();
-    await this.btnYes().click();
+    await this.btnYes.click();
 
     return { isDisplayed, isEnabled };
   }

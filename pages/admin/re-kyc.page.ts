@@ -1,37 +1,55 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import fs from "fs";
 import { AdminBasePage } from "./admin-base.page";
 import { KycPage } from "./kyc.page";
 
 export class ReKycPage extends AdminBasePage {
+  private readonly kycDetails: Locator;
+  private readonly appliedKyc: Locator;
+  private readonly customerIdFilter: Locator;
+  private readonly filterBtn: Locator;
+  private readonly reKycHeader: Locator;
+  private readonly reKycButton: Locator;
+  private readonly btnYes: Locator;
+  private readonly wizardTitle: Locator;
+  private readonly nextBtn: Locator;
+  private readonly reviewSubmitBtn: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators ──────────────────────────────────────────────────────────────
-
-  private readonly kycDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='KYC Details']");
-  private readonly appliedKyc = () =>
-    this.page.locator("xpath=//span[normalize-space()='Applied KYC']");
-  private readonly customerIdFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer ID']");
-  private readonly filterBtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly reKycHeader = () =>
-    this.page.locator("xpath=//*[normalize-space()='Re KYC']");
-  private readonly reKycButton = () =>
-    this.page
+    this.kycDetails = this.page.locator(
+      "xpath=//span[normalize-space()='KYC Details']",
+    );
+    this.appliedKyc = this.page.locator(
+      "xpath=//span[normalize-space()='Applied KYC']",
+    );
+    this.customerIdFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer ID']",
+    );
+    this.filterBtn = this.page.locator("xpath=//button[@type='submit']");
+    this.reKycHeader = this.page.locator(
+      "xpath=//*[normalize-space()='Re KYC']",
+    );
+    this.reKycButton = this.page
       .locator("xpath=//button[@mattooltip='Re KYC' and @type='button']")
       .first();
-  private readonly btnYes = () =>
-    this.page
+    this.btnYes = this.page
       .locator(
         "xpath=//button[normalize-space()='Yes' or .//span[normalize-space()='Yes']]",
       )
       .first();
-  private readonly wizardTitle = () =>
-    this.page.locator("xpath=//*[normalize-space()='Customer KYC']").first();
+    this.wizardTitle = this.page
+      .locator("xpath=//*[normalize-space()='Customer KYC']")
+      .first();
+    this.nextBtn = this.page
+      .locator("xpath=//button[normalize-space()='Next']")
+      .first();
+    this.reviewSubmitBtn = this.page
+      .locator(
+        "xpath=//button//span[normalize-space()='Review & Submit']/parent::button",
+      )
+      .first();
+  }
 
   currentCustomerId(): string {
     return String(
@@ -45,25 +63,21 @@ export class ReKycPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    if (
-      !(await this.appliedKyc()
-        .isVisible()
-        .catch(() => false))
-    ) {
-      await this.kycDetails().click();
+    if (!(await this.appliedKyc.isVisible().catch(() => false))) {
+      await this.kycDetails.click();
       await this.waitForLoaderToDisappear();
     }
-    await this.appliedKyc().click();
+    await this.appliedKyc.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
   }
 
   async filterByCustomerId(customerId: string): Promise<void> {
-    const field = this.customerIdFilter();
+    const field = this.customerIdFilter;
     await field.waitFor({ state: "visible", timeout: 15000 });
     await field.fill(customerId);
     await this.waitForLoaderToDisappear();
-    const filterBtn = this.filterBtn().first();
+    const filterBtn = this.filterBtn.first();
     await filterBtn.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await filterBtn.click({ force: true });
     await this.waitForLoaderToDisappear();
@@ -82,7 +96,7 @@ export class ReKycPage extends AdminBasePage {
         this.page.locator("xpath=//*[normalize-space(text())='No data found']"),
       )
       .first();
-    await this.reKycButton()
+    await this.reKycButton
       .or(noData)
       .first()
       .waitFor({ state: "visible", timeout: 20000 });
@@ -100,7 +114,7 @@ export class ReKycPage extends AdminBasePage {
       );
     }
 
-    const reKyc = this.reKycButton();
+    const reKyc = this.reKycButton;
     await reKyc.waitFor({ state: "visible", timeout: 20000 });
     await reKyc.scrollIntoViewIfNeeded();
     console.log("Clicking Re KYC button");
@@ -112,26 +126,18 @@ export class ReKycPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     if (
-      await this.btnYes()
+      await this.btnYes
         .waitFor({ state: "visible", timeout: 5000 })
         .then(() => true)
         .catch(() => false)
     ) {
-      await this.btnYes().click();
+      await this.btnYes.click();
       await this.waitForLoaderToDisappear();
     }
-    await this.wizardTitle().waitFor({ state: "visible", timeout: 20000 });
+    await this.wizardTitle.waitFor({ state: "visible", timeout: 20000 });
     await this.page.waitForTimeout(2000);
     return customerId;
   }
-  private readonly nextBtn = () =>
-    this.page.locator("xpath=//button[normalize-space()='Next']").first();
-  private readonly reviewSubmitBtn = () =>
-    this.page
-      .locator(
-        "xpath=//button//span[normalize-space()='Review & Submit']/parent::button",
-      )
-      .first();
 
   private async currentStep(): Promise<
     "pan" | "identity" | "personal" | "review" | "unknown"
@@ -150,11 +156,7 @@ export class ReKycPage extends AdminBasePage {
       (await visible("//*[normalize-space()='Aadhaar Details']"))
     )
       return "identity";
-    if (
-      await this.reviewSubmitBtn()
-        .isVisible()
-        .catch(() => false)
-    )
+    if (await this.reviewSubmitBtn.isVisible().catch(() => false))
       return "review";
     return "unknown";
   }
@@ -182,7 +184,7 @@ export class ReKycPage extends AdminBasePage {
         .catch(() => {});
 
       if (where === "review") {
-        const next = this.nextBtn();
+        const next = this.nextBtn;
         if (
           (await next.isVisible().catch(() => false)) &&
           (await next.isEnabled().catch(() => false))
@@ -193,11 +195,7 @@ export class ReKycPage extends AdminBasePage {
           await this.waitForLoaderToDisappear();
           await this.page.waitForTimeout(2000);
         }
-        if (
-          await this.reviewSubmitBtn()
-            .isVisible()
-            .catch(() => false)
-        ) {
+        if (await this.reviewSubmitBtn.isVisible().catch(() => false)) {
           await kyc.reviewAndSubmit();
         }
         return;
@@ -221,8 +219,8 @@ export class ReKycPage extends AdminBasePage {
         );
         continue;
       }
-      await this.nextBtn().scrollIntoViewIfNeeded();
-      await this.nextBtn().click();
+      await this.nextBtn.scrollIntoViewIfNeeded();
+      await this.nextBtn.click();
     }
 
     throw new Error(

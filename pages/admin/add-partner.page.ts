@@ -1,4 +1,4 @@
-import { Page, expect } from "@playwright/test";
+import { Locator, Page, expect } from "@playwright/test";
 import { KycPage } from "./kyc.page";
 import path from "path";
 import { AdminBasePage } from "./admin-base.page";
@@ -34,145 +34,185 @@ import customerData from "../../testdata/admin/documents/customerData.json";
 
 export class AddPartnerPage extends AdminBasePage {
   private Kycpage: KycPage;
+  private readonly userManagent: Locator;
+  private readonly partner: Locator;
+  private readonly btnAddpartner: Locator;
+  private readonly firstName: Locator;
+  private readonly lastName: Locator;
+  private readonly emailID: Locator;
+  private readonly enterCommision: Locator;
+  private readonly dropdown: Locator;
+  private readonly PacketInAugmont: Locator;
+  private readonly cashDisbursementlimit: Locator;
+  private readonly customerID: Locator;
+  private readonly loanID: Locator;
+  private readonly btnYes: Locator;
+  private readonly cashLimit: Locator;
+  private readonly CashLimitDisburse: Locator;
+  private readonly custid: Locator;
+  private readonly btncashYes: Locator;
+  private readonly cashRepayment: Locator;
+  private readonly btnAdd: Locator;
+  private readonly mobileNumber: Locator;
+  private readonly Radio: Locator;
+  private readonly multiModeDisbursement: Locator;
+  private readonly edit: Locator;
+  private readonly btnUpdate: Locator;
+  private readonly btnDelete: Locator;
+  private readonly searchName: Locator;
+  private readonly btYes: Locator;
+  private readonly btnClose: Locator;
+  private readonly branchName: Locator;
+  private readonly partnerbranch: Locator;
+  private readonly addNewBranch: Locator;
+  private readonly selVault: Locator;
+  private readonly selState: Locator;
+  private readonly selCity: Locator;
+  private readonly pincode: Locator;
+  private readonly address: Locator;
+  private readonly toMail: Locator;
+  private readonly ccMail: Locator;
+  private readonly btAdd: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+
   constructor(page: Page) {
     super(page);
     this.Kycpage = new KycPage(page);
-  }
-
-  // ── Locators (from PO32_AddPartner) ──────────────────────────────────────
-
-  private readonly userManagent = () =>
-    this.page.locator("xpath=//span[normalize-space()='User Management']");
-  private readonly partner = () =>
-    this.page.locator("xpath=//span[normalize-space()='Partner']");
-  private readonly btnAddpartner = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add Partner']");
-  private readonly firstName = () =>
-    this.page.locator("xpath=//input[@placeholder='First Name']");
-  private readonly lastName = () =>
-    this.page.locator("xpath=//input[@placeholder='Last Name']");
-  private readonly emailID = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g abc@123.com']");
-  private readonly enterCommision = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Commission']");
-  private readonly dropdown = () =>
-    this.page.locator("xpath=//span[@class='ng-arrow-wrapper']");
-  private readonly PacketInAugmont = () =>
-    this.page.locator("xpath=//label[@for='togglePacketSubmit-input']");
-  private readonly cashDisbursementlimit = () =>
-    this.page.locator(
+    this.userManagent = this.page.locator(
+      "xpath=//span[normalize-space()='User Management']",
+    );
+    this.partner = this.page.locator(
+      "xpath=//span[normalize-space()='Partner']",
+    );
+    this.btnAddpartner = this.page.locator(
+      "xpath=//span[normalize-space()='Add Partner']",
+    );
+    this.firstName = this.page.locator(
+      "xpath=//input[@placeholder='First Name']",
+    );
+    this.lastName = this.page.locator(
+      "xpath=//input[@placeholder='Last Name']",
+    );
+    this.emailID = this.page.locator(
+      "xpath=//input[@placeholder='e.g abc@123.com']",
+    );
+    this.enterCommision = this.page.locator(
+      "xpath=//input[@placeholder='Enter Commission']",
+    );
+    this.dropdown = this.page.locator(
+      "xpath=//span[@class='ng-arrow-wrapper']",
+    );
+    this.PacketInAugmont = this.page.locator(
+      "xpath=//label[@for='togglePacketSubmit-input']",
+    );
+    this.cashDisbursementlimit = this.page.locator(
       "xpath=//input[@formcontrolname='cashDisbursementLimitWithoutDeclaration']",
     );
-  private readonly customerID = () =>
-    this.page.locator(
+    this.customerID = this.page.locator(
       "xpath=(//input[@type='radio' and @value='customerId'])[1]",
     );
-  private readonly loanID = () =>
-    this.page.locator("xpath=(//input[@type='radio' and @value='loanId'])[1]");
-  private readonly btnYes = () =>
-    this.page.locator(
+    this.loanID = this.page.locator(
+      "xpath=(//input[@type='radio' and @value='loanId'])[1]",
+    );
+    this.btnYes = this.page.locator(
       "xpath=//label[@for='mat-radio-5-input']//div[@class='mat-radio-outer-circle']",
     );
-  private readonly cashLimit = () =>
-    this.page.locator(
+    this.cashLimit = this.page.locator(
       "xpath=//input[@formcontrolname='cashDisbursementLimitWithDeclaration']",
     );
-  private readonly CashLimitDisburse = () =>
-    this.page.locator(
+    this.CashLimitDisburse = this.page.locator(
       "xpath=//input[@formcontrolname='cashRepaymentLimitWithoutDeclaration']",
     );
-  private readonly custid = () =>
-    this.page.locator(
+    this.custid = this.page.locator(
       "xpath=(//label[.//input[@type='radio' and @value='customerId']])[2]",
     );
-  private readonly btncashYes = () =>
-    this.page.locator(
+    this.btncashYes = this.page.locator(
       "xpath=//label[@for='mat-radio-11-input']//div[@class='mat-radio-outer-circle']",
     );
-  private readonly cashRepayment = () =>
-    this.page.locator(
+    this.cashRepayment = this.page.locator(
       "xpath=//input[@formcontrolname='cashRepaymentLimitWithDeclaration']",
     );
-  private readonly btnAdd = () =>
-    this.page.locator(
+    this.btnAdd = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly mobileNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g 9023451234']");
-  private readonly Radio = () =>
-    this.page.locator(
+    this.mobileNumber = this.page.locator(
+      "xpath=//input[@placeholder='e.g 9023451234']",
+    );
+    this.Radio = this.page.locator(
       "xpath=//span[@class='checkmark checkmark-custom header-checkmark']",
     );
-  private readonly multiModeDisbursement = () =>
-    this.page.locator(
+    this.multiModeDisbursement = this.page.locator(
       "xpath=(//div[@class='mat-slide-toggle-ripple mat-ripple'])[5]",
     );
-  private readonly edit = () =>
-    this.page.locator(
+    this.edit = this.page.locator(
       "xpath=(//div[contains(@class,'kt-pointer') and contains(normalize-space(.),'Edit')])[1]",
     );
-  private readonly btnUpdate = () =>
-    this.page.locator("xpath=//span[contains(.,'Update')]");
-  private readonly btnDelete = () =>
-    this.page.locator(
+    this.btnUpdate = this.page.locator("xpath=//span[contains(.,'Update')]");
+    this.btnDelete = this.page.locator(
       "xpath=(//div[contains(@class,'kt-pointer') and contains(normalize-space(.),'Delete')])[1]",
     );
-  private readonly searchName = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
-  private readonly btYes = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly btnClose = () =>
-    this.page.locator(
+    this.searchName = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
+    this.btYes = this.page.locator("xpath=//button[@type='submit']");
+    this.btnClose = this.page.locator(
       "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
     );
-  private readonly branchName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='name']");
-  private readonly partnerbranch = () =>
-    this.page.locator("xpath=//span[normalize-space()='Partner Branch']");
-  private readonly addNewBranch = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add New Branch']");
-  private readonly selVault = () =>
-    this.page.locator("xpath=//select[@formcontrolname='vaultType']");
-  private readonly selState = () =>
-    this.page.locator("xpath=//select[@formcontrolname='stateId']");
-  private readonly selCity = () =>
-    this.page.locator("xpath=//select[@formcontrolname='cityId']");
-  private readonly pincode = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Pin Code']");
-  private readonly address = () =>
-    this.page.locator("xpath=//textarea[@placeholder='Enter Address']");
-  private readonly toMail = () =>
-    this.page.locator("xpath=//textarea[@placeholder='Enter To Mails']");
-  private readonly ccMail = () =>
-    this.page.locator("xpath=//textarea[@placeholder='Enter CC Mails']");
-  private readonly btAdd = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add']");
-
-  // Cross-page re-declarations
-  private readonly profile = () =>
-    this.page.locator(
+    this.branchName = this.page.locator(
+      "xpath=//input[@formcontrolname='name']",
+    );
+    this.partnerbranch = this.page.locator(
+      "xpath=//span[normalize-space()='Partner Branch']",
+    );
+    this.addNewBranch = this.page.locator(
+      "xpath=//span[normalize-space()='Add New Branch']",
+    );
+    this.selVault = this.page.locator(
+      "xpath=//select[@formcontrolname='vaultType']",
+    );
+    this.selState = this.page.locator(
+      "xpath=//select[@formcontrolname='stateId']",
+    );
+    this.selCity = this.page.locator(
+      "xpath=//select[@formcontrolname='cityId']",
+    );
+    this.pincode = this.page.locator(
+      "xpath=//input[@placeholder='Enter Pin Code']",
+    );
+    this.address = this.page.locator(
+      "xpath=//textarea[@placeholder='Enter Address']",
+    );
+    this.toMail = this.page.locator(
+      "xpath=//textarea[@placeholder='Enter To Mails']",
+    );
+    this.ccMail = this.page.locator(
+      "xpath=//textarea[@placeholder='Enter CC Mails']",
+    );
+    this.btAdd = this.page.locator("xpath=//span[normalize-space()='Add']");
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async navigateToPartner(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.page.waitForTimeout(500);
-    await this.userManagent().click();
+    await this.userManagent.click();
     await this.page.waitForTimeout(5000);
   }
   async uploadPartnerImage(imagePath?: string): Promise<void> {
@@ -243,33 +283,33 @@ export class AddPartnerPage extends AdminBasePage {
     }
 
     await this.page.waitForTimeout(1500);
-    await this.btnAddpartner().click();
+    await this.btnAddpartner.click();
     await this.page.waitForTimeout(1000);
 
-    await this.firstName().fill(fn);
-    await this.lastName().fill(ln);
-    await this.mobileNumber().fill(mobile);
-    await this.emailID().fill(email);
+    await this.firstName.fill(fn);
+    await this.lastName.fill(ln);
+    await this.mobileNumber.fill(mobile);
+    await this.emailID.fill(email);
 
-    await this.dropdown().click();
-    await this.Radio().click();
-    await this.dropdown().click();
+    await this.dropdown.click();
+    await this.Radio.click();
+    await this.dropdown.click();
 
-    await this.jsClick(this.multiModeDisbursement());
+    await this.jsClick(this.multiModeDisbursement);
 
-    const commEl = this.enterCommision();
+    const commEl = this.enterCommision;
     await commEl.clear();
     await commEl.fill(commission);
 
-    await this.cashDisbursementlimit().fill(cashDisbursementLimit);
+    await this.cashDisbursementlimit.fill(cashDisbursementLimit);
     await this.page.waitForTimeout(5000);
 
     await this.page
       .locator("(//mat-radio-button[@value='loanId'])[1]")
       .click({ force: true });
 
-    await this.jsClick(this.btnYes());
-    const cashLimit = this.cashLimit();
+    await this.jsClick(this.btnYes);
+    const cashLimit = this.cashLimit;
 
     await cashLimit.waitFor({
       state: "visible",
@@ -277,14 +317,14 @@ export class AddPartnerPage extends AdminBasePage {
     });
 
     await cashLimit.fill(cashLimitVal);
-    await this.CashLimitDisburse().fill(cashLimitDisburse);
+    await this.CashLimitDisburse.fill(cashLimitDisburse);
     await this.page.waitForTimeout(5000);
     await this.page
       .locator("(//label[.//input[@type='radio' and @value='customerId']])[2]")
       .click({ force: true });
-    await this.jsClick(this.btncashYes());
+    await this.jsClick(this.btncashYes);
 
-    await this.cashRepayment().fill(cashRepaymentVal);
+    await this.cashRepayment.fill(cashRepaymentVal);
     await this.page.waitForTimeout(5000);
     const imagePath = path.resolve("testdata/admin/image.png");
     await this.page
@@ -294,7 +334,7 @@ export class AddPartnerPage extends AdminBasePage {
     console.log("Image uploaded");
 
     await this.page.waitForTimeout(5000);
-    await this.btnAdd().click();
+    await this.btnAdd.click();
     await this.page.waitForTimeout(15000);
 
     // Open View popup for the second entry
@@ -305,12 +345,12 @@ export class AddPartnerPage extends AdminBasePage {
     await viewBtn.click();
     await this.page.waitForTimeout(3000);
 
-    const displayedFirstName = (await this.firstName().inputValue()).trim();
-    const displayedLastName = (await this.lastName().inputValue()).trim();
-    const displayedEmail = (await this.emailID().inputValue()).trim();
-    const displayedMobile = (await this.mobileNumber().inputValue()).trim();
+    const displayedFirstName = (await this.firstName.inputValue()).trim();
+    const displayedLastName = (await this.lastName.inputValue()).trim();
+    const displayedEmail = (await this.emailID.inputValue()).trim();
+    const displayedMobile = (await this.mobileNumber.inputValue()).trim();
 
-    await this.btnClose().click();
+    await this.btnClose.click();
     await this.page.waitForTimeout(5000);
     await this.validateEdit();
     await this.page.waitForTimeout(5000);
@@ -333,12 +373,7 @@ export class AddPartnerPage extends AdminBasePage {
     );
     await editBtn.waitFor({ state: "visible", timeout: 10000 });
     await editBtn.click();
-
-    // The Edit Partner form loads the partner's data asynchronously. Submitting before that
-    // leaves First/Last Name, Email and Mobile blank ("Required field"), so Update is rejected
-    // and the modal stays open — blocking every later click (confirmed from the TC05 failure
-    // screenshot). Wait until the name field is actually populated.
-    const editFirstName = this.firstName();
+    const editFirstName = this.firstName;
     await editFirstName.waitFor({ state: "visible", timeout: 15000 });
     await expect
       .poll(async () => (await editFirstName.inputValue()).trim(), {
@@ -347,7 +382,7 @@ export class AddPartnerPage extends AdminBasePage {
       })
       .not.toBe("");
 
-    const commEl = this.enterCommision();
+    const commEl = this.enterCommision;
     await commEl.clear();
     await this.page.waitForTimeout(500);
     await commEl.fill("2%");
@@ -364,7 +399,7 @@ export class AddPartnerPage extends AdminBasePage {
     //     'xpath=//label[contains(@class,"custom-checkbox")][.//span[@class="label-checkbox" and normalize-space(text())="Select All"]]',
     //   )
     //   .click();
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.closeEditPartnerModalIfOpen();
   }
 
@@ -400,13 +435,12 @@ export class AddPartnerPage extends AdminBasePage {
     await deleteBtn.waitFor({ state: "visible", timeout: 10000 });
     await deleteBtn.click();
     await this.page.waitForTimeout(500);
-    await this.btYes().click();
+    await this.btYes.click();
     await this.page.waitForTimeout(500);
   }
 
- 
   private async searchPartner(searchText: string): Promise<void> {
-    const box = this.searchName();
+    const box = this.searchName;
     await box.waitFor({ state: "visible", timeout: 15000 });
     await box.click();
     await box.fill("");
@@ -462,18 +496,18 @@ export class AddPartnerPage extends AdminBasePage {
 
     await this.searchPartner(searchText);
 
-    const editBtn = this.edit();
+    const editBtn = this.edit;
     await editBtn.waitFor({ state: "visible", timeout: 15000 });
     await editBtn.click();
     await this.page.waitForTimeout(500);
 
-    const commEl = this.enterCommision();
+    const commEl = this.enterCommision;
     await commEl.waitFor({ state: "visible", timeout: 15000 });
     await commEl.clear();
     await commEl.fill(newCommission);
     await this.page.waitForTimeout(500);
 
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.page.waitForTimeout(1000);
 
     return newCommission;

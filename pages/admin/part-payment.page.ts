@@ -1,159 +1,179 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import fs from "fs";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 
-/**
- * Port of Java: PO11_PartPayment (locators) + Flow12_PartPayment.partPaySuccess() (actions)
- *
- * Cross-page locator notes:
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `branchDropdown` is an inline locator shared across TC02 flows (same XPath).
- *   - `loanManagement` re-declares PO_Common.loc_loanManagement (same XPath).
- *   - `firstNameFilter` re-declares PO01_KycSel.loc_firstName (same XPath).
- *   - `filterbtn` re-declares PO01_KycSel.loc_filterbtn (same XPath).
- *   - `loanDetails` re-declares PO10_QuickPayment.loc_LoanDetails (same XPath).
- *   - `kebabMenu` re-declares PO10_QuickPayment.loc_kebabMenu (same XPath).
- *   - `btnProceed` re-declares PO10_QuickPayment.loc_btnProceed (same XPath).
- *   - `netBanking` re-declares PO10_QuickPayment.loc_netBanking (same XPath).
- *   - `searchBank` re-declares PO10_QuickPayment.loc_searchBank (same XPath).
- *   - `sbibank` re-declares PO10_QuickPayment.loc_sbibank (same XPath).
- *   - `btnPay` re-declares PO10_QuickPayment.loc_btnPay (same XPath).
- *   - `selPayment` re-declares PO10_QuickPayment.loc_selPayment (same XPath).
- *
- * Omitted loginWith* calls:
- *   - Flow12_PartPayment.partPaySuccess() called Flow_LoginLogout.loginWithAppraiser() — OMITTED.
- *   Role = appraiser; caller must inject via loginAs('appraiser').
- */
 export class PartPaymentPage extends AdminBasePage {
+  private readonly partPay: Locator;
+  private readonly paymentAmount: Locator;
+  private readonly btnProced: Locator;
+  private readonly viewPartPaymentLogsBtn: Locator;
+  private readonly partPayTransactionHistoryBtn: Locator;
+  private readonly btnCancelText: Locator;
+  private readonly logAmountCell: Locator;
+  private readonly logDialogClose: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly loanDetails: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly btnProceed: Locator;
+  private readonly netBanking: Locator;
+  private readonly searchBank: Locator;
+  private readonly sbibank: Locator;
+  private readonly textField: Locator;
+  private readonly selPayment: Locator;
+  private readonly inputBankName: Locator;
+  private readonly inputBranchName: Locator;
+  private readonly inputBankTransactionID: Locator;
+  private readonly btnYesOffline: Locator;
+  private readonly btnPaymentDone: Locator;
+  private readonly btnEdit: Locator;
+  private readonly btndone: Locator;
+  private readonly btnYesDeposit: Locator;
+  private readonly depositCustomerIdFilter: Locator;
+  private readonly btnDepositFilter: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO11_PartPayment) ──────────────────────────────────────
-
-  private readonly partPay = () =>
-    this.page.locator("xpath=//button[normalize-space()='Part Payment']");
-  private readonly paymentAmount = () =>
-    this.page.locator("xpath=(//td[contains(@class,'table-last')]//input)[1]");
-  private readonly btnProced = () =>
-    this.page.locator(
+    this.partPay = this.page.locator(
+      "xpath=//button[normalize-space()='Part Payment']",
+    );
+    this.paymentAmount = this.page.locator(
+      "xpath=(//td[contains(@class,'table-last')]//input)[1]",
+    );
+    this.btnProced = this.page.locator(
       "xpath=(//kt-button[@ng-reflect-value='Proceed']//button[@type='button'])[2]",
     );
-  // Confirmed live: the Part Payment screen surfaces its own copy of these buttons
-  // alongside the payment form — not the same locators as loan-view.page.ts's
-  // "View Loan" screen, even though the labels overlap.
-  private readonly viewPartPaymentLogsBtn = () =>
-    this.page.locator("xpath=//span[contains(.,'View Part Payment Logs')]");
-  private readonly partPayTransactionHistoryBtn = () =>
-    this.page.locator("xpath=//span[contains(text(),'Transaction History')]");
-  private readonly btnCancelText = () =>
-    this.page.locator("xpath=//span[normalize-space()='Cancel']");
-  private readonly logAmountCell = () =>
-    this.page.locator("xpath=(//td[@class='table-amount'])[1]");
-  private readonly logDialogClose = () =>
-    this.page.locator(
+    this.viewPartPaymentLogsBtn = this.page.locator(
+      "xpath=//span[contains(.,'View Part Payment Logs')]",
+    );
+    this.partPayTransactionHistoryBtn = this.page.locator(
+      "xpath=//span[contains(text(),'Transaction History')]",
+    );
+    this.btnCancelText = this.page.locator(
+      "xpath=//span[normalize-space()='Cancel']",
+    );
+    this.logAmountCell = this.page.locator(
+      "xpath=(//td[@class='table-amount'])[1]",
+    );
+    this.logDialogClose = this.page.locator(
       "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
     );
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  // Inline branch dropdown
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO10_QuickPayment.loc_LoanDetails
-  private readonly loanDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Details']");
-  // PO10_QuickPayment.loc_kebabMenu
-  private readonly kebabMenu = () =>
-    this.page.locator(
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.loanDetails = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Details']",
+    );
+    this.kebabMenu = this.page.locator(
       "xpath=(//button[.//mat-icon[normalize-space(text())='more_vert']])[1]",
     );
-  // PO10_QuickPayment.loc_btnProceed
-  private readonly btnProceed = () =>
-    this.page.locator("xpath=//span[normalize-space()='Proceed']");
-  // PO10_QuickPayment.loc_netBanking
-  private readonly netBanking = () =>
-    this.page.locator("xpath=//img[@alt='netbanking']");
-  // PO10_QuickPayment.loc_searchBank
-  private readonly searchBank = () =>
-    this.page.locator("xpath=//input[@placeholder='Search for Banks']");
-  // PO10_QuickPayment.loc_sbibank
-  private readonly sbibank = () =>
-    this.page.locator("xpath=(//span[contains(.,'State Bank of India')])[1]");
-  // PO10_QuickPayment.loc_btnPay
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  // PO10_QuickPayment.loc_selPayment
-  private readonly selPayment = () =>
-    this.page.locator("xpath=//select[@name='showPaymentValue']");
+    this.btnProceed = this.page.locator(
+      "xpath=//span[normalize-space()='Proceed']",
+    );
+    this.netBanking = this.page.locator("xpath=//img[@alt='netbanking']");
+    this.searchBank = this.page.locator(
+      "xpath=//input[@placeholder='Search for Banks']",
+    );
+    this.sbibank = this.page.locator(
+      "xpath=(//span[contains(.,'State Bank of India')])[1]",
+    );
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.selPayment = this.page.locator(
+      "xpath=//select[@name='showPaymentValue']",
+    );
+    this.inputBankName = this.page.locator(
+      "xpath=//input[@formcontrolname='bankName']",
+    );
+    this.inputBranchName = this.page.locator(
+      "xpath=//input[@formcontrolname='branchName']",
+    );
+    this.inputBankTransactionID = this.page.locator(
+      "xpath=//input[@formcontrolname='transactionId']",
+    );
+    this.btnYesOffline = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.btnPaymentDone = this.page.locator(
+      "xpath=//span[normalize-space()='Done']",
+    );
+    this.btnEdit = this.page.locator(
+      "xpath=//button[normalize-space()='Edit']",
+    );
+    this.btndone = this.page.locator("xpath=//span[normalize-space()='Done']");
+    this.btnYesDeposit = this.page.locator(
+      "xpath=//button[normalize-space()='Yes']",
+    );
+    this.depositCustomerIdFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.btnDepositFilter = this.page.locator(
+      "xpath=//span[normalize-space()='Filter']",
+    );
+  }
 
   async partPaySuccess(): Promise<void> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(5000);
 
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.partPay().click();
+    await this.partPay.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.paymentAmount();
+    const ele = this.paymentAmount;
     await ele.clear();
     await this.page.waitForTimeout(2000);
     await ele.fill("25000");
     await this.waitForLoaderToDisappear();
 
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selPayment().selectOption({ label: "PAYMENT GATEWAY" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "PAYMENT GATEWAY" });
+    await this.netBanking.click();
     await this.page.waitForTimeout(3000);
 
     // JS-click the Part Payment proceed button
-    await this.jsClick(this.btnProced());
+    await this.jsClick(this.btnProced);
     await this.page.waitForTimeout(2000);
 
     // Switch into Razorpay iframe
@@ -189,31 +209,31 @@ export class PartPaymentPage extends AdminBasePage {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(5000);
 
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     // noWaitAfter: see partPaySuccess() above.
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.partPay().click();
+    await this.partPay.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
   }
@@ -221,34 +241,34 @@ export class PartPaymentPage extends AdminBasePage {
   async validateViewTransactionLog(): Promise<string> {
     await this.navigateToPartPaymentScreen();
 
-    await this.viewPartPaymentLogsBtn().click();
+    await this.viewPartPaymentLogsBtn.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.logAmountCell();
+    const ele = this.logAmountCell;
     const str = await ele
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => ele.innerText())
       .then((t) => t.trim())
       .catch(() => "No Records Found");
 
-    await this.logDialogClose().click();
+    await this.logDialogClose.click();
     await this.waitForLoaderToDisappear();
 
     return str;
   }
 
   async validatePartPayTransactionHistory(): Promise<string> {
-    await this.partPayTransactionHistoryBtn().click();
+    await this.partPayTransactionHistoryBtn.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.logAmountCell();
+    const ele = this.logAmountCell;
     const str = await ele
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => ele.innerText())
       .then((t) => t.trim())
       .catch(() => "No Records Found");
 
-    await this.logDialogClose().click();
+    await this.logDialogClose.click();
     await this.waitForLoaderToDisappear();
 
     return str;
@@ -259,22 +279,22 @@ export class PartPaymentPage extends AdminBasePage {
     proceedEnabled: boolean;
     cancelVisible: boolean;
   }> {
-    const proceed = this.btnProceed();
+    const proceed = this.btnProceed;
     const proceedVisible = await proceed.isVisible();
     const proceedEnabled = await proceed.isEnabled();
-    const cancelVisible = await this.btnCancelText().isVisible();
+    const cancelVisible = await this.btnCancelText.isVisible();
 
     return { proceedVisible, proceedEnabled, cancelVisible };
   }
 
   async validateWithCashZero(): Promise<string> {
-    const amountField = this.paymentAmount();
+    const amountField = this.paymentAmount;
     await amountField.clear();
     await this.page.waitForTimeout(1000);
     await amountField.fill("0");
     await this.page.waitForTimeout(1000);
 
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
 
     const error = this.page.locator(
@@ -285,31 +305,6 @@ export class PartPaymentPage extends AdminBasePage {
   }
 
   // ── Offline Part Pay (TC04 additions) ─────────────────────────────────────
-
-  // Additional locators for offline payment (PO23_PartReleaseOffline locators re-declared locally)
-  private readonly inputBankName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='bankName']");
-  private readonly inputBranchName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='branchName']");
-  private readonly inputBankTransactionID = () =>
-    this.page.locator("xpath=//input[@formcontrolname='transactionId']");
-  private readonly btnYesOffline = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-  // PO10_QuickPayment.loc_btnDone (payment done button)
-  private readonly btnPaymentDone = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  // PO45_Deposit locators re-declared
-  private readonly btnEdit = () =>
-    this.page.locator("xpath=//button[normalize-space()='Edit']");
-  private readonly btndone = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  private readonly btnYesDeposit = () =>
-    this.page.locator("xpath=//button[normalize-space()='Yes']");
-  // Deposit list filter: Customer Unique Id + Filter button
-  private readonly depositCustomerIdFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  private readonly btnDepositFilter = () =>
-    this.page.locator("xpath=//span[normalize-space()='Filter']");
 
   private generateTransactionId(): string {
     return "TXN-" + Math.random().toString(36).substring(2, 14).toUpperCase();
@@ -359,26 +354,26 @@ export class PartPaymentPage extends AdminBasePage {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(5000);
 
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     // noWaitAfter: see partPaySuccess() above.
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
     const customerIdCell = this.page.locator(
@@ -386,37 +381,37 @@ export class PartPaymentPage extends AdminBasePage {
     );
     const customerId = (await customerIdCell.innerText()).trim();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.partPay().click();
+    await this.partPay.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.paymentAmount();
+    const ele = this.paymentAmount;
     await ele.clear();
     await this.page.waitForTimeout(2000);
     await ele.fill("25000");
     await this.waitForLoaderToDisappear();
 
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selPayment().selectOption({ label: "IMPS" });
+    await this.selPayment.selectOption({ label: "IMPS" });
     await this.page.waitForTimeout(2000);
 
-    await this.inputBankName().fill(this.getRandomBankName());
-    await this.inputBranchName().fill(this.getRandomBranchName());
+    await this.inputBankName.fill(this.getRandomBankName());
+    await this.inputBranchName.fill(this.getRandomBranchName());
     await this.page.waitForTimeout(2000);
-    await this.inputBankTransactionID().fill(this.generateTransactionId());
+    await this.inputBankTransactionID.fill(this.generateTransactionId());
     await this.page.waitForTimeout(2000);
 
-    await this.btnPaymentDone().click();
+    await this.btnPaymentDone.click();
     await this.waitForLoaderToDisappear();
 
-    await this.jsClick(this.btnProced());
+    await this.jsClick(this.btnProced);
     await this.waitForLoaderToDisappear();
 
-    if ((await this.btnYesOffline().count()) > 0) {
-      await this.btnYesOffline().click();
+    if ((await this.btnYesOffline.count()) > 0) {
+      await this.btnYesOffline.click();
       await this.waitForLoaderToDisappear();
     }
 
@@ -445,9 +440,9 @@ export class PartPaymentPage extends AdminBasePage {
 
     await this.page.waitForTimeout(5000);
     const customerId = this.getCurrentCustomerId();
-    await this.textField().fill(customerId);
+    await this.textField.fill(customerId);
     console.log(customerId);
-    await this.btnDepositFilter().click();
+    await this.btnDepositFilter.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -463,7 +458,7 @@ export class PartPaymentPage extends AdminBasePage {
     await this.page.keyboard.press("Home");
     await this.page.waitForTimeout(3000);
 
-    await this.btnEdit().click();
+    await this.btnEdit.click();
     await this.waitForLoaderToDisappear();
 
     const selStatus = this.page.locator(
@@ -472,55 +467,55 @@ export class PartPaymentPage extends AdminBasePage {
     await selStatus.evaluate((el: any) => el.scrollIntoView(true));
     await selStatus.selectOption({ label: "Completed" });
 
-    await this.btndone().click();
+    await this.btndone.click();
     await this.waitForLoaderToDisappear();
-    await this.btnYesDeposit().click();
+    await this.btnYesDeposit.click();
     await this.waitForLoaderToDisappear();
   }
   async partPaySuccessCron(): Promise<void> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(5000);
 
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.partPay().click();
+    await this.partPay.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.paymentAmount();
+    const ele = this.paymentAmount;
     await ele.clear();
     await this.page.waitForTimeout(2000);
     await ele.fill("25000");
     await this.waitForLoaderToDisappear();
 
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selPayment().selectOption({ label: "CRON" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "CRON" });
+    await this.netBanking.click();
     await this.page.waitForTimeout(3000);
 
     // JS-click the Part Payment proceed button
-    await this.jsClick(this.btnProced());
+    await this.jsClick(this.btnProced);
     await this.page.waitForTimeout(2000);
 
     // Switch into Razorpay iframe
