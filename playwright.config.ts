@@ -7,6 +7,24 @@ import { panelUrl, apiUrl } from "./config/urls";
 import { getTargetEnv, type EnvName } from "./config/environments";
 
 const targetEnv = getTargetEnv();
+
+// setup/auth.setup.ts runs inside a worker, whose process.argv does NOT contain the CLI flags,
+// so it can't tell which project was requested. Decide it here, in the main process (env set
+// before workers fork is inherited): a run of ONLY the admin project must not also log in to
+// the customer / business / new-admin panels via the shared auth-setup project.
+{
+  const argv = process.argv.join(" ");
+  const names = [
+    ...argv.matchAll(/--project(?:=|\s+)([\w-]+)/g),
+  ].map((m) => m[1]);
+  if (
+    !process.env.TARGET_PANEL &&
+    names.length > 0 &&
+    names.every((n) => n === "admin" || n === "auth-setup")
+  ) {
+    process.env.TARGET_PANEL = "admin";
+  }
+}
 const isCI = !!process.env.CI;
 const headless = process.env.HEADLESS !== "false";
 
@@ -90,20 +108,17 @@ export default defineConfig({
       name: "admin",
       use: {
         ...devices["Desktop Chrome"],
-        // devices["Desktop Chrome"] sets a fixed 1280x720 viewport, which overrides the top-level
-        // `viewport: null` and is why the browser could not be maximized — reset it per project.
         viewport: null,
         deviceScaleFactor: undefined,
         baseURL: panelUrl("admin", targetEnv),
       },
+      dependencies: ["auth-setup"],
       testMatch: /tests\/admin\/.*\.spec\.ts/,
     },
     {
       name: "customer",
       use: {
         ...devices["Desktop Chrome"],
-        // devices["Desktop Chrome"] sets a fixed 1280x720 viewport, which overrides the top-level
-        // `viewport: null` and is why the browser could not be maximized — reset it per project.
         viewport: null,
         deviceScaleFactor: undefined,
         baseURL: panelUrl("customer", targetEnv),
@@ -120,8 +135,6 @@ export default defineConfig({
       name: "business",
       use: {
         ...devices["Desktop Chrome"],
-        // devices["Desktop Chrome"] sets a fixed 1280x720 viewport, which overrides the top-level
-        // `viewport: null` and is why the browser could not be maximized — reset it per project.
         viewport: null,
         deviceScaleFactor: undefined,
         baseURL: panelUrl("business", targetEnv),

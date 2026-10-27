@@ -1,14 +1,172 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import fs from "fs";
 
 export class QuickPaymentPage extends AdminBasePage {
+  private readonly loanDetails: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly quickPay: Locator;
+  private readonly btnProceed: Locator;
+  private readonly netBanking: Locator;
+  private readonly btnConfirm: Locator;
+  private readonly searchBank: Locator;
+  private readonly sbibank: Locator;
+  private readonly btnPay: Locator;
+  private readonly btnSign: Locator;
+  private readonly btnDone: Locator;
+  private readonly selPayment: Locator;
+  private readonly btnCancel: Locator;
+  private readonly btnFilter: Locator;
+  private readonly customerUniqID: Locator;
+  private readonly radioTillDate: Locator;
+  private readonly radioNextDueDate: Locator;
+  private readonly radioCustomAmount: Locator;
+  private readonly quickPayAmountField: Locator;
+  private readonly btnViewInterestEmiLogs: Locator;
+  private readonly btnTransactionHistory: Locator;
+  private readonly btnQuickPayTransactionHistory: Locator;
+  private readonly logDialogClose: Locator;
+  private readonly amountErrorText: Locator;
+  private readonly maxAmountErrorText: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly btnNextduedateRadio: Locator;
+  private readonly partPay: Locator;
+  private readonly paymentAmount: Locator;
+  private readonly btnProcedPP: Locator;
+  private readonly inputBankName: Locator;
+  private readonly inputBranchName: Locator;
+  private readonly inputBankTransactionID: Locator;
+  private readonly btnYesOffline: Locator;
+  private readonly selBranch: Locator;
+  private readonly btnEdit: Locator;
+  private readonly btndone: Locator;
+  private readonly btnYesDeposit: Locator;
+
   constructor(page: Page) {
     super(page);
+    this.loanDetails = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Details']",
+    );
+    this.kebabMenu = this.page.locator(
+      "xpath=(//button[.//mat-icon[normalize-space(text())='more_vert']])[1]",
+    );
+    this.quickPay = this.page.locator(
+      "xpath=//button[normalize-space()='Quick Pay']",
+    );
+    this.btnProceed = this.page.locator(
+      "xpath=//span[normalize-space()='Proceed']",
+    );
+    this.netBanking = this.page.locator("xpath=//img[@alt='netbanking']");
+    this.btnConfirm = this.page.locator(
+      "xpath=//span[normalize-space()='Confirm']",
+    );
+    this.searchBank = this.page.locator(
+      "xpath=//input[@placeholder='Search for Banks']",
+    );
+    this.sbibank = this.page.locator(
+      "xpath=(//span[contains(.,'State Bank of India')])[1]",
+    );
+    this.btnPay = this.page.locator(
+      "xpath=//button[contains(.,'Continue & Pay')]",
+    );
+    this.btnSign = this.page.locator(
+      "xpath=//button[@ng-reflect-disabled='false']",
+    );
+    this.btnDone = this.page.locator("xpath=//span[normalize-space()='Done']");
+    this.selPayment = this.page.locator(
+      "xpath=//select[@name='showPaymentValue']",
+    );
+    this.btnCancel = this.page.locator(
+      "xpath=//span[normalize-space()='Cancel']",
+    );
+    this.btnFilter = this.page.locator(
+      "xpath=//span[normalize-space()='Filter']",
+    );
+    this.customerUniqID = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.radioTillDate = this.page.locator(
+      "xpath=//mat-radio-button[contains(normalize-space(.),'Amount Till Date')]",
+    );
+    this.radioNextDueDate = this.page.locator(
+      "xpath=//mat-radio-button[contains(normalize-space(.),'Next Due Date')]",
+    );
+    this.radioCustomAmount = this.page.locator(
+      "xpath=//mat-radio-button[contains(normalize-space(.),'Custom')]",
+    );
+    this.quickPayAmountField = this.page.locator("xpath=//input[@type='text']");
+    this.btnViewInterestEmiLogs = this.page.locator(
+      "xpath=//button[normalize-space()='View Interest EMI Logs']",
+    );
+    this.btnTransactionHistory = this.page.locator(
+      "xpath=//button[normalize-space()='Transaction History']",
+    );
+    this.btnQuickPayTransactionHistory = this.page.locator(
+      "xpath=//button[normalize-space()='Quick Pay Transaction History']",
+    );
+    this.logDialogClose = this.page.locator(
+      "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
+    );
+    this.amountErrorText = this.page.locator(
+      "xpath=//small[@class='text-danger']",
+    );
+    this.maxAmountErrorText = this.page.locator(
+      "xpath=//mat-error[contains(@class,'mat-error')]//small[contains(normalize-space(),'Part Payment option')]",
+    );
+    this.profile = this.page.locator(
+      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
+    );
+    this.arrow = this.page.locator(
+      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
+    );
+    this.branchDropdown = this.page.locator(
+      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
+    );
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.btnNextduedateRadio = this.page.locator(
+      "xpath=(//mat-radio-button[@class='mat-radio-button mat-accent'])[1]",
+    );
+    this.partPay = this.page.locator(
+      "xpath=//button[normalize-space()='Part Payment']",
+    );
+    this.paymentAmount = this.page.locator("xpath=//input[@type='text']");
+    this.btnProcedPP = this.page.locator(
+      "xpath=(//kt-button[@ng-reflect-value='Proceed']//button[@type='button'])[2]",
+    );
+    this.inputBankName = this.page.locator(
+      "xpath=//input[@formcontrolname='bankName']",
+    );
+    this.inputBranchName = this.page.locator(
+      "xpath=//input[@formcontrolname='branchName']",
+    );
+    this.inputBankTransactionID = this.page.locator(
+      "xpath=//input[@formcontrolname='transactionId']",
+    );
+    this.btnYesOffline = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.selBranch = this.page.locator(
+      "xpath=//select[@formcontrolname='receivedAmountForBranchId']",
+    );
+    this.btnEdit = this.page.locator(
+      "xpath=//button[normalize-space()='Edit']",
+    );
+    this.btndone = this.page.locator("xpath=//span[normalize-space()='Done']");
+    this.btnYesDeposit = this.page.locator(
+      "xpath=//button[normalize-space()='Yes']",
+    );
   }
 
-  /** Reads the customer ID most recently written by CustomerManagementPage during onboarding. */
   private getCurrentCustomerId(): string {
     const customerData = JSON.parse(
       fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
@@ -16,195 +174,52 @@ export class QuickPaymentPage extends AdminBasePage {
     return customerData.customerId.trim();
   }
 
-  // ── Locators (from PO10_QuickPayment) ─────────────────────────────────────
-
-  private readonly loanDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Details']");
-  private readonly kebabMenu = () =>
-    this.page.locator(
-      "xpath=(//button[.//mat-icon[normalize-space(text())='more_vert']])[1]",
-    );
-  private readonly quickPay = () =>
-    this.page.locator("xpath=//button[normalize-space()='Quick Pay']");
-  private readonly btnProceed = () =>
-    this.page.locator("xpath=//span[normalize-space()='Proceed']");
-  private readonly netBanking = () =>
-    this.page.locator("xpath=//img[@alt='netbanking']");
-  private readonly btnConfirm = () =>
-    this.page.locator("xpath=//span[normalize-space()='Confirm']");
-  private readonly searchBank = () =>
-    this.page.locator("xpath=//input[@placeholder='Search for Banks']");
-  private readonly sbibank = () =>
-    this.page.locator("xpath=(//span[contains(.,'State Bank of India')])[1]");
-  private readonly btnPay = () =>
-    this.page.locator("xpath=//button[contains(.,'Continue & Pay')]");
-  private readonly btnSign = () =>
-    this.page.locator("xpath=//button[@ng-reflect-disabled='false']");
-  private readonly btnDone = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  private readonly selPayment = () =>
-    this.page.locator("xpath=//select[@name='showPaymentValue']");
-  private readonly btnCancel = () =>
-    this.page.locator("xpath=//span[normalize-space()='Cancel']");
-  private readonly btnFilter = () =>
-    this.page.locator("xpath=//span[normalize-space()='Filter']");
-  private readonly customerUniqID = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-
-  // ── Locators confirmed live on the Quick Pay screen itself (2026-07) ──────
-  // Payment-mode radios: "Amount Till Date" (default checked), "Next Due Date", "Custom".
-  private readonly radioTillDate = () =>
-    this.page.locator(
-      "xpath=//mat-radio-button[contains(normalize-space(.),'Amount Till Date')]",
-    );
-  private readonly radioNextDueDate = () =>
-    this.page.locator(
-      "xpath=//mat-radio-button[contains(normalize-space(.),'Next Due Date')]",
-    );
-  private readonly radioCustomAmount = () =>
-    this.page.locator(
-      "xpath=//mat-radio-button[contains(normalize-space(.),'Custom')]",
-    );
-  // Read-only/editable Payment Amount field next to the radios.
-  private readonly quickPayAmountField = () =>
-    this.page.locator("xpath=//input[@type='text']");
-  // Confirmed live: three distinct log/history buttons sit directly on the Quick Pay
-  // screen (not behind the separate "View Loan" kebab route that loan-view.page.ts targets).
-  private readonly btnViewInterestEmiLogs = () =>
-    this.page.locator(
-      "xpath=//button[normalize-space()='View Interest EMI Logs']",
-    );
-  private readonly btnTransactionHistory = () =>
-    this.page.locator(
-      "xpath=//button[normalize-space()='Transaction History']",
-    );
-  private readonly btnQuickPayTransactionHistory = () =>
-    this.page.locator(
-      "xpath=//button[normalize-space()='Quick Pay Transaction History']",
-    );
-  // Close icon for whatever dialog the three log buttons above open (same icon used by
-  // loan-view.page.ts's btnclose for its own log dialogs — confirmed shared component).
-  private readonly logDialogClose = () =>
-    this.page.locator(
-      "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
-    );
-  private readonly amountErrorText = () =>
-    this.page.locator("xpath=//small[@class='text-danger']");
-  private readonly maxAmountErrorText = () =>
-    this.page.locator(
-      "xpath=//mat-error[contains(@class,'mat-error')]//small[contains(normalize-space(),'Part Payment option')]",
-    );
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
-      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
-    );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
-      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
-    );
-  // Inline branch dropdown
-  private readonly branchDropdown = () =>
-    this.page.locator(
-      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
-    );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO23_PartReleaseOffline.loc_btnNextduedateRadio
-  private readonly btnNextduedateRadio = () =>
-    this.page.locator(
-      "xpath=(//mat-radio-button[@class='mat-radio-button mat-accent'])[1]",
-    );
-  // PO11_PartPayment.loc_partPay
-  private readonly partPay = () =>
-    this.page.locator("xpath=//button[normalize-space()='Part Payment']");
-  // PO11_PartPayment.loc_paymentAmount
-  private readonly paymentAmount = () =>
-    this.page.locator("xpath=//input[@type='text']");
-  // PO11_PartPayment.loc_btnProced
-  private readonly btnProcedPP = () =>
-    this.page.locator(
-      "xpath=(//kt-button[@ng-reflect-value='Proceed']//button[@type='button'])[2]",
-    );
-
-  // ── Shared navigation helper ───────────────────────────────────────────────
-
-  /** Navigate to Loan Details section (profile → branch → arrow → Loan Management → Loan Details → filter). */
   private async navigateToLoanDetails(): Promise<void> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
 
-    // Confirmed live: selecting any branch scope other than the appraiser account's own
-    // assigned branch gets the session force-logged-out on UAT within ~3s (backend rejects
-    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
-    // Leave the account on its default branch scope instead of calling selectOption().
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(2000);
 
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     const customerId = this.getCurrentCustomerId();
-    await this.customerUniqID().fill(customerId);
+    await this.customerUniqID.fill(customerId);
     console.log(customerId);
-    //await this.firstNameFilter().fill(data.firstName);
+    //await this.firstNameFilter.fill(data.firstName);
     await this.page.waitForTimeout(2000);
-    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
-    // navigation attempt from the native submit and hangs waiting for it to "finish" even
-    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
-    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
-    // / waiver.page.ts / ops-approval.page.ts).
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
   }
 
-  // ── Actions (from Flow10_QuickPayment.quikPaymentsuccess) ─────────────────
-
-  /**
-   * Port of Java Flow10_QuickPayment.quikPaymentsuccess().
-   *
-   * NOTE: loginWithAppraiser() is OMITTED. Caller must loginAs('appraiser') first.
-   *
-   * Navigates to Loan Details, initiates Quick Pay with PAYMENT GATEWAY (net banking / SBI),
-   * switches to Razorpay iframe and then to the bank simulator popup, clicks Success.
-   */
   async quikPaymentsuccess(): Promise<void> {
     await this.navigateToLoanDetails();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.quickPay().click();
+    await this.quickPay.click();
     // await this.page.waitForTimeout(2000);
 
-    // await this.btnNextduedateRadio().click();
+    // await this.btnNextduedateRadio.click();
     await this.page.waitForTimeout(2000);
-    await this.btnProceed().click();
+    await this.btnProceed.click();
 
-    await this.selPayment().selectOption({ label: "PAYMENT GATEWAY" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "PAYMENT GATEWAY" });
+    await this.netBanking.click();
     await this.waitForLoaderToDisappear();
-    await this.btnConfirm().click();
+    await this.btnConfirm.click();
     await this.waitForLoaderToDisappear();
 
     // Switch into Razorpay iframe
@@ -266,25 +281,25 @@ export class QuickPaymentPage extends AdminBasePage {
   async quikPaymentfail(): Promise<string> {
     await this.navigateToLoanDetails();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.partPay().click();
+    await this.partPay.click();
     await this.waitForLoaderToDisappear();
 
-    const ele = this.paymentAmount();
+    const ele = this.paymentAmount;
     await ele.clear();
     await this.page.waitForTimeout(2000);
     await ele.fill("200");
     await this.waitForLoaderToDisappear();
 
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selPayment().selectOption({ label: "PAYMENT GATEWAY" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "PAYMENT GATEWAY" });
+    await this.netBanking.click();
     await this.page.waitForTimeout(2000);
 
-    await this.jsClick(this.btnProcedPP());
+    await this.jsClick(this.btnProcedPP);
     await this.page.waitForTimeout(2000);
 
     // Switch into Razorpay iframe
@@ -329,30 +344,7 @@ export class QuickPaymentPage extends AdminBasePage {
     return (await msgEl.innerText()).trim();
   }
 
-  private readonly inputBankName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='bankName']");
-  private readonly inputBranchName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='branchName']");
-  private readonly inputBankTransactionID = () =>
-    this.page.locator("xpath=//input[@formcontrolname='transactionId']");
-  private readonly btnYesOffline = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-  private readonly selBranch = () =>
-    this.page.locator(
-      "xpath=//select[@formcontrolname='receivedAmountForBranchId']",
-    );
-  // PO45_Deposit locators re-declared
-  private readonly btnEdit = () =>
-    this.page.locator("xpath=//button[normalize-space()='Edit']");
-  private readonly btndone = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  private readonly btnYesDeposit = () =>
-    this.page.locator("xpath=//button[normalize-space()='Yes']");
-
- 
-
   async quickPayOffline(): Promise<void> {
-   
     await this.page.addInitScript(() => {
       (window as any).print = () => {};
     });
@@ -364,15 +356,15 @@ export class QuickPaymentPage extends AdminBasePage {
 
     await this.navigateToLoanDetails();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.quickPay().click();
+    await this.quickPay.click();
     await this.page.waitForTimeout(2000);
-    await this.btnNextduedateRadio().click();
+    await this.btnNextduedateRadio.click();
     await this.page.waitForTimeout(2000);
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
-    await this.selPayment().click();
+    await this.selPayment.click();
 
     const selectStatusDropdown = this.page.locator(
       "xpath=//select[@name='showPaymentValue']",
@@ -412,9 +404,6 @@ export class QuickPaymentPage extends AdminBasePage {
           (window as any).print = () => {};
         });
       } catch (_) {}
-
-      // Start PDF capture non-blocking: wait 600ms for Angular to render the
-      // Cash Acknowledgement, then call Page.printToPDF (same pattern as assign-packet.page.ts).
       const pdfPromise = (async () => {
         await this.page.waitForTimeout(600);
         try {
@@ -437,7 +426,6 @@ export class QuickPaymentPage extends AdminBasePage {
         }
       })();
 
-      // Click Download → Angular generates Cash Acknowledgement and fires window.print()
       await downloadImg.click();
 
       // Wait for PDF (max 12s)
@@ -479,10 +467,10 @@ export class QuickPaymentPage extends AdminBasePage {
       }
     }
 
-    await this.selBranch().selectOption({ label: "Augmont" });
-    await this.btnDone().click();
+    await this.selBranch.selectOption({ label: "Augmont" });
+    await this.btnDone.click();
     await this.waitForLoaderToDisappear();
-    await this.btnConfirm().click();
+    await this.btnConfirm.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
   }
@@ -522,7 +510,7 @@ export class QuickPaymentPage extends AdminBasePage {
     await this.page.keyboard.press("Home");
     await this.page.waitForTimeout(3000);
 
-    await this.btnEdit().click();
+    await this.btnEdit.click();
     await this.waitForLoaderToDisappear();
 
     const selStatus = this.page.locator(
@@ -531,68 +519,66 @@ export class QuickPaymentPage extends AdminBasePage {
     await selStatus.evaluate((el: any) => el.scrollIntoView(true));
     await selStatus.selectOption({ label: "Completed" });
 
-    await this.btndone().click();
+    await this.btndone.click();
     await this.waitForLoaderToDisappear();
-    await this.btnYesDeposit().click();
+    await this.btnYesDeposit.click();
     await this.waitForLoaderToDisappear();
   }
   private async openQuickPay(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(2000);
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.page.waitForTimeout(2000);
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.quickPay().click();
+    await this.quickPay.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
   }
   async validateTillDateOption(): Promise<string> {
     await this.openQuickPay();
-    await this.radioTillDate().click();
+    await this.radioTillDate.click();
     await this.page.waitForTimeout(1000);
-    const amount = (await this.quickPayAmountField().inputValue()).trim();
-    await this.btnCancel().click();
+    const amount = (await this.quickPayAmountField.inputValue()).trim();
+    await this.btnCancel.click();
     await this.waitForLoaderToDisappear();
     return amount;
   }
 
   async validateNextDueDateOption(): Promise<string> {
     await this.openQuickPay();
-    await this.radioNextDueDate().click();
+    await this.radioNextDueDate.click();
     await this.page.waitForTimeout(1000);
-    const amount = (await this.quickPayAmountField().inputValue()).trim();
-    await this.btnCancel().click();
+    const amount = (await this.quickPayAmountField.inputValue()).trim();
+    await this.btnCancel.click();
     await this.waitForLoaderToDisappear();
     return amount;
   }
   async validateCancelButtonFunctionality(): Promise<boolean> {
     await this.openQuickPay();
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.btnCancel().click();
+    await this.btnCancel.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    return await this.btnProceed()
-      .isVisible()
-      .catch(() => false);
+    return await this.btnProceed.isVisible().catch(() => false);
   }
   async validateProceedAndCancelButtons(): Promise<{
     proceedVisible: boolean;
@@ -600,59 +586,53 @@ export class QuickPaymentPage extends AdminBasePage {
     cancelVisible: boolean;
   }> {
     await this.openQuickPay();
-    const proceedVisible = await this.btnProceed().isVisible();
-    const proceedEnabled = await this.btnProceed().isEnabled();
-    const cancelVisible = await this.btnCancel().isVisible();
-    await this.btnCancel().click();
+    const proceedVisible = await this.btnProceed.isVisible();
+    const proceedEnabled = await this.btnProceed.isEnabled();
+    const cancelVisible = await this.btnCancel.isVisible();
+    await this.btnCancel.click();
     await this.waitForLoaderToDisappear();
     return { proceedVisible, proceedEnabled, cancelVisible };
   }
   async validateViewInterestEmiLogsButton(): Promise<boolean> {
     await this.openQuickPay();
-    await this.btnViewInterestEmiLogs().click();
+    await this.btnViewInterestEmiLogs.click();
     await this.waitForLoaderToDisappear();
-    const opened = await this.logDialogClose()
+    const opened = await this.logDialogClose
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => true)
       .catch(() => false);
-    await this.logDialogClose()
-      .click()
-      .catch(() => {});
+    await this.logDialogClose.click().catch(() => {});
     await this.waitForLoaderToDisappear();
     return opened;
   }
   async validateTransactionHistoryButton(): Promise<boolean> {
     await this.openQuickPay();
-    await this.btnTransactionHistory().click();
+    await this.btnTransactionHistory.click();
     await this.waitForLoaderToDisappear();
-    const opened = await this.logDialogClose()
+    const opened = await this.logDialogClose
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => true)
       .catch(() => false);
-    await this.logDialogClose()
-      .click()
-      .catch(() => {});
+    await this.logDialogClose.click().catch(() => {});
     await this.waitForLoaderToDisappear();
     return opened;
   }
   async validateQuickPayTransactionHistoryButton(): Promise<boolean> {
     await this.openQuickPay();
-    await this.btnQuickPayTransactionHistory().click();
+    await this.btnQuickPayTransactionHistory.click();
     await this.waitForLoaderToDisappear();
-    const opened = await this.logDialogClose()
+    const opened = await this.logDialogClose
       .waitFor({ state: "visible", timeout: 10000 })
       .then(() => true)
       .catch(() => false);
-    await this.logDialogClose()
-      .click()
-      .catch(() => {});
+    await this.logDialogClose.click().catch(() => {});
     await this.waitForLoaderToDisappear();
     return opened;
   }
   private async fillCustomAmount(amount: string): Promise<void> {
-    await this.radioCustomAmount().click();
+    await this.radioCustomAmount.click();
     await this.page.waitForTimeout(1000);
-    const field = this.quickPayAmountField();
+    const field = this.quickPayAmountField;
     await field.clear();
     await this.page.waitForTimeout(500);
     await field.fill(amount);
@@ -661,43 +641,37 @@ export class QuickPaymentPage extends AdminBasePage {
   async validateZeroAmount(): Promise<string> {
     await this.openQuickPay();
     await this.fillCustomAmount("0");
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
-    const msg = (await this.amountErrorText().innerText()).trim();
-    await this.btnCancel()
-      .click()
-      .catch(() => {});
+    const msg = (await this.amountErrorText.innerText()).trim();
+    await this.btnCancel.click().catch(() => {});
     return msg;
   }
   async validateMinAmountTen(): Promise<boolean> {
     await this.openQuickPay();
     await this.fillCustomAmount("10");
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
-    const errorVisible = await this.amountErrorText()
+    const errorVisible = await this.amountErrorText
       .isVisible()
       .catch(() => false);
-    await this.btnCancel()
-      .click()
-      .catch(() => {});
+    await this.btnCancel.click().catch(() => {});
     return !errorVisible;
   }
   async validateAmountFiveHundred(): Promise<boolean> {
     await this.openQuickPay();
     await this.fillCustomAmount("500");
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
-    const errorVisible = await this.amountErrorText()
+    const errorVisible = await this.amountErrorText
       .isVisible()
       .catch(() => false);
-    await this.btnCancel()
-      .click()
-      .catch(() => {});
+    await this.btnCancel.click().catch(() => {});
     return !errorVisible;
   }
   async validateAmountOverMax(): Promise<string> {
     await this.openQuickPay();
-    await this.radioCustomAmount().click();
+    await this.radioCustomAmount.click();
     await this.page.waitForTimeout(1000);
     const nextDueCell = this.page.locator(
       "xpath=(//td[contains(@class,'table-amount')]/span)[3]",
@@ -705,35 +679,33 @@ export class QuickPaymentPage extends AdminBasePage {
     const str = (await nextDueCell.innerText()).trim();
     const value = parseFloat(str.replace(/,/g, ""));
     const overMax = (value + 1).toFixed(2);
-    const field = this.quickPayAmountField();
+    const field = this.quickPayAmountField;
     await field.clear();
     await this.page.waitForTimeout(500);
     await field.fill(overMax);
     await this.page.waitForTimeout(500);
-    await this.btnProceed().click();
+    await this.btnProceed.click();
     await this.waitForLoaderToDisappear();
-    const msg = (await this.maxAmountErrorText().innerText()).trim();
-    await this.btnCancel()
-      .click()
-      .catch(() => {});
+    const msg = (await this.maxAmountErrorText.innerText()).trim();
+    await this.btnCancel.click().catch(() => {});
     return msg;
   }
   async quikPaymentsuccessCron(): Promise<void> {
     await this.navigateToLoanDetails();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.quickPay().click();
+    await this.quickPay.click();
     // await this.page.waitForTimeout(2000);
 
-    // await this.btnNextduedateRadio().click();
+    // await this.btnNextduedateRadio.click();
     await this.page.waitForTimeout(2000);
-    await this.btnProceed().click();
+    await this.btnProceed.click();
 
-    await this.selPayment().selectOption({ label: "CRON" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "CRON" });
+    await this.netBanking.click();
     await this.waitForLoaderToDisappear();
-    await this.btnConfirm().click();
+    await this.btnConfirm.click();
     await this.waitForLoaderToDisappear();
 
     // Switch into Razorpay iframe

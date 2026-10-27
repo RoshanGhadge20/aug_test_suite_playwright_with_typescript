@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import customerData from "../../testdata/admin/documents/customerData.json";
 import { getLoginData } from "../../utils/data/admin-excel-data";
@@ -37,66 +37,196 @@ import fs from "fs";
  *   - RCH+RH+ZH+ZAH+CEO:  loan > 50 Lakhs
  */
 export class BtLoanPage extends AdminBasePage {
+  // ── Locators (from PO46_BTLoan + cross-page re-declarations) ──────────────
+  private readonly startNewBTProcess: Locator;
+  private readonly clickBankNameBox: Locator;
+  private readonly clickBankName: Locator;
+  private readonly companyType: Locator;
+  private readonly loanNumber: Locator;
+  private readonly loanAmount: Locator;
+  private readonly releaseAmount: Locator;
+  private readonly loanStartDate: Locator;
+  private readonly dateArrow: Locator;
+  private readonly year: Locator;
+  private readonly month: Locator;
+  private readonly date: Locator;
+  private readonly loanEndDate: Locator;
+  private readonly btnNext: Locator;
+  private readonly addJwellaryDetails: Locator;
+  private readonly noOfPieces: Locator;
+  private readonly selPurity: Locator;
+  private readonly selKarat: Locator;
+  private readonly selPartner: Locator;
+  private readonly textField: Locator;
+  private readonly selLoanTenuar: Locator;
+  private readonly selRepaymentCycle: Locator;
+  private readonly btnRadio: Locator;
+  private readonly loanRequiredAmount: Locator;
+  private readonly accountNumber: Locator;
+  private readonly ifscCode: Locator;
+  private readonly btnVerifyBankDetails: Locator;
+  private readonly img: Locator;
+  private readonly imgCamera: Locator;
+  private readonly btnRCHapproval: Locator;
+  private readonly selapproval: Locator;
+  private readonly comments: Locator;
+  private readonly btnSubmit: Locator;
+  private readonly btnAddExistingBT: Locator;
+  private readonly customer: Locator;
+  private readonly btnRHapproval: Locator;
+  private readonly btnZHapproval: Locator;
+  private readonly btnZAHapproval: Locator;
+  private readonly btnCEOapproval: Locator;
+  // Cross-page re-declarations
+  // PO_LoginLogout.loc_Profile
+  private readonly profile: Locator;
+  // PO_CustomerManagement.loc_arrow
+  private readonly arrow: Locator;
+  // Inline branch dropdown from Flow67/69/70
+  private readonly branchDropdown: Locator;
+  // PO_CustomerManagement.loc_customer
+  private readonly customerManagementBtn: Locator;
+  // PO_CustomerManagement.loc_allcustomer
+  private readonly allCustomers: Locator;
+  // PO01_KycSel.loc_firstName
+  private readonly firstNameFilter: Locator;
+  // PO01_KycSel.loc_filterbtn
+  private readonly filterbtn: Locator;
+  // PO04_NewGoldLoan.loc_kebabMenu
+  private readonly kebabMenu: Locator;
+  // PO04_NewGoldLoan.loc_btnAdd — confirmed live the class-based selector matched the right
+  // element but the "Create Request" modal still stayed open after clicking it (no visible
+  // validation error). Role-based, exact-text locator instead, paired with a retry helper
+  // (see submitCreateRequest()) since a single click was not reliably closing the modal.
+  private readonly btnAdd: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO46_BTLoan) ───────────────────────────────────────────
-
-  private readonly startNewBTProcess = () =>
-    this.page.locator(
+    this.startNewBTProcess = this.page.locator(
       "xpath=//button[normalize-space()='Start New BT Process']",
     );
-
-  private readonly clickBankNameBox = () =>
-    this.page.locator("xpath=//span[@class='ng-arrow-wrapper']");
-
-  private readonly clickBankName = () =>
-    this.page.locator("xpath=(//span[@class='checkmark checkmark-custom'])[2]");
-
-  private readonly companyType = () =>
-    this.page.locator("xpath=//select[@id='companyType']");
-
-  private readonly loanNumber = () =>
-    this.page.locator("xpath=//input[@id='loanNumber']");
-
-  private readonly loanAmount = () =>
-    this.page.locator("xpath=//input[@id='loanAmount']");
-
-  private readonly releaseAmount = () =>
-    this.page.locator("xpath=//input[@id='releaseAmount']");
-
-  private readonly loanStartDate = () =>
-    this.page.locator("xpath=//input[@formcontrolname='loanStartDate']");
-
-  private readonly dateArrow = () =>
-    this.page.locator("xpath=//div[@class='mat-calendar-arrow']");
-
-  private readonly year = () =>
-    this.page.locator(
+    this.clickBankNameBox = this.page.locator(
+      "xpath=//span[@class='ng-arrow-wrapper']",
+    );
+    this.clickBankName = this.page.locator(
+      "xpath=(//span[@class='checkmark checkmark-custom'])[2]",
+    );
+    this.companyType = this.page.locator("xpath=//select[@id='companyType']");
+    this.loanNumber = this.page.locator("xpath=//input[@id='loanNumber']");
+    this.loanAmount = this.page.locator("xpath=//input[@id='loanAmount']");
+    this.releaseAmount = this.page.locator(
+      "xpath=//input[@id='releaseAmount']",
+    );
+    this.loanStartDate = this.page.locator(
+      "xpath=//input[@formcontrolname='loanStartDate']",
+    );
+    this.dateArrow = this.page.locator(
+      "xpath=//div[@class='mat-calendar-arrow']",
+    );
+    this.year = this.page.locator(
       "xpath=//div[@class='mat-calendar-body-cell-content mat-calendar-body-selected mat-calendar-body-today']",
     );
-
-  private readonly month = () =>
-    this.page.locator(
+    this.month = this.page.locator(
       "xpath=//div[@class='mat-calendar-body-cell-content mat-calendar-body-selected mat-calendar-body-today']",
     );
-
-  private readonly date = () =>
-    this.page.locator(
+    this.date = this.page.locator(
       "xpath=//div[@class='mat-calendar-body-cell-content mat-calendar-body-selected']",
     );
-
-  private readonly loanEndDate = () =>
-    this.page.locator("xpath=//input[@formcontrolname='loanEndDate']");
-
-  private readonly btnNext = () =>
-    this.page.locator("xpath=//span[normalize-space()='Next']");
-
-  private readonly addJwellaryDetails = () =>
-    this.page.locator(
+    this.loanEndDate = this.page.locator(
+      "xpath=//input[@formcontrolname='loanEndDate']",
+    );
+    this.btnNext = this.page.locator("xpath=//span[normalize-space()='Next']");
+    this.addJwellaryDetails = this.page.locator(
       "xpath=(//button[normalize-space()='Add Scheme Details'])[1]",
     );
+    this.noOfPieces = this.page.locator(
+      "xpath=//input[@placeholder='Number of pieces']",
+    );
+    this.selPurity = this.page.locator(
+      "xpath=//select[@formcontrolname='purity']",
+    );
+    this.selKarat = this.page.locator(
+      "xpath=//select[@formcontrolname='karat']",
+    );
+    this.selPartner = this.page.locator(
+      "xpath=//select[@formcontrolname='partnerId']",
+    );
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
+    this.selLoanTenuar = this.page.locator(
+      "xpath=//select[@formcontrolname='loanTenuar']",
+    );
+    this.selRepaymentCycle = this.page.locator(
+      "xpath=//select[@formcontrolname='repaymentCycle']",
+    );
+    this.btnRadio = this.page.locator("xpath=//input[@type='radio']");
+    this.loanRequiredAmount = this.page.locator(
+      "xpath=//input[@id='loanAmount']",
+    );
+    this.accountNumber = this.page.locator(
+      "xpath=//input[@placeholder='Account Number']",
+    );
+    this.ifscCode = this.page.locator(
+      "xpath=//input[@placeholder='IFSC Code']",
+    );
+    this.btnVerifyBankDetails = this.page.locator(
+      "xpath=//kt-button[@ng-reflect-value='Verify Bank Details']//button[@type='button']",
+    );
+    this.img = this.page.locator("xpath=//img[@alt='placeholder']");
+    this.imgCamera = this.page.locator(
+      "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
+    );
+    this.btnRCHapproval = this.page.locator(
+      "xpath=//button[normalize-space()='RCH Approval']",
+    );
+    this.selapproval = this.page.locator(
+      "xpath=//select[@id='approvalStatus']",
+    );
+    this.comments = this.page.locator("xpath=//textarea[@id='comments']");
+    this.btnSubmit = this.page.locator(
+      "xpath=//span[normalize-space()='Submit']",
+    );
+    this.btnAddExistingBT = this.page.locator(
+      "xpath=//button[normalize-space()='Add Existing BT']",
+    );
+    this.customer = this.page.locator("xpath=(//p[contains(.,'CID')])[1]");
+    this.btnRHapproval = this.page.locator(
+      "xpath=//button[normalize-space()='RH Approval']",
+    );
+    this.btnZHapproval = this.page.locator(
+      "xpath=//button[normalize-space()='ZH Approval']",
+    );
+    this.btnZAHapproval = this.page.locator(
+      "xpath=//button[normalize-space()='ZAH Approval']",
+    );
+    this.btnCEOapproval = this.page.locator(
+      "xpath=//button[normalize-space()='CEO Approval']",
+    );
+    this.profile = this.page.locator(
+      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
+    );
+    this.arrow = this.page.locator(
+      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
+    );
+    this.branchDropdown = this.page.locator(
+      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
+    );
+    this.customerManagementBtn = this.page.locator(
+      "xpath=(//span[normalize-space()='Customer Management'])[1]",
+    );
+    this.allCustomers = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.kebabMenu = this.page.locator(
+      "xpath=(//button[.//mat-icon[text()='more_vert']])[1]",
+    );
+    this.btnAdd = this.page.getByRole("button", { name: "Add", exact: true });
+  }
 
   // Confirmed live: the "Applied BT Loan" screen (Loan Management → Applied BT Loan) has no
   // kebab menu at all — each row's Actions cell holds a single button labelled with whatever
@@ -118,122 +248,6 @@ export class BtLoanPage extends AdminBasePage {
     );
     return customerData.customerId.trim();
   }
-
-  private readonly noOfPieces = () =>
-    this.page.locator("xpath=//input[@placeholder='Number of pieces']");
-
-  private readonly selPurity = () =>
-    this.page.locator("xpath=//select[@formcontrolname='purity']");
-
-  private readonly selKarat = () =>
-    this.page.locator("xpath=//select[@formcontrolname='karat']");
-
-  private readonly selPartner = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
-
-  private readonly selLoanTenuar = () =>
-    this.page.locator("xpath=//select[@formcontrolname='loanTenuar']");
-
-  private readonly selRepaymentCycle = () =>
-    this.page.locator("xpath=//select[@formcontrolname='repaymentCycle']");
-
-  private readonly btnRadio = () =>
-    this.page.locator("xpath=//input[@type='radio']");
-
-  private readonly loanRequiredAmount = () =>
-    this.page.locator("xpath=//input[@id='loanAmount']");
-
-  private readonly accountNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='Account Number']");
-
-  private readonly ifscCode = () =>
-    this.page.locator("xpath=//input[@placeholder='IFSC Code']");
-
-  private readonly btnVerifyBankDetails = () =>
-    this.page.locator(
-      "xpath=//kt-button[@ng-reflect-value='Verify Bank Details']//button[@type='button']",
-    );
-
-  private readonly img = () =>
-    this.page.locator("xpath=//img[@alt='placeholder']");
-
-  private readonly imgCamera = () =>
-    this.page.locator(
-      "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
-    );
-
-  private readonly btnRCHapproval = () =>
-    this.page.locator("xpath=//button[normalize-space()='RCH Approval']");
-
-  private readonly selapproval = () =>
-    this.page.locator("xpath=//select[@id='approvalStatus']");
-
-  private readonly comments = () =>
-    this.page.locator("xpath=//textarea[@id='comments']");
-
-  private readonly btnSubmit = () =>
-    this.page.locator("xpath=//span[normalize-space()='Submit']");
-
-  private readonly btnAddExistingBT = () =>
-    this.page.locator("xpath=//button[normalize-space()='Add Existing BT']");
-
-  private readonly customer = () =>
-    this.page.locator("xpath=(//p[contains(.,'CID')])[1]");
-
-  private readonly btnRHapproval = () =>
-    this.page.locator("xpath=//button[normalize-space()='RH Approval']");
-
-  private readonly btnZHapproval = () =>
-    this.page.locator("xpath=//button[normalize-space()='ZH Approval']");
-
-  private readonly btnZAHapproval = () =>
-    this.page.locator("xpath=//button[normalize-space()='ZAH Approval']");
-
-  private readonly btnCEOapproval = () =>
-    this.page.locator("xpath=//button[normalize-space()='CEO Approval']");
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
-      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
-    );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
-      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
-    );
-  // Inline branch dropdown from Flow67/69/70
-  private readonly branchDropdown = () =>
-    this.page.locator(
-      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
-    );
-  // PO_CustomerManagement.loc_customer
-  private readonly customerManagementBtn = () =>
-    this.page.locator(
-      "xpath=(//span[normalize-space()='Customer Management'])[1]",
-    );
-  // PO_CustomerManagement.loc_allcustomer
-  private readonly allCustomers = () =>
-    this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO04_NewGoldLoan.loc_kebabMenu
-  private readonly kebabMenu = () =>
-    this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
-  // PO04_NewGoldLoan.loc_btnAdd — confirmed live the class-based selector matched the right
-  // element but the "Create Request" modal still stayed open after clicking it (no visible
-  // validation error). Role-based, exact-text locator instead, paired with a retry helper
-  // (see submitCreateRequest()) since a single click was not reliably closing the modal.
-  private readonly btnAdd = () =>
-    this.page.getByRole("button", { name: "Add", exact: true });
 
   // ── Approval thresholds (from Flow67 constants) ───────────────────────────
 
@@ -269,7 +283,7 @@ export class BtLoanPage extends AdminBasePage {
       "xpath=//*[@role='alertdialog'][contains(normalize-space(.),'already Exists')]",
     );
 
-    await this.btnAdd().click();
+    await this.btnAdd.click();
 
     // The alert is a transient, auto-dismissing toast — confirmed live that checking
     // isVisible() after a fixed wait missed it (already gone by then). Actively wait for it to
@@ -292,7 +306,7 @@ export class BtLoanPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
 
     if (await createRequestHeading.isVisible().catch(() => false)) {
-      await this.btnAdd().click();
+      await this.btnAdd.click();
       await this.page.waitForTimeout(3000);
     }
 
@@ -365,7 +379,7 @@ export class BtLoanPage extends AdminBasePage {
     ];
 
     await this.page.waitForTimeout(3000);
-    await this.loanStartDate().click();
+    await this.loanStartDate.click();
     await this.selectDateFromCalendar({
       year: startDate.getFullYear(),
       month: monthNames[startDate.getMonth()],
@@ -373,7 +387,7 @@ export class BtLoanPage extends AdminBasePage {
     });
 
     await this.page.waitForTimeout(3000);
-    await this.loanEndDate().click();
+    await this.loanEndDate.click();
     await this.selectDateFromCalendar({
       year: endDate.getFullYear(),
       month: monthNames[endDate.getMonth()],
@@ -470,9 +484,9 @@ export class BtLoanPage extends AdminBasePage {
    * Selects partner, loan tenure, repayment cycle, radio, and enters loan amount.
    */
   async selectScheme(): Promise<void> {
-    await this.selPartner().selectOption({ label: "KHARATMOL SK" });
+    await this.selPartner.selectOption({ label: "KHARATMOL SK" });
     await this.page.waitForTimeout(4000);
-    await this.selLoanTenuar().selectOption({ label: "120" });
+    await this.selLoanTenuar.selectOption({ label: "120" });
     await this.page.waitForTimeout(4000);
 
     const repayment = this.page.locator(
@@ -481,7 +495,7 @@ export class BtLoanPage extends AdminBasePage {
     await repayment.selectOption({ value: "30Days" });
     await this.page.waitForTimeout(4000);
 
-    await this.btnRadio().click();
+    await this.btnRadio.click();
     await this.page.waitForTimeout(4000);
 
     await this.enterLoanAmountBasedOnSchemeEligibility();
@@ -538,16 +552,16 @@ export class BtLoanPage extends AdminBasePage {
    * NOTE: bank document upload omitted — Java used C:\\ path (omitted per rules).
    */
   async validateBankDetails(): Promise<void> {
-    await this.accountNumber().fill("50100709899488");
+    await this.accountNumber.fill("50100709899488");
     await this.page.waitForTimeout(4000);
-    await this.ifscCode().fill("HDFC0001210");
+    await this.ifscCode.fill("HDFC0001210");
     await this.page.waitForTimeout(4000);
 
     // TODO(port): Bank document upload — Java used sendKeys to //input[@type='file'] with C:\\ path.
     // Best-effort: setInputFiles(). documentPath must be supplied from test config/env vars if needed.
 
     await this.waitForLoaderToDisappear();
-    await this.btnVerifyBankDetails().click();
+    await this.btnVerifyBankDetails.click();
   }
 
   /**
@@ -558,14 +572,14 @@ export class BtLoanPage extends AdminBasePage {
    */
   async uploadDocuments(): Promise<void> {
     await this.page.waitForTimeout(2000);
-    const element = this.img();
+    const element = this.img;
     await element.evaluate((el: any) => {
       el.scrollIntoView(true);
     });
     await this.page.evaluate("window.scrollBy(0, -150);");
     await this.page.waitForTimeout(3000);
     await element.click();
-    await this.imgCamera().click();
+    await this.imgCamera.click();
 
     // TODO(port): document uploads — Java used sendKeys to (//input[@type='file'])[1/2/7/8] with C:\\ paths.
     // Best-effort: setInputFiles(). Paths must be supplied from test config/env vars if needed.
@@ -577,7 +591,7 @@ export class BtLoanPage extends AdminBasePage {
    * Port of Flow67_ValidateForBTLoan.safeClick() — clicks Next button via jsClick.
    */
   async safeClick(): Promise<void> {
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   // ── Approval methods (from Flow67) ────────────────────────────────────────
@@ -598,60 +612,37 @@ export class BtLoanPage extends AdminBasePage {
       await this.safeClick();
     }
 
-    const element = this.selapproval();
+    const element = this.selapproval;
     await this.page.waitForTimeout(3000);
     await element.scrollIntoViewIfNeeded();
-    await this.selapproval().selectOption({ label: status });
+    await this.selapproval.selectOption({ label: status });
     await this.page.waitForTimeout(3000);
-    await this.comments().fill(status);
+    await this.comments.fill(status);
     await this.page.waitForTimeout(500);
-    await this.btnSubmit().click();
+    await this.btnSubmit.click();
   }
 
-  /**
-   * Port of Flow67_ValidateForBTLoan.rchApproval().
-   */
   async rchApproval(status = "Approved"): Promise<void> {
-    await this.performApprovalStep(() => this.btnRCHapproval(), status);
+    await this.performApprovalStep(() => this.btnRCHapproval, status);
   }
 
-  /**
-   * Port of Flow67_ValidateForBTLoan.rhApproval().
-   */
   async rhApproval(): Promise<void> {
-    await this.performApprovalStep(() => this.btnRHapproval(), "Approved");
+    await this.performApprovalStep(() => this.btnRHapproval, "Approved");
   }
 
-  /**
-   * Port of Flow67_ValidateForBTLoan.zhApproval().
-   */
   async zhApproval(): Promise<void> {
-    await this.performApprovalStep(() => this.btnZHapproval(), "Approved");
+    await this.performApprovalStep(() => this.btnZHapproval, "Approved");
   }
 
-  /**
-   * Port of Flow67_ValidateForBTLoan.ceoApproval().
-   */
   async ceoApproval(): Promise<void> {
-    await this.performApprovalStep(() => this.btnCEOapproval(), "Approved");
+    await this.performApprovalStep(() => this.btnCEOapproval, "Approved");
   }
 
-  /**
-   * Port of Flow67_ValidateForBTLoan.executeApprovalForLoanAmount().
-   * Runs approval chain based on loan amount thresholds.
-   */
   async executeApprovalForLoanAmount(loanAmount: number): Promise<void> {
     await this.rchApproval();
-
-    // Boundary convention (per approval-matrix reference): "Up to 10 Lakhs" / "10 to 25
-    // Lakhs" / "25 to 50 Lakhs" / "More than 50 Lakhs" — the boundary value itself belongs to
-    // the LOWER bracket, so each higher tier starts strictly above its threshold (`>`, not
-    // `>=`). Confirmed live-relevant: validateForBTLoan() hardcodes exactly ₹10,00,000, which
-    // must land in the RCH-only bracket, not the RCH+RH one.
     if (loanAmount > this.CEO_APPROVAL_THRESHOLD) {
       await this.rhApproval();
       await this.zhApproval();
-      // ZAH approval is handled by ZahReviewPage.validateZahReview()
       await this.ceoApproval();
     } else if (loanAmount > this.ZH_APPROVAL_THRESHOLD) {
       await this.rhApproval();
@@ -661,52 +652,34 @@ export class BtLoanPage extends AdminBasePage {
     }
     // else: RCH only (already done above)
   }
-
-  // ── Main flow methods ─────────────────────────────────────────────────────
-
-  /**
-   * Port of Flow67_ValidateForBTLoan.validateForBTLoan().
-   * Navigates to customer, starts BT process, fills BT loan details, and runs approvals.
-   *
-   * NOTE: loginWithAppraiser() is OMITTED. Caller must invoke loginAs('appraiser') first.
-   * NOTE: loanAmountValue is set above CEO_APPROVAL_THRESHOLD so RCH+RH+ZH+CEO all run here —
-   *       confirmed live that at ₹10L (RCH-only) the loan never reaches an approval tier the
-   *       Approvals-tab dropdown recognizes as "Approved" (see loanAmountValue comment below).
-   *       ZAH itself is handled separately by Flow68_ValidateZAHReview.validateZahReview(),
-   *       called by the spec as its own second @Test step.
-   */
   async validateForBTLoan(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(3000);
 
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-
-    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
-    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
-    // reject the session outright (403/401, forced redirect to /auth/login).
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
 
-    await this.customerManagementBtn().click();
+    await this.customerManagementBtn.click();
     await this.waitForLoaderToDisappear();
-    await this.allCustomers().click();
+    await this.allCustomers.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.kebabMenu().click();
-    await this.startNewBTProcess().click();
+    await this.kebabMenu.click();
+    await this.startNewBTProcess.click();
     await this.submitCreateRequest();
     await this.page.waitForTimeout(7000);
 
@@ -727,9 +700,9 @@ export class BtLoanPage extends AdminBasePage {
     // await this.page.keyboard.press("Home");
     // await this.page.waitForTimeout(3000);
 
-    // await this.kebabMenu().click();
+    // await this.kebabMenu.click();
     // await this.page.waitForTimeout(3000);
-    // await this.textField().fill(customerData.customerId.trim());
+    // await this.textField.fill(customerData.customerId.trim());
     // console.log(customerData.customerId);
     // await this.page.waitForTimeout(3000);
     // const applyBTLoan = this.page.locator(
@@ -737,10 +710,6 @@ export class BtLoanPage extends AdminBasePage {
     // );
     // await this.jsClick(applyBTLoan);
     // await this.page.waitForTimeout(500);
-    // // Confirmed live: a freshly-created BT request never shows any action button (no kebab,
-    // // no "Update Appraiser") on the "Appraiser Requests" grid — that grid's per-row actions are
-    // // keyed off Loan Type and don't have a case for "BT Loan". The dedicated BT-loan queue lives
-    // // under Loan Management → Applied BT Loan (/admin/loan-management/applied-bt-loans) instead.
     // await this.page
     //   .locator("xpath=//span[normalize-space()='Loan Management']")
     //   .click();
@@ -751,8 +720,6 @@ export class BtLoanPage extends AdminBasePage {
     // await this.waitForLoaderToDisappear();
     // await this.page.waitForTimeout(5000);
 
-    // // Confirmed live: filtering by first name alone matched many rows ("Automation Test"
-    // // recurs across prior runs) — the customer ID uniquely identifies our row.
     // const currentCustomerId = this.getCurrentCustomerId();
     // await this.page.waitForTimeout(2000);
 
@@ -773,8 +740,8 @@ export class BtLoanPage extends AdminBasePage {
         "(//button[contains(@class,'action-btn') and normalize-space(text())='Add Scheme Details'])[1]",
       )
       .click();
-    // await this.clickBankNameBox().click();
-    // await this.clickBankName().click();
+    // await this.clickBankNameBox.click();
+    // await this.clickBankName.click();
     await this.page.waitForTimeout(2000);
 
     // Close ng-select dropdown via JS
@@ -783,10 +750,10 @@ export class BtLoanPage extends AdminBasePage {
     );
     await this.page.waitForTimeout(1000);
 
-    await this.customer().click();
+    await this.customer.click();
     await this.page.waitForTimeout(1000);
 
-    const companyTypeDropdown = this.companyType();
+    const companyTypeDropdown = this.companyType;
     await companyTypeDropdown.evaluate((el: any) =>
       el.scrollIntoView({ block: "center" }),
     );
@@ -794,7 +761,7 @@ export class BtLoanPage extends AdminBasePage {
     await companyTypeDropdown.selectOption({ label: "NBFC" });
     await this.page.waitForTimeout(3000);
 
-    await this.loanNumber().fill(this.generateLoanNumber());
+    await this.loanNumber.fill(this.generateLoanNumber());
     await this.page.waitForTimeout(3000);
 
     // Confirmed live: at exactly ₹10L (RCH-only tier) the loan never reaches an RH/ZH/ZAH/CEO
@@ -803,10 +770,10 @@ export class BtLoanPage extends AdminBasePage {
     // point. Use a loan amount above the CEO threshold so the full RCH+RH+ZH+CEO chain runs
     // (ZAH itself is handled separately by ZahReviewPage.validateZahReview()).
     const loanAmountValue = "6000000";
-    await this.loanAmount().fill(loanAmountValue);
+    await this.loanAmount.fill(loanAmountValue);
     await this.page.waitForTimeout(2000);
 
-    await this.releaseAmount().fill(loanAmountValue);
+    await this.releaseAmount.fill(loanAmountValue);
     await this.page.waitForTimeout(2000);
 
     await this.selectLoanDates();
@@ -847,31 +814,31 @@ export class BtLoanPage extends AdminBasePage {
     const data = getLoginData();
     await this.page.waitForTimeout(3000);
 
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
 
     // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
     // loan-defects.page.ts) that switching this account's branch scope gets the backend to
     // reject the session outright (403/401, forced redirect to /auth/login).
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.page.waitForTimeout(500);
 
-    await this.customerManagementBtn().click();
+    await this.customerManagementBtn.click();
     await this.waitForLoaderToDisappear();
-    await this.allCustomers().click();
-    await this.firstNameFilter().fill(data.firstName);
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(5000);
-
-    await this.filterbtn().click();
+    await this.allCustomers.click();
+    await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.kebabMenu().click();
-    await this.startNewBTProcess().click();
+    await this.filterbtn.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+
+    await this.kebabMenu.click();
+    await this.startNewBTProcess.click();
     await this.submitCreateRequest();
     await this.page.waitForTimeout(7000);
 
@@ -908,8 +875,8 @@ export class BtLoanPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(15000);
 
-    // await this.clickBankNameBox().click();
-    // await this.clickBankName().click();
+    // await this.clickBankNameBox.click();
+    // await this.clickBankName.click();
     await this.page.waitForTimeout(2000);
 
     // Close ng-select dropdown via JS
@@ -918,21 +885,21 @@ export class BtLoanPage extends AdminBasePage {
     // );
     // await this.page.waitForTimeout(1000);
 
-    // await this.customer().click();
+    // await this.customer.click();
     // await this.page.waitForTimeout(500);
 
-    // const companyTypeDropdown = this.companyType();
+    // const companyTypeDropdown = this.companyType;
     // await companyTypeDropdown.selectOption({ label: "NBFC" });
     // await this.page.waitForTimeout(3000);
 
-    // await this.loanNumber().fill(this.generateLoanNumber());
+    // await this.loanNumber.fill(this.generateLoanNumber());
     // await this.page.waitForTimeout(3000);
 
     // const loanAmountValue = 150000;
-    // await this.loanAmount().fill(String(loanAmountValue));
+    // await this.loanAmount.fill(String(loanAmountValue));
     // await this.page.waitForTimeout(2000);
 
-    // await this.releaseAmount().fill(String(loanAmountValue));
+    // await this.releaseAmount.fill(String(loanAmountValue));
     // await this.page.waitForTimeout(2000);
 
     // await this.selectLoanDates();
@@ -957,7 +924,7 @@ export class BtLoanPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
 
     // Incomplete flow: Add Existing BT instead of approval chain
-    await this.btnAddExistingBT().click();
+    await this.btnAddExistingBT.click();
     await this.page.waitForTimeout(5000);
     await this.safeClick();
     await this.page.waitForTimeout(5000);

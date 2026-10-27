@@ -6,298 +6,304 @@ import { apiUrl, documentPath, autoPanNumber } from "@config/urls";
 import { existsSync } from "fs";
 import fs from "fs";
 
-/**
- * Port of Java: PO01_KycSel (locators) + Flow01_Kyc (actions)
- *
- * Cross-page locator notes:
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `btnNextFromPO04` re-declares PO04_NewGoldLoan.loc_btnNext (same XPath) — used in
- *     ValidatePersonalDetails() via Flow04_NewGoldLoan.safeClick().
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *
- * File upload TODOs:
- *   - ClickonKyc(): PAN card upload was done via Java AWT Robot / sendKeys to hidden input.
- *     Best-effort Playwright implementation uses setInputFiles(); requires a real file path at runtime.
- *   - addressandIdentity(): Aadhaar front-face upload was done via sendKeys to input#file.
- *     Best-effort Playwright implementation uses setInputFiles(); requires a real file path at runtime.
- *   - ValidatePersonalDetails(): Signature upload was done via sendKeys to (//input[@type='file'])[2].
- *     Best-effort Playwright implementation uses setInputFiles(); requires a real file path at runtime.
- *   All three are flagged DONE_WITH_CONCERNS — paths must be wired from test config/env vars.
- */
 export class KycPage extends AdminBasePage {
+  // ── Locators ──────────────────────────────────────────────────────────────
+  private readonly mobileNumber: Locator;
+  private readonly firstName_kycFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly applyKyc: Locator;
+  private readonly radiobtn: Locator;
+  private readonly kycDetails: Locator;
+  private readonly radiobtnOvdAuto: Locator;
+  private readonly radiobtnPanCard: Locator;
+  private readonly ovdNumberField: Locator;
+  private readonly btnVerifyOvd: Locator;
+  private readonly panNumberField: Locator;
+  private readonly btnVerifyPan: Locator;
+  private readonly btnVerifyAadhaar: Locator;
+  private readonly consentModalHeading: Locator;
+  private readonly btnSendConsentSms: Locator;
+  private readonly btnCancelAadhaarConsent: Locator;
+  private readonly btnSubmitAadhaarOtp: Locator;
+  private readonly consentOtpInputs: Locator;
+  private readonly panfield: Locator;
+  private readonly selPan: Locator;
+  private readonly btnPanYes: Locator;
+  private readonly btnNext: Locator;
+  private readonly btnYes: Locator;
+  private readonly aadharfield: Locator;
+  private readonly checkMark: Locator;
+  private readonly seladhar: Locator;
+  private readonly addressProofTypeDropdown: Locator;
+  private readonly addresField: Locator;
+  private readonly sameAsPermanentAddressCheckbox: Locator;
+  private readonly uniqueCusyomerNumber: Locator;
+  private readonly landMark: Locator;
+  private readonly landMarkField: Locator;
+  private readonly radiobtn1: Locator;
+  private readonly btnyes: Locator;
+  private readonly profileLink: Locator;
+  private readonly imgCamera: Locator;
+  private readonly profile: Locator;
+  private readonly Radio: Locator;
+  private readonly dateInput: Locator;
+  private readonly dateArrow: Locator;
+  private readonly dateArrow1: Locator;
+  private readonly dateYear: Locator;
+  private readonly dateMonth: Locator;
+  private readonly dateDay: Locator;
+  private readonly Radio1: Locator;
+  private readonly occupation: Locator;
+  private readonly txtSpouseName: Locator;
+  private readonly txtMotherName: Locator;
+  private readonly mobileField: Locator;
+  private readonly qualification: Locator;
+  private readonly btnok: Locator;
+  private readonly img: Locator;
+  private readonly btnReviewandSubmit: Locator;
+  private readonly clickUserMangaement: Locator;
+  private readonly clickInternalUser: Locator;
+  private readonly ArrowNavi: Locator;
+  private readonly searchField: Locator;
+  private readonly btnEdit: Locator;
+  private readonly selArrow: Locator;
+  private readonly chkRadio: Locator;
+  private readonly btnUpdate: Locator;
+  private readonly selBranch: Locator;
+  private readonly customerUniqID: Locator;
+  private readonly arrow: Locator;
+  private readonly btnNextPO04: Locator;
+  private readonly branchDropdownWaitOnly: Locator;
+  private readonly customerManagementNav: Locator;
+  private readonly allCustomersNav: Locator;
+  private readonly kycDetailsNavOps: Locator;
+  private readonly appliedKycNavOps: Locator;
+  private readonly btnActionOps: Locator;
+  private readonly kycStatusDropdown: Locator;
+  private readonly reasonForIncomplete: Locator;
+  private readonly btnSubmitOps: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // Confirmed live (2026-09-02): the Aadhaar-consent OTP modal's 6 per-digit boxes are plain
-  // <input> elements with no name/id/autocomplete attribute BasePage's default
-  // otpInputLocator() looks for — scope to the currently-open CDK overlay pane instead.
-  protected otpInputLocator(): Locator {
-    return this.consentOtpInputs();
-  }
-
-  // ── Locators (from PO01_KycSel) ────────────────────────────────────────────
-
-  private readonly mobileNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Mobile Number']");
-  private readonly firstName_kycFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly applyKyc = () =>
-    this.page.locator("xpath=//button[normalize-space()='Apply KYC']").first(); // select first match to avoid strict mode violation
-  private readonly radiobtn = () =>
-    this.page.locator(
+    this.mobileNumber = this.page.locator(
+      "xpath=//input[@placeholder='Enter Mobile Number']",
+    );
+    this.firstName_kycFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.applyKyc = this.page
+      .locator("xpath=//button[normalize-space()='Apply KYC']")
+      .first(); // select first match to avoid strict mode violation
+    this.radiobtn = this.page.locator(
       "xpath=//mat-radio-button[.//div[contains(normalize-space(),'Manual')]]",
     );
-  private readonly kycDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='KYC Details']");
-  private readonly radiobtnOvdAuto = () =>
-    this.page.locator(".toggle-card", { hasText: "OVD (No PAN)" });
-  // Confirmed live (2026-09-04): re-verified the above comment's finding while building the
-  // KYC-Incomplete-edit flow — ClickonKyc()'s own `radiobtn()` (querying a "Manual"
-  // mat-radio-button) is now permanently dead on this UI too, not just an approximation; the
-  // live wizard has no "Manual" option at all. Screenshot confirmed the sibling "PAN Card"
-  // toggle-card (same `.toggle-card` markup as radiobtnOvdAuto's "OVD (No PAN)" card) is what
-  // ClickonKyc()'s manual/PAN-based path actually needs, and it's already selected by default
-  // — clicking it is just an explicit/idempotent confirmation of that default.
-  private readonly radiobtnPanCard = () =>
-    this.page.locator(".toggle-card", { hasText: "PAN Card" });
-  // OVD Verification section (tab 1, after selecting OVD (No PAN)) — confirmed via live
-  // outerHTML dump: <input formcontrolname="ovdNumber" placeholder="MH14 20210012345" .../>.
-  private readonly ovdNumberField = () =>
-    this.page.locator("xpath=//input[@formcontrolname='ovdNumber']");
-  private readonly btnVerifyOvd = () =>
-    this.page.locator("xpath=//button[normalize-space()='Verify']").first();
-  // PAN Verification section (tab 1, default identity path) — confirmed via live ARIA
-  // snapshot: textbox placeholder "AAAAA9999A", button "Verify PAN".
-  private readonly panNumberField = () =>
-    this.page.locator("xpath=//input[@placeholder='AAAAA9999A']");
-  private readonly btnVerifyPan = () =>
-    this.page.locator("xpath=//button[normalize-space()='Verify PAN']");
-  private readonly btnVerifyAadhaar = () =>
-    this.page
+    this.kycDetails = this.page.locator(
+      "xpath=//span[normalize-space()='KYC Details']",
+    );
+    this.radiobtnOvdAuto = this.page.locator(".toggle-card", {
+      hasText: "OVD (No PAN)",
+    });
+    this.radiobtnPanCard = this.page.locator(".toggle-card", {
+      hasText: "PAN Card",
+    });
+    this.ovdNumberField = this.page.locator(
+      "xpath=//input[@formcontrolname='ovdNumber']",
+    );
+    this.btnVerifyOvd = this.page
+      .locator("xpath=//button[normalize-space()='Verify']")
+      .first();
+    this.panNumberField = this.page.locator(
+      "xpath=//input[@placeholder='AAAAA9999A']",
+    );
+    this.btnVerifyPan = this.page.locator(
+      "xpath=//button[normalize-space()='Verify PAN']",
+    );
+    this.btnVerifyAadhaar = this.page
       .locator(
         "xpath=//button[contains(translate(normalize-space(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'verify')]",
       )
       .first();
-  // Confirmed live (2026-09-01) via screenshot: clicking "Verify Aadhaar" opens a "Consent
-  // for Aadhaar verification" modal with a "Send Consent SMS" button before any OTP is sent.
-  // Root-caused a real bug here (2026-09-02): this `contains(normalize-space(), ...)` XPath
-  // matches every ANCESTOR of the heading too (each one's normalize-space() also contains
-  // the same substring), so once the modal actually renders, .waitFor() hits a strict-mode
-  // violation (>1 match) and REJECTS almost instantly — not a timeout. `.catch(() => false)`
-  // silently swallowed that as "not visible", making the modal look like a slow/inconsistent
-  // timing issue across many live runs when it was actually present the whole time. `.first()`
-  // resolves the innermost match in document order, avoiding the violation entirely.
-  private readonly consentModalHeading = () =>
-    this.page
+    this.consentModalHeading = this.page
       .locator(
         "xpath=//*[contains(normalize-space(),'Consent for Aadhaar verification')]",
       )
       .first();
-  private readonly btnSendConsentSms = () =>
-    this.page.locator("xpath=//button[normalize-space()='Send Consent SMS']");
-  // Confirmed live (2026-09-05) via screenshot: the "Consent for Aadhaar verification" modal
-  // has a "Cancel" button next to "Send Consent SMS" (plus an unlabeled X close icon) — this is
-  // the manual-KYC path's dismiss action, used instead of completing the OTP flow.
-  private readonly btnCancelAadhaarConsent = () =>
-    this.page.locator("xpath=//button[normalize-space()='Cancel']");
-  // Post-OTP confirm button — confirmed live (2026-09-02) via screenshot: the modal
-  // relabels itself "Enter OTP received by customer" after Send Consent SMS, with 6 plain
-  // per-digit OTP boxes and a "Consent Received" button (not "Verify OTP"/"Submit").
-  private readonly btnSubmitAadhaarOtp = () =>
-    this.page.locator("xpath=//button[normalize-space()='Consent Received']");
-  // The 6 per-digit OTP boxes in that same modal — plain <input> elements with no
-  // recognizable name/id/autocomplete, so BasePage's generic otpInputLocator() doesn't
-  // match them; scope to inputs inside the currently-open CDK overlay pane instead
-  // (overridden below).
-  private readonly consentOtpInputs = () =>
-    this.page.locator(
+    this.btnSendConsentSms = this.page.locator(
+      "xpath=//button[normalize-space()='Send Consent SMS']",
+    );
+    this.btnCancelAadhaarConsent = this.page.locator(
+      "xpath=//button[normalize-space()='Cancel']",
+    );
+    this.btnSubmitAadhaarOtp = this.page.locator(
+      "xpath=//button[normalize-space()='Consent Received']",
+    );
+    this.consentOtpInputs = this.page.locator(
       "xpath=//*[contains(@class,'cdk-overlay-pane')]//input[@type='text' or not(@type)]",
     );
-  private readonly panfield = () =>
-    this.page.locator("xpath=//input[@placeholder='PAN']");
-  private readonly selPan = () =>
-    this.page.locator("xpath=//select[@formcontrolname='panType']");
-  private readonly btnPanYes = () =>
-    this.page
+    this.panfield = this.page.locator("xpath=//input[@placeholder='PAN']");
+    this.selPan = this.page.locator(
+      "xpath=//select[@formcontrolname='panType']",
+    );
+    this.btnPanYes = this.page
       .locator(
         "xpath=//button[@type='submit']//span[normalize-space()='Yes']/parent::button",
       )
       .first();
-  private readonly btnNext = () =>
-    this.page
+    this.btnNext = this.page
       .locator("xpath=//button[.//span[normalize-space()='Next']]")
       .first();
-  private readonly btnYes = () =>
-    this.page
+    this.btnYes = this.page
       .locator("xpath=//button[.//span[normalize-space()='Yes']]")
       .first();
-  private readonly aadharfield = () =>
-    this.page.locator("xpath=//input[@class='form-control']");
-  private readonly checkMark = () =>
-    this.page.locator("xpath=//span[@class='checkmark top-0']");
-  private readonly seladhar = () =>
-    this.page.locator(
+    this.aadharfield = this.page.locator(
+      "xpath=//input[@class='form-control']",
+    );
+    this.checkMark = this.page.locator(
+      "xpath=//span[@class='checkmark top-0']",
+    );
+    this.seladhar = this.page.locator(
       "xpath=(//select[@formcontrolname='addressProofTypeId'])[1]",
     );
-  // New wizard only: seladhar()'s [1] index can land on the disabled residential-mirror
-  // copy instead of the visible permanent one — same duplicate-field pattern already found
-  // for landmark/the address textarea. Scope to the non-disabled instance instead.
-  private readonly addressProofTypeDropdown = () =>
-    this.page
+    this.addressProofTypeDropdown = this.page
       .locator(
         "xpath=//select[@formcontrolname='addressProofTypeId' and not(@disabled)]",
       )
       .first();
-  private readonly addresField = () =>
-    this.page.locator("xpath=//textarea[@id='permanent-address']");
-  // Confirmed live via screenshot (2026-09-03): "Current Residential Address same as
-  // Permanent Address" checkbox, on tab 2's Permanent Address section — a plain square
-  // <input type="checkbox">, NOT a mat-checkbox (that first guess never matched). It
-  // visually precedes its label text, so target the nearest checkbox input before it.
-  private readonly sameAsPermanentAddressCheckbox = () =>
-    this.page
+    this.addresField = this.page.locator(
+      "xpath=//textarea[@id='permanent-address']",
+    );
+    this.sameAsPermanentAddressCheckbox = this.page
       .locator(
         "xpath=//*[contains(normalize-space(),'Current Residential Address same as Permanent Address')]/preceding::input[@type='checkbox'][1]",
       )
       .first();
-  private readonly uniqueCusyomerNumber = () =>
-    this.page.locator(
+    this.uniqueCusyomerNumber = this.page.locator(
       "xpath=(//label[@class='mandatory font-weight-500 text-color'][normalize-space()='Unique Identity No.']//following::input)[1]",
     );
-  private readonly landMark = () =>
-    this.page.locator("xpath=//input[@id='permanent-landmark']");
-  private readonly landMarkField = () =>
-    this.page.locator("xpath=//input[@id='permanent-landmark']");
-  private readonly radiobtn1 = () =>
-    this.page.locator("xpath=(//div[@class='mat-radio-inner-circle'])[2]");
-  private readonly btnyes = () =>
-    this.page
+    this.landMark = this.page.locator(
+      "xpath=//input[@id='permanent-landmark']",
+    );
+    this.landMarkField = this.page.locator(
+      "xpath=//input[@id='permanent-landmark']",
+    );
+    this.radiobtn1 = this.page.locator(
+      "xpath=(//div[@class='mat-radio-inner-circle'])[2]",
+    );
+    this.btnyes = this.page
       .locator("xpath=//button[@type='submit' and contains(., 'Yes')]")
       .first();
-  private readonly profileLink = () =>
-    this.page.locator(
+    this.profileLink = this.page.locator(
       "xpath=//label[normalize-space()='Upload Profile Picture']",
     );
-  private readonly imgCamera = () =>
-    this.page.locator(
+    this.imgCamera = this.page.locator(
       "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
     );
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly Radio = () =>
-    this.page.locator("xpath=(//mat-radio-button)[1]");
-  private readonly dateInput = () =>
-    this.page.locator("xpath=//input[@placeholder='DD/MM/YYYY']");
-  private readonly dateArrow = () =>
-    this.page.locator("xpath=(//div[@class='mat-calendar-arrow'])[1]");
-  private readonly dateArrow1 = () =>
-    this.page.locator("xpath=//button[@aria-label='Previous 20 years']");
-  private readonly dateYear = () =>
-    this.page.locator("xpath=//div[normalize-space()='2003']");
-  private readonly dateMonth = () =>
-    this.page.locator("xpath=//div[normalize-space()='JAN']");
-  private readonly dateDay = () =>
-    this.page.locator(
+    this.Radio = this.page.locator("xpath=(//mat-radio-button)[1]");
+    this.dateInput = this.page.locator(
+      "xpath=//input[@placeholder='DD/MM/YYYY']",
+    );
+    this.dateArrow = this.page.locator(
+      "xpath=(//div[@class='mat-calendar-arrow'])[1]",
+    );
+    this.dateArrow1 = this.page.locator(
+      "xpath=//button[@aria-label='Previous 20 years']",
+    );
+    this.dateYear = this.page.locator("xpath=//div[normalize-space()='2003']");
+    this.dateMonth = this.page.locator("xpath=//div[normalize-space()='JAN']");
+    this.dateDay = this.page.locator(
       "xpath=//div[@class='mat-calendar-body-cell-content'][normalize-space()='1']",
     );
-  private readonly Radio1 = () =>
-    this.page.locator(
+    this.Radio1 = this.page.locator(
       "xpath=//label[@for='mat-radio-10-input']//div[@class='mat-radio-inner-circle']",
     );
-  private readonly occupation = () =>
-    this.page.locator("xpath=//input[@role='combobox']");
-  private readonly txtSpouseName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='spouseName']");
-  private readonly txtMotherName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='motherName']");
-  private readonly mobileField = () =>
-    this.page.locator("xpath=//input[@placeholder='Mobile Number']");
-  private readonly qualification = () =>
-    this.page.locator("xpath=//select[@formcontrolname='qualificationId']");
-  private readonly btnok = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  private readonly img = () =>
-    this.page.locator(
+    this.occupation = this.page.locator("xpath=//input[@role='combobox']");
+    this.txtSpouseName = this.page.locator(
+      "xpath=//input[@formcontrolname='spouseName']",
+    );
+    this.txtMotherName = this.page.locator(
+      "xpath=//input[@formcontrolname='motherName']",
+    );
+    this.mobileField = this.page.locator(
+      "xpath=//input[@placeholder='Mobile Number']",
+    );
+    this.qualification = this.page.locator(
+      "xpath=//select[@formcontrolname='qualificationId']",
+    );
+    this.btnok = this.page.locator("xpath=//button[@type='submit']");
+    this.img = this.page.locator(
       "xpath=(//div[@class='offset-4 img-container ng-star-inserted'])[2]",
     );
-  private readonly btnReviewandSubmit = () =>
-    this.page
+    this.btnReviewandSubmit = this.page
       .locator("xpath=//button[.//span[normalize-space()='Review & Submit']]")
       .first();
-  private readonly clickUserMangaement = () =>
-    this.page.locator("xpath=//span[normalize-space()='User Management']");
-  private readonly clickInternalUser = () =>
-    this.page.locator("xpath=//span[normalize-space()='Internal User']");
-  private readonly ArrowNavi = () =>
-    this.page.locator(
+    this.clickUserMangaement = this.page.locator(
+      "xpath=//span[normalize-space()='User Management']",
+    );
+    this.clickInternalUser = this.page.locator(
+      "xpath=//span[normalize-space()='Internal User']",
+    );
+    this.ArrowNavi = this.page.locator(
       "xpath=//select[@id='branch']//following::option[contains(.,'Augmont Amritsar')]",
     );
-  private readonly searchField = () =>
-    this.page.locator(
+    this.searchField = this.page.locator(
       "xpath=//div[@class='d-none d-md-inline']//following::input[@placeholder='Search...'][1]",
     );
-  private readonly btnEdit = () =>
-    this.page.locator("xpath=//div[@class='kt-pointer ng-star-inserted']");
-  private readonly selArrow = () =>
-    this.page.locator("xpath=//span[@class='ng-arrow-wrapper']");
-  private readonly chkRadio = () =>
-    this.page.locator(
+    this.btnEdit = this.page.locator(
+      "xpath=//div[@class='kt-pointer ng-star-inserted']",
+    );
+    this.selArrow = this.page.locator(
+      "xpath=//span[@class='ng-arrow-wrapper']",
+    );
+    this.chkRadio = this.page.locator(
       "xpath=//div[@id='a789ec98fd87-5']//span[@class='checkmark checkmark-custom']",
     );
-  private readonly btnUpdate = () =>
-    this.page.locator(
+    this.btnUpdate = this.page.locator(
       "xpath=//button[contains(.,'Update') and contains(@class,'submit')]",
     );
-  private readonly selBranch = () =>
-    this.page.locator(
+    this.selBranch = this.page.locator(
       "xpath=(//span[contains(.,'Augmont Amritsar')]//following::input[@type='checkbox'][6])[1]",
     );
-  private readonly customerUniqID = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer ID']");
-
-  // Cross-page re-declarations
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
-      "input[placeholder*='PAN']"
+    this.customerUniqID = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer ID']",
     );
-  // PO04_NewGoldLoan.loc_btnNext (used via Flow04_NewGoldLoan.safeClick in ValidatePersonalDetails)
-  private readonly btnNextPO04 = () =>
-    this.page
+    this.arrow = this.page.locator("input[placeholder*='PAN']");
+    this.btnNextPO04 = this.page
       .locator("xpath=//button[span[normalize-space() = 'Next']]")
       .first();
-  private readonly branchDropdownWaitOnly = () =>
-    this.page.locator(
+    this.branchDropdownWaitOnly = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  private readonly customerManagementNav = () =>
-    this.page.locator(
+    this.customerManagementNav = this.page.locator(
       "xpath=(//span[normalize-space()='Customer Management'])[1]",
     );
-  private readonly allCustomersNav = () =>
-    this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  private readonly kycDetailsNavOps = () =>
-    this.page.locator("xpath=//span[normalize-space()='KYC Details']");
-  private readonly appliedKycNavOps = () =>
-    this.page.locator("xpath=//span[normalize-space()='Applied KYC']");
-  private readonly btnActionOps = () =>
-    this.page.locator("xpath=(//strong[contains(text(),'Action >')])[1]");
-  private readonly kycStatusDropdown = () =>
-    this.page.locator(
+    this.allCustomersNav = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.kycDetailsNavOps = this.page.locator(
+      "xpath=//span[normalize-space()='KYC Details']",
+    );
+    this.appliedKycNavOps = this.page.locator(
+      "xpath=//span[normalize-space()='Applied KYC']",
+    );
+    this.btnActionOps = this.page.locator(
+      "xpath=(//strong[contains(text(),'Action >')])[1]",
+    );
+    this.kycStatusDropdown = this.page.locator(
       "xpath=//select[@formcontrolname='kycStatusFromOperationalTeam']",
     );
-  private readonly reasonForIncomplete = () =>
-    this.page.locator(
+    this.reasonForIncomplete = this.page.locator(
       "xpath=//textarea[@formcontrolname='reasonFromOperationalTeam']",
     );
-  private readonly btnSubmitOps = () =>
-    this.page.locator("xpath=//span[contains(.,'Submit')]");
+    this.btnSubmitOps = this.page.locator("xpath=//span[contains(.,'Submit')]");
+  }
+
+  protected otpInputLocator(): Locator {
+    return this.consentOtpInputs;
+  }
 
   public async uploadFileWithValidation(
     filePath: string | undefined,
@@ -373,19 +379,19 @@ export class KycPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
 
     const customerId = this.getCurrentCustomerId();
-    await this.customerUniqID().fill(customerId);
+    await this.customerUniqID.fill(customerId);
     console.log(customerId);
-    //await this.firstName_kycFilter().fill(data.firstName);
+    //await this.firstName_kycFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
   }
   async validateApplyKycButton(): Promise<{
     isDisplayed: boolean;
     isEnabled: boolean;
   }> {
-    const applyKycBtn = this.applyKyc();
+    const applyKycBtn = this.applyKyc;
     await applyKycBtn.waitFor({ state: "visible", timeout: 15000 });
     const isDisplayed = await applyKycBtn.isVisible();
     const isEnabled = await applyKycBtn.isEnabled();
@@ -403,22 +409,22 @@ export class KycPage extends AdminBasePage {
     const randomPan = panNumber ?? this.randomPanGenerator();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.applyKyc().click();
+    await this.applyKyc.click();
     await this.page.waitForTimeout(5000);
-    await this.radiobtnPanCard().click();
+    await this.radiobtnPanCard.click();
     await this.waitForLoaderToDisappear();
-    await this.dateInput().click();
+    await this.dateInput.click();
     await this.waitForLoaderToDisappear();
-    await this.dateArrow().click();
+    await this.dateArrow.click();
     await this.page.waitForTimeout(1000);
-    await this.dateYear().click();
+    await this.dateYear.click();
     await this.page.waitForTimeout(1000);
-    await this.dateMonth().click();
+    await this.dateMonth.click();
     await this.page.waitForTimeout(1000);
-    await this.dateDay().click();
+    await this.dateDay.click();
     await this.page.waitForTimeout(1000);
 
-    await this.panNumberField().fill(randomPan);
+    await this.panNumberField.fill(randomPan);
     await this.page.waitForTimeout(1000);
     await this.uploadFileWithValidation(
       panCardPath,
@@ -460,7 +466,7 @@ export class KycPage extends AdminBasePage {
           { timeout: 20000 },
         )
         .catch(() => null);
-      await this.btnVerifyPan().click({ timeout: 30000 });
+      await this.btnVerifyPan.click({ timeout: 30000 });
       await this.waitForLoaderToDisappear();
       const response = await responsePromise;
       verifyPanResponse = response;
@@ -506,7 +512,7 @@ export class KycPage extends AdminBasePage {
           { timeout: 20000 },
         )
         .catch(() => null);
-      await this.btnVerifyPan().click({ timeout: 30000 });
+      await this.btnVerifyPan.click({ timeout: 30000 });
       await this.waitForLoaderToDisappear();
       const response = await responsePromise;
       verifyPanResponse = response;
@@ -534,12 +540,12 @@ export class KycPage extends AdminBasePage {
     }
 
     if (panVerifySucceeded) {
-      const panYesAppeared = await this.btnPanYes()
+      const panYesAppeared = await this.btnPanYes
         .waitFor({ state: "visible", timeout: 15000 })
         .then(() => true)
         .catch(() => false);
       if (panYesAppeared) {
-        await this.btnPanYes().click();
+        await this.btnPanYes.click();
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(3000);
       }
@@ -633,7 +639,7 @@ export class KycPage extends AdminBasePage {
     month: string,
     year: string,
   ): Promise<void> {
-    await this.dateArrow().click();
+    await this.dateArrow.click();
     await this.page.waitForTimeout(1000);
 
     const yearCell = this.page.locator(
@@ -643,7 +649,7 @@ export class KycPage extends AdminBasePage {
       .isVisible()
       .catch(() => false);
     if (!yearVisibleOnFirstPage) {
-      await this.dateArrow1().click();
+      await this.dateArrow1.click();
       await this.page.waitForTimeout(1000);
     }
     await yearCell.click();
@@ -669,14 +675,14 @@ export class KycPage extends AdminBasePage {
     const randomPan = panNumber ?? this.randomPanGenerator();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.applyKyc().click();
+    await this.applyKyc.click();
     await this.page.waitForTimeout(5000);
-    await this.radiobtnPanCard().click();
+    await this.radiobtnPanCard.click();
     await this.waitForLoaderToDisappear();
-    await this.dateInput().click();
+    await this.dateInput.click();
     await this.waitForLoaderToDisappear();
     await this.selectDobFromCalendar("20", "APR", "1995");
-    await this.panNumberField().fill(randomPan);
+    await this.panNumberField.fill(randomPan);
     await this.page.waitForTimeout(1000);
     await this.uploadFileWithValidation(
       panCardPath,
@@ -719,7 +725,7 @@ export class KycPage extends AdminBasePage {
           { timeout: 20000 },
         )
         .catch(() => null);
-      await this.btnVerifyPan().click({ timeout: 30000 });
+      await this.btnVerifyPan.click({ timeout: 30000 });
       await this.waitForLoaderToDisappear();
       const response = await responsePromise;
       verifyPanResponse = response;
@@ -772,7 +778,7 @@ export class KycPage extends AdminBasePage {
             { timeout: 20000 },
           )
           .catch(() => null);
-        await this.btnVerifyPan().click({ timeout: 30000 });
+        await this.btnVerifyPan.click({ timeout: 30000 });
         await this.waitForLoaderToDisappear();
         const response = await responsePromise;
         verifyPanResponse = response;
@@ -829,12 +835,12 @@ export class KycPage extends AdminBasePage {
       );
     }
 
-    const panYesAppeared = await this.btnPanYes()
+    const panYesAppeared = await this.btnPanYes
       .waitFor({ state: "visible", timeout: 15000 })
       .then(() => true)
       .catch(() => false);
     if (panYesAppeared) {
-      await this.btnPanYes().click();
+      await this.btnPanYes.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(3000);
     }
@@ -974,24 +980,24 @@ export class KycPage extends AdminBasePage {
     await this.ValidatePersonalDetails(signaturePath);
     await this.page.waitForTimeout(4000);
     await this.reviewAndSubmit();
-    // await this.radiobtn().click();
+    // await this.radiobtn.click();
     // await this.waitForLoaderToDisappear();
-    // await this.selPan().click();
+    // await this.selPan.click();
     // await this.waitForLoaderToDisappear();
     // await this.selectAsPan();
-    // await this.selPan().click();
+    // await this.selPan.click();
     // await this.waitForLoaderToDisappear();
     // await this.page.waitForTimeout(5000);
     // await this.uploadFileWithValidation(panCardPath, "xpath=//input[@type='file']", "PAN card");
     // await this.page.waitForTimeout(5000);
-    // await this.panfield().fill(randomPan);
+    // await this.panfield.fill(randomPan);
     // await this.page.waitForTimeout(1000);
-    // const btnNextEl = this.btnNext();
+    // const btnNextEl = this.btnNext;
     // await btnNextEl.scrollIntoViewIfNeeded();
     // await this.page.waitForTimeout(1500);
-    // await this.btnNext().click();
+    // await this.btnNext.click();
     // await this.waitForLoaderToDisappear();
-    // await this.btnYes().click();
+    // await this.btnYes.click();
     // await this.waitForLoaderToDisappear();
     // await this.page.waitForTimeout(15000);
     // await this.page.locator("xpath=//mat-radio-button[contains(@class,'mat-radio-button')][2]").click();
@@ -1066,24 +1072,24 @@ export class KycPage extends AdminBasePage {
 
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.applyKyc().click();
+    await this.applyKyc.click();
     await this.page.waitForTimeout(5000);
-    await this.radiobtnOvdAuto().click();
+    await this.radiobtnOvdAuto.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
 
-    await this.dateInput().click();
+    await this.dateInput.click();
     await this.waitForLoaderToDisappear();
-    await this.dateArrow().click();
+    await this.dateArrow.click();
     await this.page.waitForTimeout(1000);
-    await this.dateYear().click();
+    await this.dateYear.click();
     await this.page.waitForTimeout(1000);
-    await this.dateMonth().click();
+    await this.dateMonth.click();
     await this.page.waitForTimeout(1000);
-    await this.dateDay().click();
+    await this.dateDay.click();
     await this.page.waitForTimeout(1000);
 
-    await this.ovdNumberField().fill(randomOvdNumber);
+    await this.ovdNumberField.fill(randomOvdNumber);
     await this.page.waitForTimeout(1000);
 
     let ovdVerifySucceeded = false;
@@ -1095,7 +1101,7 @@ export class KycPage extends AdminBasePage {
           { timeout: 20000 },
         )
         .catch(() => null);
-      await this.btnVerifyOvd().click({ timeout: 30000 });
+      await this.btnVerifyOvd.click({ timeout: 30000 });
       await this.waitForLoaderToDisappear();
       const response = await responsePromise;
       await this.page
@@ -1154,7 +1160,7 @@ export class KycPage extends AdminBasePage {
       await this.page.waitForTimeout(3000);
     }
 
-    const stillOnTab1 = await this.ovdNumberField()
+    const stillOnTab1 = await this.ovdNumberField
       .isVisible()
       .catch(() => false);
     if (stillOnTab1) {
@@ -1243,7 +1249,7 @@ export class KycPage extends AdminBasePage {
       }
     };
     this.page.on("request", requestListener);
-    await this.btnVerifyAadhaar().click();
+    await this.btnVerifyAadhaar.click();
     await this.waitForLoaderToDisappear();
     const response = await responsePromise;
     let body = "";
@@ -1303,7 +1309,7 @@ export class KycPage extends AdminBasePage {
   }
 
   private async dismissAadhaarConsentModalIfPresent(): Promise<void> {
-    const consentModalOpen = await this.consentModalHeading()
+    const consentModalOpen = await this.consentModalHeading
       .waitFor({ state: "visible", timeout: 5000 })
       .then(() => true)
       .catch(() => false);
@@ -1311,9 +1317,9 @@ export class KycPage extends AdminBasePage {
     console.log(
       "Aadhaar consent modal appeared after Verify Aadhaar — clicking Cancel to skip OTP (manual-KYC path).",
     );
-    await this.btnCancelAadhaarConsent().click();
+    await this.btnCancelAadhaarConsent.click();
     await this.page.waitForTimeout(500);
-    const stillOpen = await this.consentModalHeading()
+    const stillOpen = await this.consentModalHeading
       .isVisible()
       .catch(() => false);
     if (stillOpen) {
@@ -1326,7 +1332,7 @@ export class KycPage extends AdminBasePage {
   private async completeAadhaarConsentModalIfPresent(
     otp: string = "123456",
   ): Promise<void> {
-    const consentModalOpen = await this.consentModalHeading()
+    const consentModalOpen = await this.consentModalHeading
       .waitFor({ state: "visible", timeout: 5000 })
       .then(() => true)
       .catch(() => false);
@@ -1335,7 +1341,7 @@ export class KycPage extends AdminBasePage {
     console.log(
       "Aadhaar consent modal appeared after Verify Aadhaar — sending consent SMS and submitting OTP.",
     );
-    const sendConsentSms = this.btnSendConsentSms();
+    const sendConsentSms = this.btnSendConsentSms;
     await sendConsentSms.waitFor({ state: "visible", timeout: 10000 });
     await sendConsentSms.click();
     await this.waitForLoaderToDisappear();
@@ -1343,7 +1349,7 @@ export class KycPage extends AdminBasePage {
     await this.fillOtp(otp);
     await this.page.waitForTimeout(500);
 
-    const submitOtp = this.btnSubmitAadhaarOtp();
+    const submitOtp = this.btnSubmitAadhaarOtp;
     await submitOtp.waitFor({ state: "visible", timeout: 10000 });
     await submitOtp.click();
     await this.waitForLoaderToDisappear();
@@ -1356,7 +1362,7 @@ export class KycPage extends AdminBasePage {
     const errorText = errorVisible
       ? await errorBanner.innerText().catch(() => "")
       : "";
-    const stillOpen = await this.consentModalHeading()
+    const stillOpen = await this.consentModalHeading
       .isVisible()
       .catch(() => false);
 
@@ -1400,15 +1406,15 @@ export class KycPage extends AdminBasePage {
     ): Promise<string> => {
       await select.waitFor({ state: "visible", timeout: 15000 });
       for (let i = 0; i < 15; i++) {
-        const opts = await select
-          .locator("option")
-          .evaluateAll((els) =>
-            els.map((o) => ({
-              value: (o as HTMLOptionElement).value,
-              text: (o.textContent || "").trim(),
-            })),
-          );
-        const real = opts.filter((o) => o.value && !/^select|^--/i.test(o.text));
+        const opts = await select.locator("option").evaluateAll((els) =>
+          els.map((o) => ({
+            value: (o as HTMLOptionElement).value,
+            text: (o.textContent || "").trim(),
+          })),
+        );
+        const real = opts.filter(
+          (o) => o.value && !/^select|^--/i.test(o.text),
+        );
         if (real.length) {
           const pick = real.find((o) => prefer.test(o.text)) ?? real[0];
           await select.selectOption({ value: pick.value });
@@ -1421,7 +1427,10 @@ export class KycPage extends AdminBasePage {
       throw new Error("Dropdown never offered any selectable option.");
     };
 
-    const state = await pickOption(fieldAfter("State", "select"), /maharashtra/i);
+    const state = await pickOption(
+      fieldAfter("State", "select"),
+      /maharashtra/i,
+    );
     const city = await pickOption(fieldAfter("City", "select"), /mumbai|pune/i);
     console.log(`Permanent address: state="${state}", city="${city}"`);
 
@@ -1473,7 +1482,7 @@ export class KycPage extends AdminBasePage {
     kind: keyof typeof KycPage.ADDRESS_PROOFS,
   ): Promise<string> {
     const { match, label } = KycPage.ADDRESS_PROOFS[kind];
-    const dropdown = this.addressProofTypeDropdown();
+    const dropdown = this.addressProofTypeDropdown;
     await dropdown.waitFor({ state: "visible", timeout: 20000 });
 
     const options = await dropdown
@@ -1509,7 +1518,7 @@ export class KycPage extends AdminBasePage {
     aadharNumber: string,
     addressProof: keyof typeof KycPage.ADDRESS_PROOFS = "aadhaar",
   ): Promise<void> {
-    const sameAddressCheckbox = this.sameAsPermanentAddressCheckbox();
+    const sameAddressCheckbox = this.sameAsPermanentAddressCheckbox;
     const alreadyChecked = await sameAddressCheckbox
       .isChecked()
       .catch(() => false);
@@ -1615,7 +1624,7 @@ export class KycPage extends AdminBasePage {
       .waitFor({ state: "hidden", timeout: 10000 })
       .catch(() => {});
 
-    const panField = this.panNumberField();
+    const panField = this.panNumberField;
     await panField.waitFor({ state: "visible", timeout: 20000 });
     await panField.scrollIntoViewIfNeeded();
     await panField.click();
@@ -1649,7 +1658,7 @@ export class KycPage extends AdminBasePage {
           { timeout: 20000 },
         )
         .catch(() => null);
-      await this.btnVerifyPan().click({ timeout: 30000 });
+      await this.btnVerifyPan.click({ timeout: 30000 });
       await this.waitForLoaderToDisappear();
       const response = await responsePromise;
       if (response) {
@@ -1686,12 +1695,12 @@ export class KycPage extends AdminBasePage {
       );
     }
 
-    const panYesAppeared = await this.btnPanYes()
+    const panYesAppeared = await this.btnPanYes
       .waitFor({ state: "visible", timeout: 15000 })
       .then(() => true)
       .catch(() => false);
     if (panYesAppeared) {
-      await this.btnPanYes().click();
+      await this.btnPanYes.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(3000);
     }
@@ -1716,7 +1725,7 @@ export class KycPage extends AdminBasePage {
   ): Promise<string> {
     await this.confirmOsvIfPresent();
     await this.completeAadhaarConsentModalIfPresent();
-    const aadhaarField = this.aadharfield();
+    const aadhaarField = this.aadharfield;
     await aadhaarField.waitFor({ state: "visible", timeout: 20000 });
 
     const maxAttempts = 3;
@@ -1790,7 +1799,7 @@ export class KycPage extends AdminBasePage {
   ): Promise<void> {
     await this.confirmOsvIfPresent();
     await this.completeAadhaarConsentModalIfPresent();
-    const aadhaarField = this.aadharfield();
+    const aadhaarField = this.aadharfield;
     await aadhaarField.waitFor({ state: "visible", timeout: 15000 });
 
     let aadharNumber = initialAadharNumber;
@@ -1835,7 +1844,7 @@ export class KycPage extends AdminBasePage {
   ): Promise<void> {
     await this.confirmOsvIfPresent();
     await this.completeAadhaarConsentModalIfPresent();
-    const aadhaarField = this.aadharfield();
+    const aadhaarField = this.aadharfield;
     await aadhaarField.waitFor({ state: "visible", timeout: 15000 });
 
     let aadharNumber = this.randomAadhar();
@@ -1948,7 +1957,7 @@ export class KycPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
 
     const selected = (
-      await this.addressProofTypeDropdown()
+      await this.addressProofTypeDropdown
         .locator("option:checked")
         .innerText()
         .catch(() => "")
@@ -1970,14 +1979,14 @@ export class KycPage extends AdminBasePage {
 
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
-    await this.applyKyc().click();
+    await this.applyKyc.click();
     await this.page.waitForTimeout(5000);
-    const aadhaarField = this.aadharfield();
+    const aadhaarField = this.aadharfield;
     await aadhaarField.waitFor({ state: "visible", timeout: 15000 });
     await this.fillAadhaarNumberAndDocs(aadhaarField, aadharToUse);
 
     await this.clickVerifyAadhaarAndCheckResult();
-    const consentModalOpened = await this.consentModalHeading()
+    const consentModalOpened = await this.consentModalHeading
       .waitFor({ state: "visible", timeout: 8000 })
       .then(() => true)
       .catch(() => false);
@@ -1995,13 +2004,13 @@ export class KycPage extends AdminBasePage {
       };
     }
 
-    await this.btnSendConsentSms().click();
+    await this.btnSendConsentSms.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
     await this.fillOtp("000000");
     await this.page.waitForTimeout(500);
-    await this.btnSubmitAadhaarOtp().click();
+    await this.btnSubmitAadhaarOtp.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
@@ -2009,7 +2018,7 @@ export class KycPage extends AdminBasePage {
       "xpath=//*[contains(@class,'toast-error') or contains(@class,'alert-danger')]",
     );
     const errorVisible = await errorBanner.isVisible().catch(() => false);
-    const modalStillOpen = await this.consentModalHeading()
+    const modalStillOpen = await this.consentModalHeading
       .isVisible()
       .catch(() => false);
 
@@ -2215,7 +2224,7 @@ export class KycPage extends AdminBasePage {
   }
 
   async parameterSelection(parameter: string): Promise<void> {
-    await this.selPan().selectOption({ label: parameter });
+    await this.selPan.selectOption({ label: parameter });
   }
 
   async selectAsPan(): Promise<void> {
@@ -2253,7 +2262,7 @@ export class KycPage extends AdminBasePage {
 
     console.log("Generated Aadhaar:", randomAadhar);
     await this.page.waitForTimeout(5000);
-    const aadhaarField = this.aadharfield();
+    const aadhaarField = this.aadharfield;
     await aadhaarField.waitFor({ state: "visible" });
     await aadhaarField.click();
     await this.page.waitForTimeout(500);
@@ -2273,40 +2282,40 @@ export class KycPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(10000);
 
-    const checkMarkEl = this.checkMark();
+    const checkMarkEl = this.checkMark;
     await checkMarkEl.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(12000);
-    await this.checkMark().click();
+    await this.checkMark.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(12000);
 
-    await this.seladhar().selectOption({ label: data.proofName });
+    await this.seladhar.selectOption({ label: data.proofName });
 
     await this.page.waitForTimeout(10000);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
     await this.page.evaluate("window.scrollBy(0, 800)");
-    const addressEl = this.addresField();
+    const addressEl = this.addresField;
     await addressEl.evaluate((el) => (el as any).scrollIntoView(true));
     await this.page.waitForTimeout(2000);
 
-    await this.addresField().fill(randomAddress);
+    await this.addresField.fill(randomAddress);
     await this.waitForLoaderToDisappear();
 
-    const landMarkEl = this.landMark();
+    const landMarkEl = this.landMark;
     await landMarkEl.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(5000);
 
-    await this.landMarkField().click();
+    await this.landMarkField.click();
     await this.waitForLoaderToDisappear();
-    await this.landMarkField().fill(randomLandMarkVal);
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(2000);
-    await this.btnNext().click();
+    await this.landMarkField.fill(randomLandMarkVal);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnyes().click();
+    await this.btnNext.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
+    await this.btnyes.click();
     await this.waitForLoaderToDisappear();
   }
   randomAadhar(): string {
@@ -2318,7 +2327,7 @@ export class KycPage extends AdminBasePage {
   }
 
   async parameterSelectiona(parametera: string): Promise<void> {
-    await this.seladhar().selectOption({ label: parametera });
+    await this.seladhar.selectOption({ label: parametera });
   }
 
   async selectAsAadhar(): Promise<void> {
@@ -2409,16 +2418,16 @@ export class KycPage extends AdminBasePage {
   ): Promise<void> {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.profileLink().scrollIntoViewIfNeeded();
+    await this.profileLink.scrollIntoViewIfNeeded();
     await this.waitForLoaderToDisappear();
     try {
-      await this.profileLink().click();
+      await this.profileLink.click();
     } catch {
-      await this.jsClick(this.profileLink());
+      await this.jsClick(this.profileLink);
     }
     await this.waitForLoaderToDisappear();
 
-    await this.imgCamera().click();
+    await this.imgCamera.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(7000);
 
@@ -2429,34 +2438,32 @@ export class KycPage extends AdminBasePage {
       path: "reports/test-artifacts/DIAG-tab3-personal-details.png",
       fullPage: true,
     });
-    const dobDisabled = await this.dateInput()
-      .isDisabled()
-      .catch(() => false);
+    const dobDisabled = await this.dateInput.isDisabled().catch(() => false);
     if (!dobDisabled && dob) {
       // Caller supplied the DOB (e.g. re-KYC, matching the one used on the PAN tab).
-      await this.dateInput().click();
+      await this.dateInput.click();
       await this.waitForLoaderToDisappear();
       await this.selectDobFromCalendar(dob.day, dob.month, dob.year);
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(3000);
     } else if (!dobDisabled) {
-      await this.dateInput().click();
+      await this.dateInput.click();
       await this.waitForLoaderToDisappear();
-      await this.dateArrow().click();
-      await this.waitForLoaderToDisappear();
-      await this.page.waitForTimeout(2000);
-      await this.dateYear().click();
+      await this.dateArrow.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(2000);
-      await this.dateMonth().click();
+      await this.dateYear.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(2000);
-      await this.dateDay().click();
+      await this.dateMonth.click();
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(2000);
+      await this.dateDay.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(5000);
     }
 
-    await this.Radio().click();
+    await this.Radio.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(2000);
@@ -2469,7 +2476,7 @@ export class KycPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(2000);
-    await this.occupation().click();
+    await this.occupation.click();
     await this.waitForLoaderToDisappear();
 
     await this.page
@@ -2480,9 +2487,9 @@ export class KycPage extends AdminBasePage {
       .click();
     await this.waitForLoaderToDisappear();
 
-    await this.txtSpouseName().fill("Saysha");
+    await this.txtSpouseName.fill("Saysha");
     await this.waitForLoaderToDisappear();
-    await this.txtMotherName().fill("Ashwini");
+    await this.txtMotherName.fill("Ashwini");
     await this.waitForLoaderToDisappear();
 
     await this.page
@@ -2491,7 +2498,7 @@ export class KycPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     const mobileNumber = TestDataFactory.mobile();
-    await this.mobileField().fill(mobileNumber);
+    await this.mobileField.fill(mobileNumber);
     await this.waitForLoaderToDisappear();
 
     await this.page
@@ -2499,7 +2506,7 @@ export class KycPage extends AdminBasePage {
       .selectOption({ label: "Above 15 Lakh" });
     await this.waitForLoaderToDisappear();
 
-    await this.qualification().selectOption({ label: "Bachelor's Degree" });
+    await this.qualification.selectOption({ label: "Bachelor's Degree" });
     await this.waitForLoaderToDisappear();
 
     console.log("Attempting to upload signature...");
@@ -2523,7 +2530,7 @@ export class KycPage extends AdminBasePage {
 
     await this.page.waitForTimeout(15000);
     await this.page.waitForTimeout(5000);
-    await this.jsClick(this.btnNextPO04());
+    await this.jsClick(this.btnNextPO04);
   }
 
   async reviewAndSubmit(): Promise<void> {
@@ -2553,12 +2560,12 @@ export class KycPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(10000);
 
-    await this.clickUserMangaement().click();
+    await this.clickUserMangaement.click();
     await this.waitForLoaderToDisappear();
-    await this.clickInternalUser().click();
+    await this.clickInternalUser.click();
     await this.waitForLoaderToDisappear();
 
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -2578,9 +2585,9 @@ export class KycPage extends AdminBasePage {
     await searchInput.fill("7780002900");
 
     await this.page.waitForTimeout(3000);
-    await this.btnEdit().click();
+    await this.btnEdit.click();
     await this.waitForLoaderToDisappear();
-    await this.selArrow().click();
+    await this.selArrow.click();
     await this.waitForLoaderToDisappear();
 
     const dropdownToggle = this.page.locator(
@@ -2606,9 +2613,9 @@ export class KycPage extends AdminBasePage {
     }
 
     await this.page.waitForTimeout(5000);
-    const updateBtn = this.btnUpdate();
+    const updateBtn = this.btnUpdate;
     await updateBtn.scrollIntoViewIfNeeded();
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
   }
   async clickNext(): Promise<void> {
@@ -2646,28 +2653,28 @@ export class KycPage extends AdminBasePage {
   ): Promise<void> {
     await this.page.waitForTimeout(500);
 
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.branchDropdownWaitOnly().waitFor({ state: "visible" });
+    await this.branchDropdownWaitOnly.waitFor({ state: "visible" });
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
 
-    await this.kycDetailsNavOps().click();
+    await this.kycDetailsNavOps.click();
     await this.waitForLoaderToDisappear();
-    await this.appliedKycNavOps().click();
+    await this.appliedKycNavOps.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
     const customerId = this.getCurrentCustomerId();
-    await this.customerUniqID().fill(customerId);
+    await this.customerUniqID.fill(customerId);
     console.log("performOpsMarkIncomplete — customerId:", customerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    const filterBtnEl = this.filterbtn();
+    const filterBtnEl = this.filterbtn;
     await filterBtnEl.evaluate((el: any) =>
       el.scrollIntoView({ behavior: "smooth", block: "center" }),
     );
@@ -2682,7 +2689,7 @@ export class KycPage extends AdminBasePage {
     await this.reviewAndSubmit();
     await this.page.waitForTimeout(5000);
 
-    const statusDropdown = this.kycStatusDropdown();
+    const statusDropdown = this.kycStatusDropdown;
     await statusDropdown.waitFor({ state: "visible" });
     await statusDropdown.evaluate((el: any) =>
       el.scrollIntoView({ behavior: "smooth", block: "center" }),
@@ -2691,12 +2698,12 @@ export class KycPage extends AdminBasePage {
     await statusDropdown.selectOption({ label: "Incomplete" });
     await this.page.waitForTimeout(2000);
 
-    const reasonField = this.reasonForIncomplete();
+    const reasonField = this.reasonForIncomplete;
     await reasonField.waitFor({ state: "visible", timeout: 15000 });
     await reasonField.fill(reason);
     await this.page.waitForTimeout(500);
 
-    await this.btnSubmitOps().click();
+    await this.btnSubmitOps.click();
     await this.waitForLoaderToDisappear();
   }
 
@@ -2704,11 +2711,11 @@ export class KycPage extends AdminBasePage {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         await this.page.waitForTimeout(1500);
-        await this.btnActionOps().waitFor({
+        await this.btnActionOps.waitFor({
           state: "visible",
           timeout: 20_000,
         });
-        await this.btnActionOps().click();
+        await this.btnActionOps.click();
         return;
       } catch {
         if (attempt === maxAttempts - 1) {
@@ -2723,27 +2730,27 @@ export class KycPage extends AdminBasePage {
     editedFieldAfter: string;
   }> {
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
-    await this.branchDropdownWaitOnly().waitFor({ state: "visible" });
+    await this.branchDropdownWaitOnly.waitFor({ state: "visible" });
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
     await this.waitForLoaderToDisappear();
-    await this.kycDetails().click();
+    await this.kycDetails.click();
     await this.waitForLoaderToDisappear();
-    await this.appliedKycNavOps().click();
+    await this.appliedKycNavOps.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
     const customerId = this.getCurrentCustomerId();
-    await this.customerUniqID().fill(customerId);
+    await this.customerUniqID.fill(customerId);
     console.log("verifyEditOnReviewAndSubmit — customerId:", customerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    const filterBtnEl = this.filterbtn();
+    const filterBtnEl = this.filterbtn;
     await filterBtnEl.evaluate((el: any) =>
       el.scrollIntoView({ behavior: "smooth", block: "center" }),
     );
@@ -2765,8 +2772,8 @@ export class KycPage extends AdminBasePage {
       .catch(() => {});
 
     try {
-      await this.btnActionOps().waitFor({ state: "visible", timeout: 15000 });
-      await this.btnActionOps().click();
+      await this.btnActionOps.waitFor({ state: "visible", timeout: 15000 });
+      await this.btnActionOps.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(2000);
     } catch (err: any) {

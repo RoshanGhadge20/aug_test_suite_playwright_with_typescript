@@ -1,99 +1,208 @@
-import { Page } from '@playwright/test';
-import { AdminBasePage } from './admin-base.page';
-import { getLoginData } from '../../utils/data/admin-excel-data';
+import { Locator, Page } from "@playwright/test";
+import { AdminBasePage } from "./admin-base.page";
+import { getLoginData } from "../../utils/data/admin-excel-data";
 
-/**
- * Port of Java: PO31_DigiOFunctionality (locators) + Flow40_ValidateDigiOfunctionality
- *              + Flow41_ValidateDigiOFunctionalityArvog (actions)
- *
- * Cross-page locator notes:
- *   - All cross-page locators re-declared from PO01_KycSel, PO03_CreateNewPacket, PO05_AssignPacket,
- *     PO07_OpsTeamLoanApproval, PO09_PartnerLoanApproval, PO_Common, PO_CustomerManagement,
- *     PO_LoginLogout (re-declared locally per porting recipe).
- *
- * Role split for Flow40 (validateDigiO):
- *   1. Appraiser (after precondition GoldLoan): creates packet, assigns it, uploads with DigiO sign docs.
- *   2. Ops + Partner + Packet submission: delegated to existing POs via spec.
- *
- * Role split for Flow41 (validateDigiOFunctionality — Arvog):
- *   1. Appraiser: navigate fixed customer (MHOE12GL), apply loan, create packet, assign.
- *   2. BM approval, ops approval, Arvog partner approval, packet submission.
- *
- * File upload TODOs:
- *   - Multiple file inputs (1-4, 5, 7, 7dNone) — Java sendKeys("C:\\..."). Playwright: setInputFiles() guarded.
- *   All paths must be supplied via env vars for live runs.
- */
 export class DigioPage extends AdminBasePage {
-  constructor(page: Page) { super(page); }
+  private readonly loc_signDocuments: Locator;
+  private readonly loc_signDocument: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly customerManagementBtn: Locator;
+  private readonly allCustomers: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly customerUniqID: Locator;
+  private readonly filterbtn: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly startNewGL: Locator;
+  private readonly btnAdd: Locator;
+  private readonly appraiserRequests: Locator;
+  private readonly textField: Locator;
+  private readonly kebabMenu1: Locator;
+  private readonly applyLoan: Locator;
+  private readonly btnOk: Locator;
+  private readonly btnNext: Locator;
+  private readonly scrollableTable: Locator;
+  private readonly loanManagement_packet: Locator;
+  private readonly btnPacket: Locator;
+  private readonly packetID: Locator;
+  private readonly internalUserBranch: Locator;
+  private readonly btnNewpacket: Locator;
+  private readonly barCode: Locator;
+  private readonly btnAddPacket: Locator;
+  private readonly btnEditPacket: Locator;
+  private readonly userType: Locator;
+  private readonly appraiserId: Locator;
+  private readonly btnUpdate: Locator;
+  private readonly loanManagement: Locator;
+  private readonly appliedLoan: Locator;
+  private readonly assignPacketBtn: Locator;
+  private readonly selectPacket: Locator;
+  private readonly packetIdDropdown: Locator;
+  private readonly ornamenttype: Locator;
+  private readonly headerCheckmark: Locator;
+  private readonly btnAddPacket2: Locator;
+  private readonly imagePlaceholder: Locator;
+  private readonly camera: Locator;
+  private readonly btnSave: Locator;
+  private readonly btnYesSave: Locator;
+  private readonly btnUploadDocuments: Locator;
+  private readonly selLead: Locator;
+  private readonly btnDone: Locator;
+  private readonly fileInput1: Locator;
+  private readonly fileInput2: Locator;
+  private readonly fileInput3: Locator;
+  private readonly fileInput4: Locator;
+  private readonly fileInput5: Locator;
+  private readonly fileInput7: Locator;
+  private readonly fileInput7dNone: Locator;
 
-  // ── Locators (from PO31_DigiOFunctionality) ───────────────────────────────
-
-  private readonly loc_signDocuments = () => this.page.locator("xpath=//span[contains(text(),'Sign Documents')]");
-  private readonly loc_signDocument = () => this.page.locator("xpath=//button[@class='btn btn-sm w-100 mt-3']");
-
-  // Cross-page re-declarations
-  private readonly profile = () => this.page.locator("xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']");
-  private readonly arrow = () => this.page.locator("xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']");
-  private readonly branchDropdown = () => this.page.locator("xpath=//select[@id='branch' and contains(@class, 'form-control')]");
-  private readonly customerManagementBtn = () => this.page.locator("xpath=(//span[normalize-space()='Customer Management'])[1]");
-  private readonly allCustomers = () => this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  private readonly firstNameFilter = () => this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // Original used all-caps "ID" — confirmed live the actual placeholder is Title Case
-  // ("Enter Customer Unique Id"), so the exact-match locator always found zero elements.
-  private readonly customerUniqID = () => this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  private readonly filterbtn = () => this.page.locator("xpath=//button[@type='submit']");
-  private readonly kebabMenu = () => this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
-  private readonly startNewGL = () => this.page.locator("xpath=//button[normalize-space()='Start New Gold Loan']");
-  private readonly btnAdd = () => this.page.locator("xpath=//button[@class='submit mat-raised-button mat-button-base']");
-  private readonly appraiserRequests = () => this.page.locator("xpath=//span[normalize-space()='Appraiser Requests']");
-  private readonly textField = () => this.page.locator("xpath=//input[@placeholder='enter text here']");
-  private readonly kebabMenu1 = () => this.page.locator("xpath=(//mat-row[.//*[contains(text(),'New Loan')]]//mat-icon[normalize-space()='more_vert'])[1]");
-  private readonly applyLoan = () => this.page.locator("xpath=//button[normalize-space()='Apply Loan']");
-  private readonly btnOk = () => this.page.locator("xpath=//button[@type='submit']");
-  private readonly btnNext = () => this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
-  private readonly scrollableTable = () => this.page.locator("xpath=//div[@class='mat-table__wrapper']");
-  // Packet creation
-  private readonly loanManagement_packet = () => this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  private readonly btnPacket = () => this.page.locator("xpath=//span[normalize-space()='Packet']");
-  private readonly packetID = () => this.page.locator("xpath=//input[@formcontrolname='packetCode']");
-  private readonly internalUserBranch = () => this.page.locator("xpath=//select[@formcontrolname='internalUserBranch']");
-  private readonly btnNewpacket = () => this.page.locator("xpath=//button[normalize-space()='New Packet']");
-  private readonly barCode = () => this.page.locator("xpath=//input[@formcontrolname='barcode']");
-  // Confirmed live this exact label is reused for two distinct steps: the Packets list
-  // screen's own trigger button (opens the packet-code/branch creation dialog) AND the
-  // in-dialog submit button after entering the barcode — both read "Add Packet". The
-  // original code's btnAdd() (generic '@class=...' exact-match) never matched the list-screen
-  // trigger, likely due to an Angular-appended class like "ng-star-inserted" breaking exact
-  // equality (same recurring pattern as other fixed locators this session) — use this
-  // text-based locator for both.
-  private readonly btnAddPacket = () => this.page.locator("xpath=//button[normalize-space()='Add Packet']");
-  private readonly btnEditPacket = () => this.page.locator("xpath=//button[normalize-space()='Edit']");
-  private readonly userType = () => this.page.locator("xpath=//select[@formcontrolname='userType']");
-  private readonly appraiserId = () => this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
-  private readonly btnUpdate = () => this.page.locator("xpath=//button[normalize-space()='Update']");
-  // Applied loan / assign
-  private readonly loanManagement = () => this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  private readonly appliedLoan = () => this.page.locator("xpath=//span[normalize-space()='Applied Loan']");
-  private readonly assignPacketBtn = () => this.page.locator("xpath=//button[normalize-space()='Assign Packet']");
-  private readonly selectPacket = () => this.page.locator("xpath=//button[normalize-space()='Select Packet']");
-  private readonly packetIdDropdown = () => this.page.locator("xpath=//select[@formcontrolname='packetId']");
-  private readonly ornamenttype = () => this.page.locator("xpath=//button[normalize-space()='Ornament Type']");
-  private readonly headerCheckmark = () => this.page.locator("xpath=//span[@class='checkmark checkmark-custom header-checkmark']");
-  private readonly btnAddPacket2 = () => this.page.locator("xpath=//button[normalize-space()='Add Packet']");
-  private readonly imagePlaceholder = () => this.page.locator("xpath=//img[@src='../../../../../assets/media/icons/image-placeholder.png']");
-  private readonly camera = () => this.page.locator("xpath=//img[@src='../../../../../assets/media/icons/camera.svg']");
-  private readonly btnSave = () => this.page.locator("xpath=//button[normalize-space()='Save']");
-  private readonly btnYesSave = () => this.page.locator("xpath=//button[normalize-space()='Yes']");
-  private readonly btnUploadDocuments = () => this.page.locator("xpath=//button[normalize-space()='Upload Documents']");
-  private readonly selLead = () => this.page.locator("xpath=//select[@formcontrolname='leadConverterId']");
-  private readonly btnDone = () => this.page.locator("xpath=//button[normalize-space()='Done']");
-  private readonly fileInput1 = () => this.page.locator("xpath=(//input[@type='file'])[1]");
-  private readonly fileInput2 = () => this.page.locator("xpath=(//input[@type='file'])[2]");
-  private readonly fileInput3 = () => this.page.locator("xpath=(//input[@type='file'])[3]");
-  private readonly fileInput4 = () => this.page.locator("xpath=(//input[@type='file'])[4]");
-  private readonly fileInput5 = () => this.page.locator("xpath=(//input[@type='file'])[5]");
-  private readonly fileInput7 = () => this.page.locator("xpath=(//input[@type='file'])[7]");
-  private readonly fileInput7dNone = () => this.page.locator("xpath=(//input[@type='file' and contains(@class, 'd-none')])[7]");
+  constructor(page: Page) {
+    super(page);
+    this.loc_signDocuments = this.page.locator(
+      "xpath=//span[contains(text(),'Sign Documents')]",
+    );
+    this.loc_signDocument = this.page.locator(
+      "xpath=//button[@class='btn btn-sm w-100 mt-3']",
+    );
+    this.profile = this.page.locator(
+      "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
+    );
+    this.arrow = this.page.locator(
+      "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
+    );
+    this.branchDropdown = this.page.locator(
+      "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
+    );
+    this.customerManagementBtn = this.page.locator(
+      "xpath=(//span[normalize-space()='Customer Management'])[1]",
+    );
+    this.allCustomers = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.customerUniqID = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.kebabMenu = this.page.locator(
+      "xpath=(//button[.//mat-icon[text()='more_vert']])[1]",
+    );
+    this.startNewGL = this.page.locator(
+      "xpath=//button[normalize-space()='Start New Gold Loan']",
+    );
+    this.btnAdd = this.page.locator(
+      "xpath=//button[@class='submit mat-raised-button mat-button-base']",
+    );
+    this.appraiserRequests = this.page.locator(
+      "xpath=//span[normalize-space()='Appraiser Requests']",
+    );
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
+    this.kebabMenu1 = this.page.locator(
+      "xpath=(//mat-row[.//*[contains(text(),'New Loan')]]//mat-icon[normalize-space()='more_vert'])[1]",
+    );
+    this.applyLoan = this.page.locator(
+      "xpath=//button[normalize-space()='Apply Loan']",
+    );
+    this.btnOk = this.page.locator("xpath=//button[@type='submit']");
+    this.btnNext = this.page.locator(
+      "xpath=//button[span[normalize-space() = 'Next']]",
+    );
+    this.scrollableTable = this.page.locator(
+      "xpath=//div[@class='mat-table__wrapper']",
+    );
+    this.loanManagement_packet = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.btnPacket = this.page.locator(
+      "xpath=//span[normalize-space()='Packet']",
+    );
+    this.packetID = this.page.locator(
+      "xpath=//input[@formcontrolname='packetCode']",
+    );
+    this.internalUserBranch = this.page.locator(
+      "xpath=//select[@formcontrolname='internalUserBranch']",
+    );
+    this.btnNewpacket = this.page.locator(
+      "xpath=//button[normalize-space()='New Packet']",
+    );
+    this.barCode = this.page.locator(
+      "xpath=//input[@formcontrolname='barcode']",
+    );
+    this.btnAddPacket = this.page.locator(
+      "xpath=//button[normalize-space()='Add Packet']",
+    );
+    this.btnEditPacket = this.page.locator(
+      "xpath=//button[normalize-space()='Edit']",
+    );
+    this.userType = this.page.locator(
+      "xpath=//select[@formcontrolname='userType']",
+    );
+    this.appraiserId = this.page.locator(
+      "xpath=//select[@formcontrolname='appraiserId']",
+    );
+    this.btnUpdate = this.page.locator(
+      "xpath=//button[normalize-space()='Update']",
+    );
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.appliedLoan = this.page.locator(
+      "xpath=//span[normalize-space()='Applied Loan']",
+    );
+    this.assignPacketBtn = this.page.locator(
+      "xpath=//button[normalize-space()='Assign Packet']",
+    );
+    this.selectPacket = this.page.locator(
+      "xpath=//button[normalize-space()='Select Packet']",
+    );
+    this.packetIdDropdown = this.page.locator(
+      "xpath=//select[@formcontrolname='packetId']",
+    );
+    this.ornamenttype = this.page.locator(
+      "xpath=//button[normalize-space()='Ornament Type']",
+    );
+    this.headerCheckmark = this.page.locator(
+      "xpath=//span[@class='checkmark checkmark-custom header-checkmark']",
+    );
+    this.btnAddPacket2 = this.page.locator(
+      "xpath=//button[normalize-space()='Add Packet']",
+    );
+    this.imagePlaceholder = this.page.locator(
+      "xpath=//img[@src='../../../../../assets/media/icons/image-placeholder.png']",
+    );
+    this.camera = this.page.locator(
+      "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
+    );
+    this.btnSave = this.page.locator(
+      "xpath=//button[normalize-space()='Save']",
+    );
+    this.btnYesSave = this.page.locator(
+      "xpath=//button[normalize-space()='Yes']",
+    );
+    this.btnUploadDocuments = this.page.locator(
+      "xpath=//button[normalize-space()='Upload Documents']",
+    );
+    this.selLead = this.page.locator(
+      "xpath=//select[@formcontrolname='leadConverterId']",
+    );
+    this.btnDone = this.page.locator(
+      "xpath=//button[normalize-space()='Done']",
+    );
+    this.fileInput1 = this.page.locator("xpath=(//input[@type='file'])[1]");
+    this.fileInput2 = this.page.locator("xpath=(//input[@type='file'])[2]");
+    this.fileInput3 = this.page.locator("xpath=(//input[@type='file'])[3]");
+    this.fileInput4 = this.page.locator("xpath=(//input[@type='file'])[4]");
+    this.fileInput5 = this.page.locator("xpath=(//input[@type='file'])[5]");
+    this.fileInput7 = this.page.locator("xpath=(//input[@type='file'])[7]");
+    this.fileInput7dNone = this.page.locator(
+      "xpath=(//input[@type='file' and contains(@class, 'd-none')])[7]",
+    );
+  }
 
   async validateDigiO(documentPath?: string): Promise<void> {
     await this.validatePackets_flow40(documentPath);
@@ -102,37 +211,37 @@ export class DigioPage extends AdminBasePage {
   async validatePackets_flow40(documentPath?: string): Promise<void> {
     const data = getLoginData();
     const packetCode = this.getRandomAPacketCode();
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.loanManagement_packet().click();
+    await this.loanManagement_packet.click();
     await this.waitForLoaderToDisappear();
-    await this.btnPacket().click();
+    await this.btnPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAddPacket().click();
+    await this.btnAddPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
-    await this.packetID().fill(packetCode);
-    await this.internalUserBranch().selectOption({ label: 'Augmont' });
-    await this.btnNewpacket().click();
+    await this.packetID.fill(packetCode);
+    await this.internalUserBranch.selectOption({ label: "Augmont" });
+    await this.btnNewpacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.barCode().fill(packetCode);
-    await this.barCode().click();
-    await this.btnAddPacket().click();
+    await this.barCode.fill(packetCode);
+    await this.barCode.click();
+    await this.btnAddPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.btnEditPacket().click();
+    await this.btnEditPacket.click();
     await this.waitForLoaderToDisappear();
-    await this.userType().selectOption({ label: 'Appraiser' });
-    await this.appraiserId().selectOption({ label: 'Priyanka Thorat' });
-    await this.btnUpdate().click();
+    await this.userType.selectOption({ label: "Appraiser" });
+    await this.appraiserId.selectOption({ label: "Priyanka Thorat" });
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
 
     // NOTE: After this, caller must loginAs('appraiser') then call validatePackets_flow40_appraiserPart
@@ -147,436 +256,403 @@ export class DigioPage extends AdminBasePage {
     documentPath?: string,
   ): Promise<void> {
     const data = getLoginData();
-
-    // Appraiser: assign packet and upload docs with DigiO
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // Confirmed live: selecting any branch scope other than the account's own assigned
-    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
-    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
-    // Leave the account on its default branch scope instead of calling selectOption().
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(7000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
-    await this.appliedLoan().scrollIntoViewIfNeeded().catch(() => {});
-    await this.appliedLoan().click();
+    await this.appliedLoan.scrollIntoViewIfNeeded().catch(() => {});
+    await this.appliedLoan.click();
     await this.waitForLoaderToDisappear();
-    await this.firstNameFilter().fill(data.firstName);
+    await this.firstNameFilter.fill(data.firstName);
     await this.page.waitForTimeout(500);
-    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
-    // navigation attempt from the native submit and hangs waiting for it to "finish" even
-    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
-    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
-    // / waiver.page.ts / ops-approval.page.ts).
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.assignPacketBtn().click();
+    await this.assignPacketBtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(7000);
-    await this.selectPacket().click();
+    await this.selectPacket.click();
     await this.waitForLoaderToDisappear();
 
     const code = packetCode.trim();
-    const packetOption = this.page.locator(`xpath=//select[@formcontrolname='packetId']//option[contains(., '${code}')]`);
-    await packetOption.waitFor({ state: 'attached', timeout: 10000 });
-    await this.packetIdDropdown().click();
+    const packetOption = this.page.locator(
+      `xpath=//select[@formcontrolname='packetId']//option[contains(., '${code}')]`,
+    );
+    await packetOption.waitFor({ state: "attached", timeout: 10000 });
+    await this.packetIdDropdown.click();
     await this.page.waitForTimeout(2000);
     await packetOption.click();
     await this.page.waitForTimeout(2000);
 
-    await this.ornamenttype().click();
+    await this.ornamenttype.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.headerCheckmark().click();
+    await this.headerCheckmark.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAddPacket2().click();
+    await this.btnAddPacket2.click();
     await this.waitForLoaderToDisappear();
-    await this.page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
+    await this.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
     await this.page.waitForTimeout(2000);
 
-    const rows = await this.imagePlaceholder().all();
+    const rows = await this.imagePlaceholder.all();
     for (const row of rows) {
       await this.page.waitForTimeout(2000);
       await row.click();
       await this.page.waitForTimeout(2000);
-      await this.camera().scrollIntoViewIfNeeded().catch(() => {});
+      await this.camera.scrollIntoViewIfNeeded().catch(() => {});
       await this.page.waitForTimeout(2000);
-      await this.camera().click();
+      await this.camera.click();
       await this.page.waitForTimeout(5000);
     }
 
-    await this.btnSave().click();
+    await this.btnSave.click();
     await this.waitForLoaderToDisappear();
-    await this.btnYesSave().click();
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(5000);
-    await this.btnUploadDocuments().click();
+    await this.btnYesSave.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-
-    // DigiO sign documents
-    await this.loc_signDocuments().scrollIntoViewIfNeeded().catch(() => {});
+    await this.btnUploadDocuments.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.loc_signDocuments.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(1500);
-    await this.loc_signDocuments().click();
+    await this.loc_signDocuments.click();
     await this.page.waitForTimeout(500);
-    await this.loc_signDocuments().scrollIntoViewIfNeeded().catch(() => {});
+    await this.loc_signDocuments.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(2000);
-    await this.loc_signDocuments().click();
-    await this.loc_signDocument().click();
+    await this.loc_signDocuments.click();
+    await this.loc_signDocument.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
     if (documentPath) {
-      await this.fileInput1().waitFor({ state: 'attached', timeout: 20000 });
+      await this.fileInput1.waitFor({ state: "attached", timeout: 20000 });
       await this.page.waitForTimeout(15000);
-      await this.fileInput1().setInputFiles(documentPath);
-      await this.fileInput2().setInputFiles(documentPath);
+      await this.fileInput1.setInputFiles(documentPath);
+      await this.fileInput2.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput3().setInputFiles(documentPath);
+      await this.fileInput3.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
     } else {
       await this.page.waitForTimeout(5000);
     }
 
-    await this.page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
-    await this.btnSave().scrollIntoViewIfNeeded().catch(() => {});
+    await this.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+    await this.btnSave.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(5000);
-    await this.btnSave().click();
+    await this.btnSave.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selLead().waitFor({ state: 'visible' });
+    await this.selLead.waitFor({ state: "visible" });
     await this.page.waitForTimeout(5000);
-    await this.selLead().selectOption({ label: 'Priyanka Thorat' });
+    await this.selLead.selectOption({ label: "Priyanka Thorat" });
     await this.page.waitForTimeout(2000);
-    await this.btnDone().click();
+    await this.btnDone.click();
     await this.waitForLoaderToDisappear();
   }
-
-  /**
-   * Port of Flow41_ValidateDigiOFunctionalityArvog.validateDigiOFunctionality().
-   * Caller must first loginAs('appraiser').
-   * Uses fixed customer ID "MHOE12GL" (as in Java source).
-   * File uploads are guarded optional params.
-   */
   async validateDigiOFunctionality(documentPath?: string): Promise<void> {
-    const fixedCustomerId = 'MHOE12GL';
-    const fixedSearchId = 'MHOE12G';
+    const fixedCustomerId = "MHOE12GL";
+    const fixedSearchId = "MHOE12G";
     const packetCode = this.getRandomAPacketCode();
 
     await this.page.waitForTimeout(3000);
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
-    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
-    // reject the session outright (403/401, forced redirect to /auth/login).
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.customerManagementBtn().click();
+    await this.customerManagementBtn.click();
     await this.waitForLoaderToDisappear();
-    await this.allCustomers().click();
+    await this.allCustomers.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(fixedCustomerId);
+    await this.customerUniqID.fill(fixedCustomerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
-    // navigation attempt from the native submit and hangs waiting for it to "finish" even
-    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
-    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
-    // / waiver.page.ts / ops-approval.page.ts).
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.startNewGL().click();
+    await this.startNewGL.click();
     await this.waitForLoaderToDisappear();
-    await this.btnAdd().click();
+    await this.btnAdd.click();
     await this.page.waitForTimeout(3000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(7000);
-    await this.appraiserRequests().waitFor({ state: 'visible' });
-    await this.appraiserRequests().click();
+    await this.appraiserRequests.waitFor({ state: "visible" });
+    await this.appraiserRequests.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(fixedSearchId);
+    await this.textField.fill(fixedSearchId);
 
-    await this.scrollableTable().click();
-    await this.scrollableTable().evaluate((el) => { (el as any).scrollLeft = (el as any).scrollWidth; });
+    await this.scrollableTable.click();
+    await this.scrollableTable.evaluate((el) => {
+      (el as any).scrollLeft = (el as any).scrollWidth;
+    });
     await this.page.waitForTimeout(3000);
-    await this.scrollableTable().click();
-    await this.scrollableTable().evaluate((el) => { (el as any).scrollLeft = 0; });
+    await this.scrollableTable.click();
+    await this.scrollableTable.evaluate((el) => {
+      (el as any).scrollLeft = 0;
+    });
     await this.page.waitForTimeout(3000);
 
-    await this.jsClick(this.kebabMenu1());
-    await this.jsClick(this.applyLoan());
-    await this.btnOk().click();
+    await this.jsClick(this.kebabMenu1);
+    await this.jsClick(this.applyLoan);
+    await this.btnOk.click();
     await this.waitForLoaderToDisappear();
-
-    // Basic details, nominee, ornaments, FIC (Arvog), bank
-    await this.page.locator("xpath=//select[@formcontrolname='purpose']").scrollIntoViewIfNeeded().catch(() => {});
-    await this.page.locator("xpath=//select[@formcontrolname='purpose']").selectOption({ label: 'Business Expansion' });
-    await this.safeClickLocal(this.btnNext());
+    await this.page
+      .locator("xpath=//select[@formcontrolname='purpose']")
+      .scrollIntoViewIfNeeded()
+      .catch(() => {});
+    await this.page
+      .locator("xpath=//select[@formcontrolname='purpose']")
+      .selectOption({ label: "Business Expansion" });
+    await this.safeClickLocal(this.btnNext);
     await this.page.waitForTimeout(5000);
-    await this.safeClickLocal(this.btnNext());
+    await this.safeClickLocal(this.btnNext);
     await this.addOrnamentsArvog();
     await this.validateFICPage_arvog();
     await this.validateBankDetailsAdvanceCash();
-
-    // Ops creates packet (same session if logged in as ops after appraiser logout)
-    // NOTE: this mirrors the Java flow where login switches happen inside validatePackets()
-    // In the TS port, the spec handles role switching. This section assumes ops session.
-
-    // Ops packet creation inlined
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // NOTE: does NOT select "Show All" branch scope — see the earlier NOTE in this method.
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.loanManagement_packet().click();
+    await this.loanManagement_packet.click();
     await this.waitForLoaderToDisappear();
-    await this.btnPacket().click();
+    await this.btnPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAddPacket().click();
+    await this.btnAddPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
-    await this.packetID().fill(packetCode);
-    await this.internalUserBranch().selectOption({ label: 'Augmont' });
-    await this.btnNewpacket().click();
+    await this.packetID.fill(packetCode);
+    await this.internalUserBranch.selectOption({ label: "Augmont" });
+    await this.btnNewpacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.barCode().fill(packetCode);
-    await this.barCode().click();
-    await this.btnAddPacket().click();
+    await this.barCode.fill(packetCode);
+    await this.barCode.click();
+    await this.btnAddPacket.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.btnEditPacket().click();
+    await this.btnEditPacket.click();
     await this.waitForLoaderToDisappear();
-    await this.userType().selectOption({ label: 'Appraiser' });
-    await this.appraiserId().selectOption({ label: 'Priyanka Thorat' });
-    await this.btnUpdate().click();
+    await this.userType.selectOption({ label: "Appraiser" });
+    await this.appraiserId.selectOption({ label: "Priyanka Thorat" });
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
-
-    // Appraiser: assign packet, digio upload
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // NOTE: does NOT select "Show All" branch scope — see the earlier NOTE in this method.
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
-    await this.appliedLoan().scrollIntoViewIfNeeded().catch(() => {});
-    await this.appliedLoan().click();
+    await this.appliedLoan.scrollIntoViewIfNeeded().catch(() => {});
+    await this.appliedLoan.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(fixedCustomerId);
+    await this.customerUniqID.fill(fixedCustomerId);
     await this.page.waitForTimeout(500);
-    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
-    // navigation attempt from the native submit and hangs waiting for it to "finish" even
-    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
-    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
-    // / waiver.page.ts / ops-approval.page.ts).
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.assignPacketBtn().click();
+    await this.assignPacketBtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.selectPacket().click();
+    await this.selectPacket.click();
 
     const code = packetCode.trim();
-    const packetOption = this.page.locator(`xpath=//select[@formcontrolname='packetId']//option[contains(., '${code}')]`);
-    await packetOption.waitFor({ state: 'attached', timeout: 10000 });
-    await this.packetIdDropdown().click();
+    const packetOption = this.page.locator(
+      `xpath=//select[@formcontrolname='packetId']//option[contains(., '${code}')]`,
+    );
+    await packetOption.waitFor({ state: "attached", timeout: 10000 });
+    await this.packetIdDropdown.click();
     await this.page.waitForTimeout(2000);
     await packetOption.click();
     await this.page.waitForTimeout(2000);
-    await this.ornamenttype().click();
+    await this.ornamenttype.click();
     await this.page.waitForTimeout(500);
-    await this.headerCheckmark().click();
+    await this.headerCheckmark.click();
     await this.page.waitForTimeout(2000);
-    await this.btnAddPacket2().click();
+    await this.btnAddPacket2.click();
 
-    await this.page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
+    await this.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
     await this.page.waitForTimeout(2000);
-    const rows = await this.imagePlaceholder().all();
+    const rows = await this.imagePlaceholder.all();
     for (const row of rows) {
       await this.page.waitForTimeout(2000);
       await row.click();
       await this.page.waitForTimeout(2000);
-      await this.camera().scrollIntoViewIfNeeded().catch(() => {});
+      await this.camera.scrollIntoViewIfNeeded().catch(() => {});
       await this.page.waitForTimeout(2000);
-      await this.camera().click();
+      await this.camera.click();
       await this.page.waitForTimeout(5000);
     }
-    await this.btnSave().click();
-    await this.btnYesSave().click();
+    await this.btnSave.click();
+    await this.btnYesSave.click();
     await this.waitForLoaderToDisappear();
-
-    // BM approval delegated to spec
   }
-
-  // ── DigiO upload for Arvog flow after BM ─────────────────────────────────
-
-  /**
-   * Port of Flow41 appraiser upload-with-DigiO segment (called after BM approval).
-   * Caller must first loginAs('appraiser').
-   * File uploads are guarded optional params.
-   */
   async validateDigiOFunctionality_appraiserUploadDocs(
-    fixedCustomerId = 'MHOE12GL',
+    fixedCustomerId = "MHOE12GL",
     documentPath?: string,
   ): Promise<void> {
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    // NOTE: does NOT select "Show All" branch scope — confirmed live (renew-zero.page.ts,
-    // loan-defects.page.ts) that switching this account's branch scope gets the backend to
-    // reject the session outright (403/401, forced redirect to /auth/login).
-    await this.branchDropdown().waitFor({ state: 'visible' });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
-    await this.appliedLoan().scrollIntoViewIfNeeded().catch(() => {});
-    await this.appliedLoan().click();
+    await this.appliedLoan.scrollIntoViewIfNeeded().catch(() => {});
+    await this.appliedLoan.click();
     await this.waitForLoaderToDisappear();
-    await this.customerUniqID().fill(fixedCustomerId);
+    await this.customerUniqID.fill(fixedCustomerId);
     await this.page.waitForTimeout(5000);
-    // noWaitAfter: this button is type="submit" inside a <form> — Playwright detects a real
-    // navigation attempt from the native submit and hangs waiting for it to "finish" even
-    // though Angular's (ngSubmit) handler already intercepted it client-side (same fix as
-    // renew-zero.page.ts / manual-charges.page.ts / loan-view.page.ts / custom-cancel.page.ts
-    // / waiver.page.ts / ops-approval.page.ts).
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.btnUploadDocuments().click();
+    await this.btnUploadDocuments.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-
-    // DigiO sign
-    await this.loc_signDocuments().scrollIntoViewIfNeeded().catch(() => {});
+    await this.loc_signDocuments.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(1500);
-    await this.loc_signDocuments().click();
+    await this.loc_signDocuments.click();
     await this.page.waitForTimeout(500);
-    await this.loc_signDocument().scrollIntoViewIfNeeded().catch(() => {});
+    await this.loc_signDocument.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(2000);
-    await this.loc_signDocument().click();
+    await this.loc_signDocument.click();
     await this.page.waitForTimeout(5000);
 
     if (documentPath) {
-      await this.fileInput1().waitFor({ state: 'attached', timeout: 20000 });
+      await this.fileInput1.waitFor({ state: "attached", timeout: 20000 });
       await this.page.waitForTimeout(15000);
-      await this.fileInput1().setInputFiles(documentPath);
-      await this.fileInput2().setInputFiles(documentPath);
+      await this.fileInput1.setInputFiles(documentPath);
+      await this.fileInput2.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput3().setInputFiles(documentPath);
+      await this.fileInput3.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput4().setInputFiles(documentPath);
+      await this.fileInput4.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput5().setInputFiles(documentPath);
+      await this.fileInput5.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput7().setInputFiles(documentPath);
+      await this.fileInput7.setInputFiles(documentPath);
       await this.page.waitForTimeout(5000);
-      await this.fileInput7dNone().setInputFiles(documentPath);
+      await this.fileInput7dNone.setInputFiles(documentPath);
     } else {
       await this.page.waitForTimeout(5000);
     }
 
-    await this.page.evaluate('window.scrollTo(0, document.body.scrollHeight)');
-    await this.btnSave().scrollIntoViewIfNeeded().catch(() => {});
+    await this.page.evaluate("window.scrollTo(0, document.body.scrollHeight)");
+    await this.btnSave.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(5000);
-    await this.btnSave().click();
+    await this.btnSave.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selLead().waitFor({ state: 'visible' });
+    await this.selLead.waitFor({ state: "visible" });
     await this.page.waitForTimeout(5000);
-    await this.selLead().selectOption({ label: 'Priyanka Thorat' });
+    await this.selLead.selectOption({ label: "Priyanka Thorat" });
     await this.page.waitForTimeout(2000);
-    await this.btnDone().click();
+    await this.btnDone.click();
     await this.waitForLoaderToDisappear();
   }
 
-  // ── FIC / bank helpers for Flow41 ────────────────────────────────────────
-
   private async validateFICPage_arvog(): Promise<void> {
     await this.page.waitForTimeout(5000);
-    await this.page.locator("xpath=//select[@formcontrolname='partnerId']").selectOption({ label: 'ARVOG ARV10' });
+    await this.page
+      .locator("xpath=//select[@formcontrolname='partnerId']")
+      .selectOption({ label: "ARVOG ARV10" });
     await this.page.waitForTimeout(2000);
-    await this.page.locator("xpath=//select[@formcontrolname='schemeId']").selectOption({ label: 'SCHEME_LTV84 (0 - 1100000)' });
+    await this.page
+      .locator("xpath=//select[@formcontrolname='schemeId']")
+      .selectOption({ label: "SCHEME_LTV84 (0 - 1100000)" });
     await this.page.waitForTimeout(2000);
-    await this.page.locator("xpath=//input[@formcontrolname='finalLoanAmount']").fill('605000');
+    await this.page
+      .locator("xpath=//input[@formcontrolname='finalLoanAmount']")
+      .fill("605000");
     await this.page.waitForTimeout(5000);
-    const calcBtn = this.page.locator("xpath=//button[.//span[normalize-space(text())='Calculate']]");
-    await calcBtn.waitFor({ state: 'visible' });
+    const calcBtn = this.page.locator(
+      "xpath=//button[.//span[normalize-space(text())='Calculate']]",
+    );
+    await calcBtn.waitFor({ state: "visible" });
     await calcBtn.dblclick();
     await calcBtn.click();
     await this.page.waitForTimeout(3000);
-    await this.safeClickLocal(this.btnNext());
+    await this.safeClickLocal(this.btnNext);
   }
 
   private async validateBankDetailsAdvanceCash(): Promise<void> {
     await this.page.waitForTimeout(2000);
-    await this.page.evaluate('window.scrollBy(0, 1000)');
+    await this.page.evaluate("window.scrollBy(0, 1000)");
     await this.page.waitForTimeout(2000);
-    const loanAmtField = this.page.locator("xpath=//td[normalize-space(.)='Loan Amount']/following-sibling::td[contains(@class,'currency')]");
+    const loanAmtField = this.page.locator(
+      "xpath=//td[normalize-space(.)='Loan Amount']/following-sibling::td[contains(@class,'currency')]",
+    );
     await loanAmtField.scrollIntoViewIfNeeded().catch(() => {});
     await this.page.waitForTimeout(1000);
-    await this.page.evaluate('window.scrollBy(0, -150)');
+    await this.page.evaluate("window.scrollBy(0, -150)");
     await this.page.waitForTimeout(500);
-    await loanAmtField.waitFor({ state: 'visible' });
+    await loanAmtField.waitFor({ state: "visible" });
     await loanAmtField.click();
-    await this.page.keyboard.press('Tab');
+    await this.page.keyboard.press("Tab");
     await this.page.locator("xpath=//input[@formcontrolname='wavier']").clear();
     await this.page.waitForTimeout(3000);
-    const toBePaid = this.page.locator("xpath=//td[normalize-space(text())='To be paid']/following-sibling::td[@class='currency']");
+    const toBePaid = this.page.locator(
+      "xpath=//td[normalize-space(text())='To be paid']/following-sibling::td[@class='currency']",
+    );
     await toBePaid.scrollIntoViewIfNeeded().catch(() => {});
-    const str = await toBePaid.innerText().then(t => t.trim()).catch(() => '');
-    const numericValue = str.replace(/[^0-9]/g, '');
-    const advCash = this.page.locator("xpath=//td//input[@formcontrolname='advanceCash']");
+    const str = await toBePaid
+      .innerText()
+      .then((t) => t.trim())
+      .catch(() => "");
+    const numericValue = str.replace(/[^0-9]/g, "");
+    const advCash = this.page.locator(
+      "xpath=//td//input[@formcontrolname='advanceCash']",
+    );
     await advCash.scrollIntoViewIfNeeded().catch(() => {});
-    await advCash.waitFor({ state: 'visible' });
+    await advCash.waitFor({ state: "visible" });
     await advCash.clear();
     await advCash.fill(numericValue);
     await this.page.waitForTimeout(4000);
-    await this.safeClickLocal(this.btnNext());
+    await this.safeClickLocal(this.btnNext);
   }
 
   private async addOrnamentsArvog(): Promise<void> {
     await this.page.waitForTimeout(5000);
-    await this.page.evaluate('window.scrollBy(0, 1000)');
+    await this.page.evaluate("window.scrollBy(0, 1000)");
     await this.page.waitForTimeout(3000);
-    await this.page.evaluate('window.scrollBy(0, -500)');
+    await this.page.evaluate("window.scrollBy(0, -500)");
     await this.page.waitForTimeout(5000);
 
-    const ornamentDropdownArrow = this.page.locator("xpath=//input[@role='combobox']//following::span[@class='ng-arrow-wrapper']");
-    const ornamentOptions = this.page.locator("xpath=//span[@class='ng-option-label ng-star-inserted']");
+    const ornamentDropdownArrow = this.page.locator(
+      "xpath=//input[@role='combobox']//following::span[@class='ng-arrow-wrapper']",
+    );
+    const ornamentOptions = this.page.locator(
+      "xpath=//span[@class='ng-option-label ng-star-inserted']",
+    );
 
     for (let i = 0; i < 2; i++) {
-      await ornamentDropdownArrow.waitFor({ state: 'visible' });
+      await ornamentDropdownArrow.waitFor({ state: "visible" });
       await ornamentDropdownArrow.scrollIntoViewIfNeeded().catch(() => {});
       await ornamentDropdownArrow.click();
       const opts = await ornamentOptions.all();
@@ -584,44 +660,60 @@ export class DigioPage extends AdminBasePage {
       if (opts.length > indexToClick) await opts[indexToClick].click();
 
       await this.page.waitForTimeout(5000);
-      await this.page.locator("xpath=//input[@formcontrolname='quantity']").fill('1');
+      await this.page
+        .locator("xpath=//input[@formcontrolname='quantity']")
+        .fill("1");
       const grossWt = 300.0;
       const deductionWt = Math.random() * Math.min(1.0, grossWt);
-      await this.page.locator("xpath=//input[@formcontrolname='grossWeight']").fill(grossWt.toFixed(1));
-      await this.page.locator("xpath=//input[@formcontrolname='deductionWeight']").fill(deductionWt.toFixed(1));
+      await this.page
+        .locator("xpath=//input[@formcontrolname='grossWeight']")
+        .fill(grossWt.toFixed(1));
+      await this.page
+        .locator("xpath=//input[@formcontrolname='deductionWeight']")
+        .fill(deductionWt.toFixed(1));
 
       await this.page.waitForTimeout(2000);
       await this.page.locator("xpath=(//button[@type='button'])[3]").click();
       await this.page.waitForTimeout(2000);
-      await this.camera().click();
+      await this.camera.click();
       await this.page.waitForTimeout(2000);
-      await this.page.locator("xpath=//img[@class='placeholder-image']").click();
+      await this.page
+        .locator("xpath=//img[@class='placeholder-image']")
+        .click();
       await this.page.waitForTimeout(2000);
-      await this.camera().click();
+      await this.camera.click();
       await this.page.waitForTimeout(2000);
 
-      await this.page.locator("xpath=//select[@formcontrolname='karat']").selectOption({ label: '22 K HM' });
-      await this.page.locator("xpath=//select[@formcontrolname='ltvPercent']").selectOption({ label: '98 %' });
+      await this.page
+        .locator("xpath=//select[@formcontrolname='karat']")
+        .selectOption({ label: "22 K HM" });
+      await this.page
+        .locator("xpath=//select[@formcontrolname='ltvPercent']")
+        .selectOption({ label: "98 %" });
 
       if (i === 0) {
-        const addMoreBtn = this.page.locator("xpath=//button[normalize-space()='+ Add More']");
+        const addMoreBtn = this.page.locator(
+          "xpath=//button[normalize-space()='+ Add More']",
+        );
         await addMoreBtn.scrollIntoViewIfNeeded().catch(() => {});
         await this.page.waitForTimeout(2000);
         await addMoreBtn.click();
       }
     }
 
-    const nextButton = this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
+    const nextButton = this.page.locator(
+      "xpath=//button[span[normalize-space() = 'Next']]",
+    );
     await nextButton.scrollIntoViewIfNeeded().catch(() => {});
     await this.safeClickLocal(nextButton);
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  private async safeClickLocal(locator: ReturnType<typeof this.page.locator>): Promise<void> {
+  private async safeClickLocal(
+    locator: ReturnType<typeof this.page.locator>,
+  ): Promise<void> {
     try {
       await locator.scrollIntoViewIfNeeded().catch(() => {});
-      await locator.waitFor({ state: 'visible', timeout: 30000 });
+      await locator.waitFor({ state: "visible", timeout: 30000 });
       await locator.click();
     } catch {
       await this.jsClick(locator);
@@ -629,9 +721,10 @@ export class DigioPage extends AdminBasePage {
   }
 
   private getRandomAPacketCode(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = '';
-    for (let i = 0; i < 8; i++) result += chars[Math.floor(Math.random() * chars.length)];
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+    for (let i = 0; i < 8; i++)
+      result += chars[Math.floor(Math.random() * chars.length)];
     return result;
   }
 }

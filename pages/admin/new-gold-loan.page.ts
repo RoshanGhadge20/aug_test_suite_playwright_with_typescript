@@ -1,180 +1,219 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import fs from "fs";
 
 export class NewGoldLoanPage extends AdminBasePage {
+  // ── Locators ──────────────────────────────────────────────────────────────
+  private readonly kebabMenu: Locator;
+  private readonly btnAdd: Locator;
+  private readonly startNewGL: Locator;
+  private readonly appraisalRequest: Locator;
+  private readonly selectAppraiser: Locator;
+  private readonly textField: Locator;
+  private readonly kebabMenu1: Locator;
+  private readonly customerField: Locator;
+  private readonly applyLoan: Locator;
+  private readonly btnOk: Locator;
+  private readonly btnNext: Locator;
+  private readonly txtNameField: Locator;
+  private readonly txtNomineeAge: Locator;
+  private readonly txtNomineeRelationship: Locator;
+  private readonly toBePaid: Locator;
+  private readonly advanceCashField: Locator;
+  private readonly txtMobileNumber: Locator;
+  private readonly ornamentType: Locator;
+  private readonly numberOfPieces: Locator;
+  private readonly grossWt: Locator;
+  private readonly deductionWt: Locator;
+  private readonly btnAttach: Locator;
+  private readonly imgAttach: Locator;
+  private readonly btnAttach1: Locator;
+  private readonly selKarat: Locator;
+  private readonly selPurity: Locator;
+  private readonly selPartner: Locator;
+  private readonly selScheme: Locator;
+  private readonly loanAmount: Locator;
+  private readonly btnCalculate: Locator;
+  private readonly ifsc: Locator;
+  private readonly bankAccount: Locator;
+  private readonly verifyBankDetails: Locator;
+  private readonly loanAmountField: Locator;
+  private readonly document: Locator;
+  private readonly alreadyExistsAlert: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly customerManagementBtn: Locator;
+  private readonly allCustomers: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly imgCamera: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  private readonly kebabMenu = () =>
-    this.page.locator("xpath=(//button[.//mat-icon[text()='more_vert']])[1]");
-  private readonly btnAdd = () =>
-    this.page.locator(
+    this.kebabMenu = this.page.locator(
+      "xpath=(//button[.//mat-icon[text()='more_vert']])[1]",
+    );
+    this.btnAdd = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly startNewGL = () =>
-    this.page.locator(
+    this.startNewGL = this.page.locator(
       "xpath=//button[normalize-space()='Start New Gold Loan']",
     );
-  private readonly appraisalRequest = () =>
-    this.page.locator("xpath=//span[normalize-space()='Appraiser Requests']");
-  private readonly selectAppraiser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique ID']");
-  private readonly kebabMenu1 = () =>
-    this.page.locator(
+    this.appraisalRequest = this.page.locator(
+      "xpath=//span[normalize-space()='Appraiser Requests']",
+    );
+    this.selectAppraiser = this.page.locator(
+      "xpath=//select[@formcontrolname='appraiserId']",
+    );
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique ID']",
+    );
+    this.kebabMenu1 = this.page.locator(
       "xpath=(//mat-row[.//*[contains(text(),'New Loan')]]//mat-icon[normalize-space()='more_vert'])[1]",
     );
-  private readonly customerField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  private readonly applyLoan = () =>
-    this.page.locator(
+    this.customerField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.applyLoan = this.page.locator(
       "xpath=//button[contains(@class,'mat-menu-item') and normalize-space(text())='Apply Loan']",
     );
-  private readonly btnOk = () =>
-    this.page.locator("xpath=(//button[@type='submit'])[2]");
-  private readonly btnNext = () =>
-    this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
-  private readonly txtNameField = () =>
-    this.page.locator("xpath=//input[@formcontrolname='nomineeName']");
-  private readonly txtNomineeAge = () =>
-    this.page.locator("xpath=//input[@formcontrolname='nomineeAge']");
-  private readonly txtNomineeRelationship = () =>
-    this.page.locator("xpath=//input[@formcontrolname='relationship']");
-  private readonly toBePaid = () =>
-    this.page.locator(
+    this.btnOk = this.page.locator("xpath=(//button[@type='submit'])[2]");
+    this.btnNext = this.page.locator(
+      "xpath=//button[span[normalize-space() = 'Next']]",
+    );
+    this.txtNameField = this.page.locator(
+      "xpath=//input[@formcontrolname='nomineeName']",
+    );
+    this.txtNomineeAge = this.page.locator(
+      "xpath=//input[@formcontrolname='nomineeAge']",
+    );
+    this.txtNomineeRelationship = this.page.locator(
+      "xpath=//input[@formcontrolname='relationship']",
+    );
+    this.toBePaid = this.page.locator(
       "xpath=//td[normalize-space(text())='To be paid']/following-sibling::td[@class='currency']",
     );
-  private readonly advanceCashField = () =>
-    this.page.locator("xpath=//td//input[@formcontrolname='advanceCash']");
-  private readonly txtMobileNumber = () =>
-    this.page.locator("xpath=//input[@formcontrolname='mobileNumber']");
-  private readonly ornamentType = () =>
-    this.page.locator("xpath=//input[@role='combobox']");
-  private readonly numberOfPieces = () =>
-    this.page.locator("xpath=//input[@formcontrolname='quantity']");
-  private readonly grossWt = () =>
-    this.page.locator("xpath=//input[@formcontrolname='grossWeight']");
-  private readonly deductionWt = () =>
-    this.page.locator("xpath=//input[@formcontrolname='deductionWeight']");
-  private readonly btnAttach = () =>
-    this.page.locator("xpath=(//button[@type='button'])[3]");
-  private readonly imgAttach = () =>
-    this.page.locator("xpath=//img[@class='placeholder-image']");
-  private readonly btnAttach1 = () =>
-    this.page.locator("xpath=(//button[@type='button'])[4]");
-  private readonly selKarat = () =>
-    this.page.locator("xpath=//select[@formcontrolname='karat']");
-  private readonly selPurity = () =>
-    this.page.locator("xpath=//select[@formcontrolname='ltvPercent']");
-  private readonly selPartner = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-  private readonly selScheme = () =>
-    this.page.locator("xpath=//select[@formcontrolname='schemeId']");
-  private readonly loanAmount = () =>
-    this.page.locator("xpath=//input[@formcontrolname='finalLoanAmount']");
-  private readonly btnCalculate = () =>
-    this.page.locator(
+    this.advanceCashField = this.page.locator(
+      "xpath=//td//input[@formcontrolname='advanceCash']",
+    );
+    this.txtMobileNumber = this.page.locator(
+      "xpath=//input[@formcontrolname='mobileNumber']",
+    );
+    this.ornamentType = this.page.locator("xpath=//input[@role='combobox']");
+    this.numberOfPieces = this.page.locator(
+      "xpath=//input[@formcontrolname='quantity']",
+    );
+    this.grossWt = this.page.locator(
+      "xpath=//input[@formcontrolname='grossWeight']",
+    );
+    this.deductionWt = this.page.locator(
+      "xpath=//input[@formcontrolname='deductionWeight']",
+    );
+    this.btnAttach = this.page.locator("xpath=(//button[@type='button'])[3]");
+    this.imgAttach = this.page.locator(
+      "xpath=//img[@class='placeholder-image']",
+    );
+    this.btnAttach1 = this.page.locator("xpath=(//button[@type='button'])[4]");
+    this.selKarat = this.page.locator(
+      "xpath=//select[@formcontrolname='karat']",
+    );
+    this.selPurity = this.page.locator(
+      "xpath=//select[@formcontrolname='ltvPercent']",
+    );
+    this.selPartner = this.page.locator(
+      "xpath=//select[@formcontrolname='partnerId']",
+    );
+    this.selScheme = this.page.locator(
+      "xpath=//select[@formcontrolname='schemeId']",
+    );
+    this.loanAmount = this.page.locator(
+      "xpath=//input[@formcontrolname='finalLoanAmount']",
+    );
+    this.btnCalculate = this.page.locator(
       'xpath=//button[contains(@class, "mat-raised-button") and contains(@class, "mat-primary") and .//span[normalize-space(text()) = "Calculate"]]',
     );
-  private readonly ifsc = () =>
-    this.page.locator("xpath=//input[@formcontrolname='ifscCode']");
-  private readonly bankAccount = () =>
-    this.page.locator("xpath=//input[@formcontrolname='accountNumber']");
-  private readonly verifyBankDetails = () =>
-    this.page.locator(
+    this.ifsc = this.page.locator("xpath=//input[@formcontrolname='ifscCode']");
+    this.bankAccount = this.page.locator(
+      "xpath=//input[@formcontrolname='accountNumber']",
+    );
+    this.verifyBankDetails = this.page.locator(
       "xpath=(//div[@class='mat-button-ripple mat-ripple'])[3]",
     );
-  private readonly loanAmountField = () =>
-    this.page.locator(
+    this.loanAmountField = this.page.locator(
       "//tr[td[normalize-space()='Loan Amount']]/td[@class='currency']",
     );
-  private readonly document = () =>
-    this.page.locator("xpath=(//input[@type='file'])[1]");
-  private readonly alreadyExistsAlert = () =>
-    this.page.locator(
+    this.document = this.page.locator("xpath=(//input[@type='file'])[1]");
+    this.alreadyExistsAlert = this.page.locator(
       "xpath=//*[@role='alertdialog'][contains(normalize-space(.),'already Exists')]",
     );
-
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  // Inline branch dropdown from Flow04
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  // PO_CustomerManagement.loc_customer
-  private readonly customerManagementBtn = () =>
-    this.page.locator(
+    this.customerManagementBtn = this.page.locator(
       "xpath=(//span[normalize-space()='Customer Management'])[1]",
     );
-  // PO_CustomerManagement.loc_allcustomer
-  private readonly allCustomers = () =>
-    this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO01_KycSel.loc_imgCamera
-  private readonly imgCamera = () =>
-    this.page.locator(
+    this.allCustomers = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.imgCamera = this.page.locator(
       "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
     );
+  }
 
   async validateGoldLoan(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(3000);
 
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
 
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
 
-    await this.customerManagementBtn().click();
+    await this.customerManagementBtn.click();
     await this.waitForLoaderToDisappear();
-    await this.allCustomers().click();
+    await this.allCustomers.click();
     await this.waitForLoaderToDisappear();
 
-    // await this.firstNameFilter().fill(data.firstName);
+    // await this.firstNameFilter.fill(data.firstName);
     const freshCustomerId = String(
       JSON.parse(
         fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
       ).customerId,
     ).trim();
-    await this.customerField().fill(freshCustomerId);
+    await this.customerField.fill(freshCustomerId);
     console.log(freshCustomerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(15000);
 
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.startNewGL().click();
+    await this.startNewGL.click();
     await this.waitForLoaderToDisappear();
-    await this.btnAdd().click();
-    const alreadyExists = await this.alreadyExistsAlert()
+    await this.btnAdd.click();
+    const alreadyExists = await this.alreadyExistsAlert
       .waitFor({ state: "visible", timeout: 4000 })
       .then(() => true)
       .catch(() => false);
@@ -189,18 +228,18 @@ export class NewGoldLoanPage extends AdminBasePage {
       await this.page.waitForTimeout(5000);
     }
 
-    await this.appraisalRequest().waitFor({ state: "visible" });
-    await this.appraisalRequest().click();
+    await this.appraisalRequest.waitFor({ state: "visible" });
+    await this.appraisalRequest.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
     console.log(
       fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
     );
-    await this.textField().fill(freshCustomerId);
+    await this.textField.fill(freshCustomerId);
     console.log(freshCustomerId);
 
-    //await this.textField().fill(data.firstName);
+    //await this.textField.fill(data.firstName);
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
@@ -219,10 +258,10 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.keyboard.press("Home");
     await this.page.waitForTimeout(3000);
 
-    await this.jsClick(this.kebabMenu1());
-    await this.jsClick(this.applyLoan());
+    await this.jsClick(this.kebabMenu1);
+    await this.jsClick(this.applyLoan);
     await this.page.waitForTimeout(3000);
-    await this.btnOk().click();
+    await this.btnOk.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(30000);
     await this.validateBasicDetails();
@@ -241,20 +280,20 @@ export class NewGoldLoanPage extends AdminBasePage {
     );
     await purposeDropdown.scrollIntoViewIfNeeded();
     await purposeDropdown.selectOption({ label: "Business Expansion" });
-    const nextButton = this.btnNext();
+    const nextButton = this.btnNext;
     await nextButton.scrollIntoViewIfNeeded();
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   async validateNomineeDetails(): Promise<void> {
-    await this.txtNameField().waitFor({ state: "visible" });
+    await this.txtNameField.waitFor({ state: "visible" });
     await this.page.waitForTimeout(500);
-    await this.txtNameField().click();
-    await this.txtNameField().fill("Suman");
+    await this.txtNameField.click();
+    await this.txtNameField.fill("Suman");
 
-    await this.txtNomineeAge().waitFor({ state: "visible" });
-    await this.txtNomineeAge().click();
-    await this.txtNomineeAge().fill("50");
+    await this.txtNomineeAge.waitFor({ state: "visible" });
+    await this.txtNomineeAge.click();
+    await this.txtNomineeAge.fill("50");
 
     const relationDropdown = this.page.locator(
       "xpath=//select[contains(@class,'form-control') and @formcontrolname='relationship']",
@@ -264,12 +303,12 @@ export class NewGoldLoanPage extends AdminBasePage {
     await relationDropdown.selectOption({ label: "Mother" });
 
     await this.page.waitForTimeout(500);
-    await this.txtMobileNumber().waitFor({ state: "visible" });
-    await this.txtMobileNumber().click();
-    await this.txtMobileNumber().fill("7567201900");
+    await this.txtMobileNumber.waitFor({ state: "visible" });
+    await this.txtMobileNumber.click();
+    await this.txtMobileNumber.fill("7567201900");
 
     await this.page.waitForTimeout(2000);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   async validateOrnaments(): Promise<void> {
@@ -279,9 +318,9 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.evaluate("window.scrollBy(0, -500)");
     await this.page.waitForTimeout(5000);
 
-    //   const nextButton = this.btnNext();
+    //   const nextButton = this.btnNext;
     //   await nextButton.evaluate((el) => (el as any).scrollIntoView({ behavior: 'smooth', block: 'center' }));
-    //   await this.jsClick(this.btnNext());
+    //   await this.jsClick(this.btnNext);
 
     for (let i = 0; i < 2; i++) {
       let clicked = false;
@@ -338,30 +377,30 @@ export class NewGoldLoanPage extends AdminBasePage {
 
       await this.page.waitForTimeout(5000);
 
-      await this.numberOfPieces().fill("1");
+      await this.numberOfPieces.fill("1");
       await this.waitForLoaderToDisappear();
 
       await this.enterGrossAndDeductionDecimal();
 
       await this.page.waitForTimeout(2000);
 
-      await this.btnAttach().click();
+      await this.btnAttach.click();
       await this.waitForLoaderToDisappear();
 
-      await this.imgCamera().click();
+      await this.imgCamera.click();
       await this.waitForLoaderToDisappear();
 
-      await this.imgAttach().click();
+      await this.imgAttach.click();
       await this.waitForLoaderToDisappear();
 
-      await this.imgCamera().click();
+      await this.imgCamera.click();
       await this.waitForLoaderToDisappear();
 
-      await this.selKarat().selectOption({
+      await this.selKarat.selectOption({
         label: "22 K HM",
       });
 
-      await this.selPurity().selectOption({
+      await this.selPurity.selectOption({
         label: "98 %",
       });
 
@@ -382,12 +421,12 @@ export class NewGoldLoanPage extends AdminBasePage {
       }
     }
 
-    const nextButton = this.btnNext();
+    const nextButton = this.btnNext;
     await nextButton.evaluate((el) =>
       (el as any).scrollIntoView({ behavior: "smooth", block: "center" }),
     );
     await this.page.waitForTimeout(3000);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
   async enterGrossAndDeductionDecimal(): Promise<void> {
     const grossWt = 10.0 + Math.random() * 40.0;
@@ -397,31 +436,28 @@ export class NewGoldLoanPage extends AdminBasePage {
     const grossStr = grossWt.toFixed(1);
     const dedStr = deductionWt.toFixed(1);
 
-    await this.grossWt().fill(grossStr);
-    await this.deductionWt().fill(dedStr);
+    await this.grossWt.fill(grossStr);
+    await this.deductionWt.fill(dedStr);
   }
 
-  /**
-   * Port of Java Flow04_NewGoldLoan.validateFICPage().
-   */
   async validateFICPage(): Promise<void> {
     await this.page.waitForTimeout(5000);
 
-    // await this.selPartner().selectOption({ label: "KHARATMOL SK" });
+    // await this.selPartner.selectOption({ label: "KHARATMOL SK" });
     // await this.page.waitForTimeout(4000);
 
-    // await this.selScheme().selectOption({
+    // await this.selScheme.selectOption({
     //   label: "[ALL] PURPOSE IGL +CONSUMPTION (0 - 3000000)",
     // });
-    await this.selPartner().selectOption({ label: "ARVOG ARV10" });
+    await this.selPartner.selectOption({ label: "ARVOG ARV10" });
     await this.page.waitForTimeout(4000);
 
-    await this.selScheme().selectOption({
+    await this.selScheme.selectOption({
       label: "[ALL] TEST GOLD LOAN FOR ARVOG PARTNER (0 - 1500000)",
     });
     await this.page.waitForTimeout(2000);
 
-    await this.loanAmount().fill("100000");
+    await this.loanAmount.fill("100000");
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -435,7 +471,7 @@ export class NewGoldLoanPage extends AdminBasePage {
     await calculateBtn.click();
     await this.page.waitForTimeout(2000);
 
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   async validateBankDetails(documentPath?: string): Promise<void> {
@@ -444,7 +480,7 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.evaluate("window.scrollBy(0, 1000);");
     await this.page.waitForTimeout(2000);
 
-    const loanAmtEl = this.loanAmountField();
+    const loanAmtEl = this.loanAmountField;
     await loanAmtEl.evaluate((el) => (el as any).scrollIntoView(true));
     await this.page.waitForTimeout(1000);
     await this.page.evaluate("window.scrollBy(0, -150);");
@@ -462,10 +498,10 @@ export class NewGoldLoanPage extends AdminBasePage {
     await wavierField.scrollIntoViewIfNeeded();
     await this.page.waitForTimeout(1000);
 
-    await this.ifsc().fill(data.ifsc);
+    await this.ifsc.fill(data.ifsc);
     await this.waitForLoaderToDisappear();
 
-    await this.bankAccount().fill(data.accountNumber);
+    await this.bankAccount.fill(data.accountNumber);
     await this.waitForLoaderToDisappear();
     if (documentPath) {
       const fileInput = this.page.locator("xpath=//input[@type='file']");
@@ -485,10 +521,10 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.jsClick(verifyBtn);
 
     await this.page.waitForTimeout(1000);
-    await this.btnOk().click();
+    await this.btnOk.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
@@ -514,7 +550,7 @@ export class NewGoldLoanPage extends AdminBasePage {
           `token before: ${!!tokenBefore}, after: ${!!tokenAfter}).`,
       );
     }
-    const loanAmtEl = this.loanAmountField();
+    const loanAmtEl = this.loanAmountField;
     //await loanAmtEl.evaluate((el) => (el as any).scrollIntoView(true));
 
     console.log("Loan Amount Count:", await loanAmtEl.count());
@@ -540,7 +576,7 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
     // await wavierField.scrollIntoViewIfNeeded();
 
-    const toBePaidEl = this.toBePaid();
+    const toBePaidEl = this.toBePaid;
     //await toBePaidEl.scrollIntoViewIfNeeded();
     const str = (await toBePaidEl.innerText()).trim();
 
@@ -548,7 +584,7 @@ export class NewGoldLoanPage extends AdminBasePage {
 
     console.log(numericValue);
 
-    const advanceCashEl = this.advanceCashField();
+    const advanceCashEl = this.advanceCashField;
     await advanceCashEl.evaluate((el) =>
       (el as any).scrollIntoView({ block: "center" }),
     );
@@ -558,10 +594,10 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.keyboard.press("Tab");
     await this.page.waitForTimeout(4000);
     await this.page.waitForTimeout(30000);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 
   async safeClick(): Promise<void> {
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
   }
 }

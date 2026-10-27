@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import {
@@ -8,96 +8,122 @@ import {
 import { TestDataFactory } from "../../utils/data/test-data.factory";
 
 export class AddPartnerBranchPage extends AdminBasePage {
+  // ── Locators ──────────────────────────────────────────────────────────────
+  private readonly btnUpdate: Locator;
+  private readonly btnDelete: Locator;
+  private readonly btnYes: Locator;
+  private readonly btnView: Locator;
+  private readonly btnClose: Locator;
+  private readonly selPartner: Locator;
+  private readonly partnerBranchUserNav: Locator;
+  private readonly btnAddUser: Locator;
+  private readonly userFirstNameInput: Locator;
+  private readonly userLastNameInput: Locator;
+  private readonly selPartnerForUser: Locator;
+  private readonly selBranchForUser: Locator;
+  private readonly userEmailInput: Locator;
+  private readonly userMobileInput: Locator;
+  private readonly selStateForUser: Locator;
+  private readonly selCityForUser: Locator;
+  private readonly userPinCodeInput: Locator;
+  private readonly btnAddUserSubmit: Locator;
+  private readonly enterText: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly userManagent: Locator;
+  private readonly btnSendOtp: Locator;
+  private readonly otpDigit: Locator;
+  private readonly btnVerifyOtp: Locator;
+  private readonly profile: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators ──────────────────────────────────────────────────────────────
-  private readonly btnUpdate = () =>
-    this.page.locator("xpath=//span[contains(.,'Edit')]");
-  private readonly btnDelete = () =>
-    this.page.locator("xpath=(//div[contains(.,'Delete')])[1]");
-  private readonly btnYes = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-  private readonly btnView = () =>
-    this.page.locator(
+    this.btnUpdate = this.page.locator("xpath=//span[contains(.,'Edit')]");
+    this.btnDelete = this.page.locator(
+      "xpath=(//div[contains(.,'Delete')])[1]",
+    );
+    this.btnYes = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.btnView = this.page.locator(
       "xpath=(//div[contains(@class,'kt-pointer') and contains(normalize-space(.),'View')])[1]",
     );
-  private readonly btnClose = () =>
-    this.page.locator(
+    this.btnClose = this.page.locator(
       "xpath=//img[@src='../../../../../../assets/media/icons/cancel.svg']",
     );
-  private readonly selPartner = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-
-  private readonly partnerBranchUserNav = () =>
-    this.page.locator("xpath=//span[normalize-space()='Partner Branch User']");
-
-  private readonly btnAddUser = () =>
-    this.page.locator("xpath=//button[normalize-space()='Add Partner User']");
-  private readonly userFirstNameInput = () =>
-    this.page.locator("xpath=//input[@placeholder='First Name']");
-  private readonly userLastNameInput = () =>
-    this.page.locator("xpath=//input[@placeholder='Last Name']");
-  private readonly selPartnerForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-  private readonly selBranchForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='branchId']");
-  private readonly userEmailInput = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g abc@123.com']");
-  private readonly userMobileInput = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g 9023451234']");
-  private readonly selStateForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='stateId']");
-  private readonly selCityForUser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='cityId']");
-  private readonly userPinCodeInput = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Pin Code']");
-  private readonly btnAddUserSubmit = () =>
-    this.page.locator(
+    this.selPartner = this.page.locator(
+      "xpath=//select[@formcontrolname='partnerId']",
+    );
+    this.partnerBranchUserNav = this.page.locator(
+      "xpath=//span[normalize-space()='Partner Branch User']",
+    );
+    this.btnAddUser = this.page.locator(
+      "xpath=//button[normalize-space()='Add Partner User']",
+    );
+    this.userFirstNameInput = this.page.locator(
+      "xpath=//input[@placeholder='First Name']",
+    );
+    this.userLastNameInput = this.page.locator(
+      "xpath=//input[@placeholder='Last Name']",
+    );
+    this.selPartnerForUser = this.page.locator(
+      "xpath=//select[@formcontrolname='partnerId']",
+    );
+    this.selBranchForUser = this.page.locator(
+      "xpath=//select[@formcontrolname='branchId']",
+    );
+    this.userEmailInput = this.page.locator(
+      "xpath=//input[@placeholder='e.g abc@123.com']",
+    );
+    this.userMobileInput = this.page.locator(
+      "xpath=//input[@placeholder='e.g 9023451234']",
+    );
+    this.selStateForUser = this.page.locator(
+      "xpath=//select[@formcontrolname='stateId']",
+    );
+    this.selCityForUser = this.page.locator(
+      "xpath=//select[@formcontrolname='cityId']",
+    );
+    this.userPinCodeInput = this.page.locator(
+      "xpath=//input[@placeholder='Enter Pin Code']",
+    );
+    this.btnAddUserSubmit = this.page.locator(
       "xpath=//mat-dialog-container//button[normalize-space()='Add']",
     );
-  private readonly enterText = () =>
-    this.page.locator("xpath=//input[@placeholder='enter text here']");
-  private readonly arrow = () =>
-    this.page.locator(
+    this.enterText = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
-  private readonly userManagent = () =>
-    this.page.locator("xpath=//span[normalize-space()='User Management']");
-  private readonly btnSendOtp = () =>
-    this.page.locator("xpath=//button[normalize-space()='Send OTP']");
-  private readonly otpDigit = () =>
-    this.page.locator("xpath=//input[@formcontrolname='otp']");
-  private readonly btnVerifyOtp = () =>
-    this.page.locator("xpath=//button[normalize-space()='Verify']");
-
-  private readonly profile = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+    this.userManagent = this.page.locator(
+      "xpath=//span[normalize-space()='User Management']",
+    );
+    this.btnSendOtp = this.page.locator(
+      "xpath=//button[normalize-space()='Send OTP']",
+    );
+    this.otpDigit = this.page.locator("xpath=//input[@formcontrolname='otp']");
+    this.btnVerifyOtp = this.page.locator(
+      "xpath=//button[normalize-space()='Verify']",
+    );
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
+  }
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
   private async navigateToPartnerBranchUser(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
-
-    // Confirmed live: selecting any branch scope other than the account's own assigned
-    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
-    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
-    // Leave the account on its default branch scope instead of calling selectOption().
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.profile.click();
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(7000);
 
-    await this.arrow().click();
+    await this.arrow.click();
     await this.page.waitForTimeout(1000);
-    await this.userManagent().click();
+    await this.userManagent.click();
     await this.page.waitForTimeout(1000);
 
-    const pbuLink = this.partnerBranchUserNav();
+    const pbuLink = this.partnerBranchUserNav;
     await pbuLink.waitFor({ state: "visible", timeout: 15_000 });
     await pbuLink.click();
     await this.page.waitForLoadState("networkidle");
@@ -107,7 +133,7 @@ export class AddPartnerBranchPage extends AdminBasePage {
   private async openPartnerBranchUserList(searchText: string): Promise<void> {
     await this.navigateToPartnerBranchUser();
 
-    await this.enterText().fill(searchText);
+    await this.enterText.fill(searchText);
     await this.page.waitForTimeout(2000);
 
     const scrollDiv = this.page.locator(
@@ -119,16 +145,6 @@ export class AddPartnerBranchPage extends AdminBasePage {
     await this.page.waitForTimeout(1000);
   }
 
-  /**
-   * Scans every "View"/"Edit"/"Delete" candidate on the Partner Branch User list and
-   * returns the one whose row text actually contains searchText (same resilient pattern
-   * appraiser-request.page.ts's updateAppraiserFirstAvailable() uses, since the search box
-   * itself can't be trusted to have filtered anything). Falls back to the first candidate
-   * if none match, on the assumption the table only shows one page of results.
-   *
-   * NOTE: unverified against the live Partner Branch User table — ported by convention from
-   * the working Partner Branch row-actions pattern in this same file, not yet run for real.
-   */
   private async resolvePartnerBranchUserAction(
     action: "View" | "Edit" | "Delete",
     searchText: string,
@@ -177,7 +193,7 @@ export class AddPartnerBranchPage extends AdminBasePage {
     await this.navigateToPartnerBranchUser();
     await this.page.waitForLoadState("networkidle");
 
-    const addUserBtn = this.btnAddUser();
+    const addUserBtn = this.btnAddUser;
     await addUserBtn.waitFor({ state: "visible", timeout: 30_000 });
     await addUserBtn.click();
     await this.page.waitForTimeout(1000);
@@ -187,15 +203,15 @@ export class AddPartnerBranchPage extends AdminBasePage {
     const lastName = `User${stamp}`;
     const mobile = TestDataFactory.mobile();
 
-    //await this.userFirstNameInput().fill(firstName);
+    //await this.userFirstNameInput.fill(firstName);
 
     const d = getPartnerBranchUserData();
     const email = `testpartner${stamp}@${d.emailDomain}`;
 
-    await this.userFirstNameInput().fill(firstName);
-    await this.userLastNameInput().fill(lastName);
+    await this.userFirstNameInput.fill(firstName);
+    await this.userLastNameInput.fill(lastName);
 
-    const partnerSel = this.selPartnerForUser();
+    const partnerSel = this.selPartnerForUser;
     await partnerSel.waitFor({ state: "visible", timeout: 15_000 });
     await this.page.waitForFunction(
       () => {
@@ -206,7 +222,7 @@ export class AddPartnerBranchPage extends AdminBasePage {
       },
       { timeout: 20_000 },
     );
-    const branchSel = this.selBranchForUser();
+    const branchSel = this.selBranchForUser;
     const branchesLoaded = (timeout: number) =>
       this.page
         .waitForFunction(
@@ -250,31 +266,31 @@ export class AddPartnerBranchPage extends AdminBasePage {
     const branch =
       (await branchSel.locator("option:checked").textContent())?.trim() ?? "";
 
-    await this.userEmailInput().fill(email);
-    await this.userMobileInput().fill(mobile);
+    await this.userEmailInput.fill(email);
+    await this.userMobileInput.fill(mobile);
 
-    await this.btnSendOtp().click();
+    await this.btnSendOtp.click();
     await this.page.waitForTimeout(2000);
 
     // Backdoor OTP convention confirmed elsewhere in this suite (config/env.ts's ADMIN_OTP
     // defaults to '1234' whenever no role-specific OTP is configured) — this dialog verifies
     // a freshly-generated test mobile number, so there's no real SMS to read.
     const otp = "1234";
-    await this.otpDigit().fill(otp);
+    await this.otpDigit.fill(otp);
 
     await this.page.waitForTimeout(500);
 
-    await this.btnVerifyOtp().click();
+    await this.btnVerifyOtp.click();
     await this.page.waitForTimeout(2000);
 
-    await this.selStateForUser().selectOption({ label: d.state });
+    await this.selStateForUser.selectOption({ label: d.state });
     await this.page.waitForTimeout(500);
-    await this.selCityForUser().selectOption({ label: d.city });
+    await this.selCityForUser.selectOption({ label: d.city });
     await this.page.waitForTimeout(500);
 
-    await this.userPinCodeInput().fill(d.pincode);
+    await this.userPinCodeInput.fill(d.pincode);
 
-    await this.btnAddUserSubmit().click();
+    await this.btnAddUserSubmit.click();
     await this.page.waitForTimeout(2000);
 
     console.log(
@@ -300,23 +316,23 @@ export class AddPartnerBranchPage extends AdminBasePage {
     await view.click();
     await this.page.waitForTimeout(2000);
 
-    await this.userFirstNameInput().waitFor({
+    await this.userFirstNameInput.waitFor({
       state: "visible",
       timeout: 15000,
     });
 
-    await expect(this.userFirstNameInput()).toHaveValue(expected.firstName);
-    await expect(this.userLastNameInput()).toHaveValue(expected.lastName);
-    await expect(this.userEmailInput()).toHaveValue(expected.email);
-    await expect(this.userMobileInput()).toHaveValue(expected.mobile);
+    await expect(this.userFirstNameInput).toHaveValue(expected.firstName);
+    await expect(this.userLastNameInput).toHaveValue(expected.lastName);
+    await expect(this.userEmailInput).toHaveValue(expected.email);
+    await expect(this.userMobileInput).toHaveValue(expected.mobile);
 
-    const selectedPartner = await this.selPartnerForUser()
+    const selectedPartner = await this.selPartnerForUser
       .locator("option:checked")
       .textContent();
     console.log("Selected Partner:", selectedPartner);
     expect(selectedPartner?.trim()).toBe(expected.partner);
 
-    const selectedBranch = await this.selBranchForUser()
+    const selectedBranch = await this.selBranchForUser
       .locator("option:checked")
       .textContent();
     console.log("Selected Branch:", selectedBranch);
@@ -324,9 +340,8 @@ export class AddPartnerBranchPage extends AdminBasePage {
 
     console.log("Partner Branch User view details verified successfully");
 
-    await this.btnClose().click();
+    await this.btnClose.click();
   }
-
 
   async editPartnerBranchUser(
     searchText: string,
@@ -338,13 +353,13 @@ export class AddPartnerBranchPage extends AdminBasePage {
     await edit.click();
     await this.page.waitForTimeout(2000);
 
-    const lastNameField = this.userLastNameInput();
+    const lastNameField = this.userLastNameInput;
     await lastNameField.waitFor({ state: "visible", timeout: 15000 });
     await lastNameField.fill("");
     await lastNameField.fill(newLastName);
     await this.page.waitForTimeout(1000);
 
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
 
     return newLastName;
@@ -360,7 +375,7 @@ export class AddPartnerBranchPage extends AdminBasePage {
     await del.click();
     await this.page.waitForTimeout(1000);
 
-    await this.btnYes().click();
+    await this.btnYes.click();
     await this.waitForLoaderToDisappear();
   }
 

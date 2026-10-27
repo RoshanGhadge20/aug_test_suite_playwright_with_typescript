@@ -1,92 +1,114 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import { TestDataFactory } from "../../utils/data/test-data.factory";
 import fs from "fs";
 
 export class CustomerManagementPage extends AdminBasePage {
+  private readonly arrow: Locator;
+  private readonly customer: Locator;
+  private readonly allcustomer: Locator;
+  private readonly addCustomer: Locator;
+  private readonly selectlead: Locator;
+  private readonly firstName: Locator;
+  private readonly lastName: Locator;
+  private readonly mobileNumber: Locator;
+  private readonly sendOtp: Locator;
+  private readonly enterOtp: Locator;
+  private readonly verify: Locator;
+  private readonly selState: Locator;
+  private readonly selCity: Locator;
+  private readonly pinCode: Locator;
+  private readonly selGoldloan: Locator;
+  private readonly addButton: Locator;
+  private readonly statusId: Locator;
+  private readonly cancelButton: Locator;
+  private readonly commentField: Locator;
+  private readonly profile: Locator;
+  private readonly branchDropdown: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly customer = () =>
-    this.page.locator(
+    this.customer = this.page.locator(
       "xpath=(//span[normalize-space()='Customer Management'])[1]",
     );
-  private readonly allcustomer = () =>
-    this.page.locator("xpath=//span[normalize-space()='All Customers']");
-  private readonly addCustomer = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add Customer']");
-  private readonly selectlead = () =>
-    this.page.locator("xpath=//select[@formcontrolname='leadSource']");
-  private readonly firstName = () =>
-    this.page.locator("xpath=//input[@placeholder='First Name']");
-  private readonly lastName = () =>
-    this.page.locator("xpath=//input[@placeholder='Last Name']");
-  private readonly mobileNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter mobile number']");
-  private readonly sendOtp = () =>
-    this.page.locator(
+    this.allcustomer = this.page.locator(
+      "xpath=//span[normalize-space()='All Customers']",
+    );
+    this.addCustomer = this.page.locator(
+      "xpath=//span[normalize-space()='Add Customer']",
+    );
+    this.selectlead = this.page.locator(
+      "xpath=//select[@formcontrolname='leadSource']",
+    );
+    this.firstName = this.page.locator(
+      "xpath=//input[@placeholder='First Name']",
+    );
+    this.lastName = this.page.locator(
+      "xpath=//input[@placeholder='Last Name']",
+    );
+    this.mobileNumber = this.page.locator(
+      "xpath=//input[@placeholder='Enter mobile number']",
+    );
+    this.sendOtp = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base w-100 mat-primary ng-star-inserted']",
     );
-  private readonly enterOtp = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter OTP']");
-  private readonly verify = () =>
-    this.page.locator(
+    this.enterOtp = this.page.locator(
+      "xpath=//input[@placeholder='Enter OTP']",
+    );
+    this.verify = this.page.locator(
       "xpath=//kt-button[@ng-reflect-value='Verify']//button[@type='button']",
     );
-  private readonly selState = () =>
-    this.page.locator("xpath=//select[@formcontrolname='stateId']");
-  private readonly selCity = () =>
-    this.page.locator("xpath=//select[@formcontrolname='cityId']");
-  private readonly pinCode = () =>
-    this.page.locator("xpath=//input[@placeholder='000 000']");
-  private readonly selGoldloan = () =>
-    this.page.locator("xpath=//select[@formcontrolname='moduleId']");
-  private readonly addButton = () =>
-    this.page.locator(
+    this.selState = this.page.locator(
+      "xpath=//select[@formcontrolname='stateId']",
+    );
+    this.selCity = this.page.locator(
+      "xpath=//select[@formcontrolname='cityId']",
+    );
+    this.pinCode = this.page.locator("xpath=//input[@placeholder='000 000']");
+    this.selGoldloan = this.page.locator(
+      "xpath=//select[@formcontrolname='moduleId']",
+    );
+    this.addButton = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-
-  private readonly statusId = () =>
-    this.page.locator("xpath=//select[@formcontrolname='statusId']");
-
-  private readonly cancelButton = () =>
-    this.page.locator(
+    this.statusId = this.page.locator(
+      "xpath=//select[@formcontrolname='statusId']",
+    );
+    this.cancelButton = this.page.locator(
       "xpath=//button[@type='reset' and normalize-space()='Cancel']",
     );
-  private readonly commentField = () =>
-    this.page.locator("xpath=//textarea[@formcontrolname='comment']");
-
-  private readonly profile = () =>
-    this.page.locator(
+    this.commentField = this.page.locator(
+      "xpath=//textarea[@formcontrolname='comment']",
+    );
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+  }
 
   async clickOnCustomerManagementButton(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
     // Confirmed live elsewhere in this suite: selecting any branch scope other than the
     // account's own assigned branch gets the session force-logged-out on UAT within ~3s
     // (backend rejects subsequent calls with 401/403, redirect to /auth/login). Leave the
     // account on its default branch scope instead of calling selectOption().
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(7000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.customer().click();
+    await this.customer.click();
     await this.waitForLoaderToDisappear();
-    await this.allcustomer().click();
+    await this.allcustomer.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
-    await this.addCustomer().click();
+    await this.addCustomer.click();
     await this.waitForLoaderToDisappear();
     await this.selectLead();
     await this.SearchInput();
@@ -94,7 +116,7 @@ export class CustomerManagementPage extends AdminBasePage {
 
   async selectLead(): Promise<void> {
     const data = getLoginData();
-    const dropdown = this.selectlead();
+    const dropdown = this.selectlead;
     await dropdown.waitFor({ state: "visible" });
     // leadSource options load asynchronously; wait until more than the placeholder is present.
     for (
@@ -126,32 +148,32 @@ export class CustomerManagementPage extends AdminBasePage {
     const mobileNumber = TestDataFactory.mobile();
     const pinCodeVal = this.generateRandomPin();
 
-    await this.firstName().fill(data.firstName);
+    await this.firstName.fill(data.firstName);
     await this.waitForLoaderToDisappear();
 
-    await this.lastName().fill(data.lastName);
+    await this.lastName.fill(data.lastName);
     await this.waitForLoaderToDisappear();
 
-    await this.mobileNumber().fill(mobileNumber);
+    await this.mobileNumber.fill(mobileNumber);
 
     await this.waitForLoaderToDisappear();
 
-    await this.sendOtp().click();
+    await this.sendOtp.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(500);
-    await this.enterOtp().fill("1234");
+    await this.enterOtp.fill("1234");
     await this.waitForLoaderToDisappear();
 
-    await this.verify().click();
+    await this.verify.click();
     await this.waitForLoaderToDisappear();
 
-    await this.selState().selectOption({ label: data.state });
+    await this.selState.selectOption({ label: data.state });
 
     await this.page.waitForTimeout(500);
-    await this.selCity().selectOption({ label: data.city });
+    await this.selCity.selectOption({ label: data.city });
 
-    await this.pinCode().fill(pinCodeVal);
+    await this.pinCode.fill(pinCodeVal);
     const pinCode = await this.page
       .locator("//input[@formcontrolname='pinCode']")
       .inputValue();
@@ -161,7 +183,7 @@ export class CustomerManagementPage extends AdminBasePage {
 
     await this.selectAsGoldLoan();
 
-    await this.addButton().click();
+    await this.addButton.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
@@ -204,7 +226,7 @@ export class CustomerManagementPage extends AdminBasePage {
   }
 
   async parameterSelection(parameter: string): Promise<void> {
-    await this.selGoldloan().selectOption({ label: parameter });
+    await this.selGoldloan.selectOption({ label: parameter });
   }
 
   async selectAsGoldLoan(): Promise<void> {
@@ -213,30 +235,30 @@ export class CustomerManagementPage extends AdminBasePage {
   async validateDuplicateMobile(): Promise<string> {
     const data = getLoginData();
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
+    await this.profile.click();
     await this.waitForLoaderToDisappear();
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     // Tags the customer under "Augmont" (see openAddCustomerForm() above) — same fix, applied
     // here since this method also opens the Add Customer form directly.
-    await this.branchDropdown().selectOption({ label: data.branchName });
+    await this.branchDropdown.selectOption({ label: data.branchName });
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.customer().click();
+    await this.customer.click();
     await this.waitForLoaderToDisappear();
-    await this.allcustomer().click();
+    await this.allcustomer.click();
     await this.waitForLoaderToDisappear();
-    await this.addCustomer().click();
+    await this.addCustomer.click();
     await this.waitForLoaderToDisappear();
     await this.selectLead();
-    await this.firstName().fill(data.firstName);
-    await this.lastName().fill(data.lastName);
-    await this.mobileNumber().fill("9123456789");
+    await this.firstName.fill(data.firstName);
+    await this.lastName.fill(data.lastName);
+    await this.mobileNumber.fill("9123456789");
     await this.page.waitForTimeout(500);
-    await this.sendOtp().click();
+    await this.sendOtp.click();
     await this.waitForLoaderToDisappear();
-    await this.selState().selectOption({ label: data.state });
+    await this.selState.selectOption({ label: data.state });
     await this.page.waitForTimeout(2000);
     const errorLocator = this.page.locator(
       "xpath=//div[@aria-label='Mobile number is already exist.']",
@@ -251,34 +273,30 @@ export class CustomerManagementPage extends AdminBasePage {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         await this.page.waitForTimeout(7000);
-        await this.profile().click();
+        await this.profile.click();
         await this.waitForLoaderToDisappear();
-        await this.branchDropdown().waitFor({ state: "visible" });
+        await this.branchDropdown.waitFor({ state: "visible" });
         // Tags the customer under the "Augmont" branch from admin-data.xlsx instead of this
         // account's default branch — confirmed live safe under the admin role (unlike
         // appraiser, where switching branch scope forces a logout; see
         // clickOnCustomerManagementButton() above for the same fix).
-        await this.branchDropdown().selectOption({ label: data.branchName });
+        await this.branchDropdown.selectOption({ label: data.branchName });
         await this.page.waitForTimeout(5000);
         await this.expandSidebar();
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(1000);
 
-        await this.jsClick(this.customer());
+        await this.jsClick(this.customer);
         await this.waitForLoaderToDisappear();
-        if (
-          !(await this.allcustomer()
-            .isVisible()
-            .catch(() => false))
-        ) {
-          await this.jsClick(this.customer());
+        if (!(await this.allcustomer.isVisible().catch(() => false))) {
+          await this.jsClick(this.customer);
           await this.waitForLoaderToDisappear();
         }
-        await this.jsClick(this.allcustomer());
+        await this.jsClick(this.allcustomer);
         await this.waitForLoaderToDisappear();
         await this.page.waitForTimeout(3000);
 
-        await this.jsClick(this.addCustomer());
+        await this.jsClick(this.addCustomer);
         await this.waitForLoaderToDisappear();
         return;
       } catch (err) {
@@ -293,16 +311,16 @@ export class CustomerManagementPage extends AdminBasePage {
     const data = getLoginData();
     await this.openAddCustomerForm();
 
-    await this.firstName().fill(data.firstName);
-    await this.lastName().fill(data.lastName);
-    await this.mobileNumber().fill(TestDataFactory.mobile());
+    await this.firstName.fill(data.firstName);
+    await this.lastName.fill(data.lastName);
+    await this.mobileNumber.fill(TestDataFactory.mobile());
     await this.page.waitForTimeout(500);
 
-    await this.cancelButton().click();
+    await this.cancelButton.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
 
-    return (await this.mobileNumber().count()) === 0;
+    return (await this.mobileNumber.count()) === 0;
   }
 
   async addCustomerWithStatus(
@@ -315,30 +333,30 @@ export class CustomerManagementPage extends AdminBasePage {
     await this.openAddCustomerForm();
     await this.selectLead();
 
-    await this.firstName().fill(data.firstName);
+    await this.firstName.fill(data.firstName);
     await this.waitForLoaderToDisappear();
-    await this.lastName().fill(data.lastName);
+    await this.lastName.fill(data.lastName);
     await this.waitForLoaderToDisappear();
-    await this.mobileNumber().fill(mobileNumber);
-    await this.waitForLoaderToDisappear();
-
-    await this.sendOtp().click();
-    await this.waitForLoaderToDisappear();
-    await this.page.waitForTimeout(500);
-    await this.enterOtp().fill("1234");
-    await this.waitForLoaderToDisappear();
-    await this.verify().click();
+    await this.mobileNumber.fill(mobileNumber);
     await this.waitForLoaderToDisappear();
 
-    await this.selState().selectOption({ label: data.state });
+    await this.sendOtp.click();
+    await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.selCity().selectOption({ label: data.city });
-    await this.pinCode().fill(pinCodeVal);
+    await this.enterOtp.fill("1234");
+    await this.waitForLoaderToDisappear();
+    await this.verify.click();
+    await this.waitForLoaderToDisappear();
+
+    await this.selState.selectOption({ label: data.state });
+    await this.page.waitForTimeout(500);
+    await this.selCity.selectOption({ label: data.city });
+    await this.pinCode.fill(pinCodeVal);
     await this.waitForLoaderToDisappear();
 
     await this.selectAsGoldLoan();
     await this.waitForLoaderToDisappear();
-    const statusSelect = this.statusId();
+    const statusSelect = this.statusId;
     if (await statusSelect.isEnabled()) {
       await statusSelect.selectOption({ label: status });
       await this.page.waitForTimeout(500);
@@ -347,21 +365,19 @@ export class CustomerManagementPage extends AdminBasePage {
         await statusSelect.locator("option:checked").textContent()
       )?.trim();
       if (currentValue !== status) {
-        await this.cancelButton()
-          .click()
-          .catch(() => {});
+        await this.cancelButton.click().catch(() => {});
         await this.waitForLoaderToDisappear().catch(() => {});
         throw new Error(
           `Select Status is disabled through this Add Customer form and defaults to "${currentValue}" — "${status}" cannot be selected here.`,
         );
       }
     }
-    if (await this.commentField().count()) {
-      await this.commentField().fill(`Status: ${status}`);
+    if (await this.commentField.count()) {
+      await this.commentField.fill(`Status: ${status}`);
       await this.page.waitForTimeout(500);
     }
 
-    await this.addButton().click();
+    await this.addButton.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
@@ -388,19 +404,19 @@ export class CustomerManagementPage extends AdminBasePage {
   }> {
     const data = getLoginData();
     // await this.openAddCustomerForm();
-    await this.jsClick(this.allcustomer());
+    await this.jsClick(this.allcustomer);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.jsClick(this.addCustomer());
+    await this.jsClick(this.addCustomer);
     await this.waitForLoaderToDisappear();
-    await this.firstName().fill(data.firstName);
-    await this.lastName().fill(data.lastName);
-    await this.mobileNumber().fill("12345");
+    await this.firstName.fill(data.firstName);
+    await this.lastName.fill(data.lastName);
+    await this.mobileNumber.fill("12345");
     await this.page.waitForTimeout(500);
 
-    const sendOtpEnabled = await this.sendOtp().isEnabled();
-    const mobileClass = (await this.mobileNumber().getAttribute("class")) || "";
+    const sendOtpEnabled = await this.sendOtp.isEnabled();
+    const mobileClass = (await this.mobileNumber.getAttribute("class")) || "";
     const mobileFieldInvalid = mobileClass.includes("ng-invalid");
 
     return { sendOtpEnabled, mobileFieldInvalid };

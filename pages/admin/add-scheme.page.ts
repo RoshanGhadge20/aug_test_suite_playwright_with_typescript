@@ -1,4 +1,4 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { TestDataFactory } from "../../utils/data/test-data.factory";
 
@@ -17,92 +17,135 @@ import { TestDataFactory } from "../../utils/data/test-data.factory";
  *   - OMITTED. Role = admin.
  */
 export class AddSchemePage extends AdminBasePage {
+  // ── Locators (from PO38_AddNewScheme + cross-page re-declarations) ───────
+  private readonly SchemeConfiguration: Locator;
+  private readonly btnAddNewScheme: Locator;
+  private readonly PartnerName: Locator;
+  private readonly SchemeName: Locator;
+  private readonly BasicDescription: Locator;
+  private readonly SelSchemeType: Locator;
+  private readonly SelCustomerType: Locator;
+  private readonly MinKarat: Locator;
+  private readonly MaxKarat: Locator;
+  private readonly DayInyear: Locator;
+  private readonly radioOneTimeProcessing: Locator;
+  private readonly RadioPreClosureFees: Locator;
+  private readonly RadioToggleOn: Locator;
+  private readonly btnNext: Locator;
+  private readonly SelAccountingStandard: Locator;
+  private readonly LoanPurposeTypeDropdown: Locator;
+  private readonly MinLoanAmountLac: Locator;
+  private readonly MaxLoanAmountLac: Locator;
+  private readonly InternalBranchDropdown: Locator;
+  private readonly SchemeLtv: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly AdminSetting: Locator;
+  private readonly loc_btnView: Locator;
+  private readonly loc_btnPartnerName: Locator;
+  private readonly loc_schemeType: Locator;
+  private readonly schemeStatusToggle: Locator;
+  private readonly confirmYesBtn: Locator;
+  private readonly rpgUpdateBtn: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO38_AddNewScheme) ────────────────────────────────────
-
-  private readonly SchemeConfiguration = () =>
-    this.page.locator("xpath=//span[normalize-space()='Scheme Configuration']");
-  private readonly btnAddNewScheme = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add New Scheme']");
-  private readonly PartnerName = () =>
-    this.page.locator("xpath=//select[@formcontrolname='partnerId']");
-  private readonly SchemeName = () =>
-    this.page.locator("xpath=//input[@placeholder='Express Gold Loan']");
-  private readonly BasicDescription = () =>
-    this.page.locator("xpath=//textarea[@placeholder='Description']");
-  private readonly SelSchemeType = () =>
-    this.page.locator("xpath=//select[@formcontrolname='schemeType']");
-  private readonly SelCustomerType = () =>
-    this.page.locator("xpath=//select[@formcontrolname='customerType']");
-  private readonly MinKarat = () =>
-    this.page.locator("xpath=//select[@formcontrolname='minKarat']");
-  private readonly MaxKarat = () =>
-    this.page.locator("xpath=//select[@formcontrolname='maxKarat']");
-  private readonly DayInyear = () =>
-    this.page.locator("xpath=//input[@formcontrolname='daysInYear']");
-  private readonly radioOneTimeProcessing = () =>
-    this.page.locator(
+    this.SchemeConfiguration = this.page.locator(
+      "xpath=//span[normalize-space()='Scheme Configuration']",
+    );
+    this.btnAddNewScheme = this.page.locator(
+      "xpath=//span[normalize-space()='Add New Scheme']",
+    );
+    this.PartnerName = this.page.locator(
+      "xpath=//select[@formcontrolname='partnerId']",
+    );
+    this.SchemeName = this.page.locator(
+      "xpath=//input[@placeholder='Express Gold Loan']",
+    );
+    this.BasicDescription = this.page.locator(
+      "xpath=//textarea[@placeholder='Description']",
+    );
+    this.SelSchemeType = this.page.locator(
+      "xpath=//select[@formcontrolname='schemeType']",
+    );
+    this.SelCustomerType = this.page.locator(
+      "xpath=//select[@formcontrolname='customerType']",
+    );
+    this.MinKarat = this.page.locator(
+      "xpath=//select[@formcontrolname='minKarat']",
+    );
+    this.MaxKarat = this.page.locator(
+      "xpath=//select[@formcontrolname='maxKarat']",
+    );
+    this.DayInyear = this.page.locator(
+      "xpath=//input[@formcontrolname='daysInYear']",
+    );
+    this.radioOneTimeProcessing = this.page.locator(
       "xpath=//label[@for='mat-slide-toggle-510-input']//div[@class='mat-slide-toggle-thumb']",
     );
-  private readonly RadioPreClosureFees = () =>
-    this.page.locator(
+    this.RadioPreClosureFees = this.page.locator(
       "xpath=//label[@for='mat-slide-toggle-511-input']//div[@class='mat-slide-toggle-thumb']",
     );
-  private readonly RadioToggleOn = () =>
-    this.page.locator(
+    this.RadioToggleOn = this.page.locator(
       "xpath=//label[@for='mat-slide-toggle-512-input']//div[@class='mat-slide-toggle-thumb']",
     );
-  private readonly btnNext = () =>
-    this.page.locator("xpath=//button[normalize-space()='Next']");
-  // Current live "Add New Scheme" modal (2026-07-08 screenshots) — a multi-step wizard, not
-  // the single-page form the rest of this file's locators were originally ported for.
-  private readonly SelAccountingStandard = () =>
-    this.page.locator(
+    this.btnNext = this.page.locator(
+      "xpath=//button[normalize-space()='Next']",
+    );
+    this.SelAccountingStandard = this.page.locator(
       "xpath=//*[normalize-space()='Accounting Standard']/following::select[1]",
     );
-  private readonly LoanPurposeTypeDropdown = () =>
-    this.page
+    this.LoanPurposeTypeDropdown = this.page
       .locator("xpath=//*[normalize-space()='Loan Purpose Type']")
       .last();
-  private readonly MinLoanAmountLac = () =>
-    this.page.locator("xpath=//input[@placeholder='From e.g. 1 or 1.5']");
-  private readonly MaxLoanAmountLac = () =>
-    this.page.locator("xpath=//input[@placeholder='To e.g. 2']");
-  private readonly InternalBranchDropdown = () =>
-    this.page.locator("xpath=//*[normalize-space()='Internal Branch']").last();
-  
-  private readonly SchemeLtv = () =>
-    this.page.locator(
+    this.MinLoanAmountLac = this.page.locator(
+      "xpath=//input[@placeholder='From e.g. 1 or 1.5']",
+    );
+    this.MaxLoanAmountLac = this.page.locator(
+      "xpath=//input[@placeholder='To e.g. 2']",
+    );
+    this.InternalBranchDropdown = this.page
+      .locator("xpath=//*[normalize-space()='Internal Branch']")
+      .last();
+    this.SchemeLtv = this.page.locator(
       "xpath=//*[normalize-space()='Accounting Standard']/following::select[2]",
     );
-
-  // Cross-page re-declarations
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
-  private readonly AdminSetting = () =>
-    this.page.locator("xpath=//span[normalize-space()='Admin Settings']");
-  // PO39_UpdateRPG locators used in validateViewScheme
-  private readonly loc_btnView = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+    this.AdminSetting = this.page.locator(
+      "xpath=//span[normalize-space()='Admin Settings']",
+    );
+    this.loc_btnView = this.page.locator(
       "xpath=//div[@id='s406']//span[@class='material-icons kt-pointer'][normalize-space()='visibility']",
     );
-  private readonly loc_btnPartnerName = () =>
-    this.page.locator("xpath=//input[@formcontrolname='partnerId']");
-  private readonly loc_schemeType = () =>
-    this.page.locator("xpath=//select[@formcontrolname='schemeType']");
+    this.loc_btnPartnerName = this.page.locator(
+      "xpath=//input[@formcontrolname='partnerId']",
+    );
+    this.loc_schemeType = this.page.locator(
+      "xpath=//select[@formcontrolname='schemeType']",
+    );
+    this.schemeStatusToggle = this.page.locator(
+      "xpath=(//input[contains(@class,'mat-slide-toggle-input')])[1]",
+    );
+    this.confirmYesBtn = this.page.locator(
+      "xpath=//span[normalize-space()='Yes']",
+    );
+    this.rpgUpdateBtn = this.page.locator(
+      "xpath=//button[.//span[normalize-space()='Update']]",
+    );
+  }
+
+  // Locators that depend on a runtime value stay as methods.
   private readonly schemeCardHeading = (schemeName: string) =>
-    this.page.locator(`xpath=//h5[normalize-space()='${schemeName.toUpperCase()}']`);
+    this.page.locator(
+      `xpath=//h5[normalize-space()='${schemeName.toUpperCase()}']`,
+    );
   private readonly schemeEditIcon = (schemeName: string) =>
     this.page.locator(
       `xpath=//h5[normalize-space()='${schemeName.toUpperCase()}']/following::img[1]`,
@@ -111,60 +154,30 @@ export class AddSchemePage extends AdminBasePage {
     this.page.getByRole("tab", {
       name: new RegExp(`^${partnerName}$`, "i"),
     });
-  // Port of Java Flow61_CheckActiveAndDeactiveFunctionality — takes the first scheme card's
-  // status toggle (Java hardcodes index [1] too; there's no per-scheme-name locator in the
-  // original PO38/PO39 either).
-  private readonly schemeStatusToggle = () =>
-    this.page.locator(
-      "xpath=(//input[contains(@class,'mat-slide-toggle-input')])[1]",
-    );
-  private readonly confirmYesBtn = () =>
-    this.page.locator("xpath=//span[normalize-space()='Yes']");
-  private readonly rpgUpdateBtn = () =>
-    this.page.locator("xpath=//button[.//span[normalize-space()='Update']]");
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   private async navigateToSchemeConfiguration(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
-
-    // NOTE: does NOT select a branch from the dropdown — confirmed live (renew-zero.page.ts,
-    // loan-defects.page.ts) that switching this account's branch scope (even to a specific
-    // named branch, not just "Show All") gets the backend to reject the session outright
-    // (403/401, forced redirect to /auth/login) before the sidebar is even reached.
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.profile.click();
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.page.waitForTimeout(1000);
-
-    // jsClick() already waits up to 30s for visibility and scrolls into view itself — a
-    // preceding .evaluate(scrollIntoView) call bound by the tight global 10s actionTimeout
-    // was timing out here (element not rendered yet right after the branch-dropdown change)
-    // before jsClick's own generous wait ever got a chance to run (same fix as
-    // loan-defects.page.ts). Also scoped to the sidebar menu specifically — the bare
-    // span[text()='Settings'] also matches an unrelated "Settings" link in the header
-    // (#kt_header), causing a strict-mode violation.
-    //
-    // This method runs twice per test (validateAddNewScheme, then validateViewScheme). The
-    // sidebar "Settings" section is a TOGGLE, not a plain expand — confirmed live (same bug as
-    // loan-defects.page.ts): clicking it unconditionally on the second call collapses the
-    // already-expanded section, hiding "Admin Settings" underneath and timing out the next
-    // click. Guard each toggle click with an isVisible() check on its target submenu.
     const settingsEle = this.page.locator(
       "xpath=//div[@id='kt_aside_menu']//span[normalize-space()='Settings']",
     );
-    if (!(await this.AdminSetting().isVisible())) {
+    if (!(await this.AdminSetting.isVisible())) {
       await this.jsClick(settingsEle);
     }
 
     await this.page.waitForTimeout(1000);
-    if (!(await this.SchemeConfiguration().isVisible())) {
-      await this.AdminSetting().click();
+    if (!(await this.SchemeConfiguration.isVisible())) {
+      await this.AdminSetting.click();
     }
     await this.page.waitForTimeout(500);
-    await this.SchemeConfiguration().click();
+    await this.SchemeConfiguration.click();
   }
 
   async validateAddNewScheme(): Promise<string> {
@@ -178,16 +191,16 @@ export class AddSchemePage extends AdminBasePage {
     await addSchemeBtn.scrollIntoViewIfNeeded();
     await addSchemeBtn.click();
     await this.page.waitForTimeout(5000);
-    await this.PartnerName().selectOption({ label: "Kharatmol Sk" });
+    await this.PartnerName.selectOption({ label: "Kharatmol Sk" });
     await this.page.waitForTimeout(1000);
-    await this.SchemeName().fill(schemeName);
-    await this.BasicDescription().fill(schemeName);
+    await this.SchemeName.fill(schemeName);
+    await this.BasicDescription.fill(schemeName);
     await this.page.waitForTimeout(1000);
-    await this.SelSchemeType().selectOption({ label: "Secured" });
+    await this.SelSchemeType.selectOption({ label: "Secured" });
     await this.page.waitForTimeout(1000);
-    await this.SelAccountingStandard().selectOption({ index: 1 });
+    await this.SelAccountingStandard.selectOption({ index: 1 });
     await this.page.waitForTimeout(1000);
-    await this.jsClick(this.InternalBranchDropdown());
+    await this.jsClick(this.InternalBranchDropdown);
     const branchOptions = this.page.locator(
       "xpath=//div[contains(@class,'ng-option')]",
     );
@@ -195,15 +208,11 @@ export class AddSchemePage extends AdminBasePage {
     const augmontBranchOption = branchOptions.filter({ hasText: /Augmont/i });
     await augmontBranchOption.first().click();
     await this.page.waitForTimeout(500);
-
-    // "Scheme LTV(%)" is a required native select.
-    await this.SchemeLtv().selectOption({ label: "85" });
+    await this.SchemeLtv.selectOption({ label: "85" });
     await this.page.waitForTimeout(500);
-
-    // "Loan Type" already shows a default chip ("Fresh Loan (+5)") in the live UI — left as-is.
-    await this.SelCustomerType().selectOption({ label: "Active Customer" });
+    await this.SelCustomerType.selectOption({ label: "Active Customer" });
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.LoanPurposeTypeDropdown());
+    await this.jsClick(this.LoanPurposeTypeDropdown);
     const purposeOptions = this.page.locator(
       "xpath=//div[contains(@class,'ng-option')]",
     );
@@ -211,13 +220,13 @@ export class AddSchemePage extends AdminBasePage {
     await purposeOptions.first().click();
     await this.page.waitForTimeout(500);
 
-    await this.MinLoanAmountLac().fill("1");
-    await this.MaxLoanAmountLac().fill("2");
-    await this.MinKarat().selectOption({ label: "18 K" });
+    await this.MinLoanAmountLac.fill("1");
+    await this.MaxLoanAmountLac.fill("2");
+    await this.MinKarat.selectOption({ label: "18 K" });
     await this.page.waitForTimeout(1000);
-    await this.MaxKarat().selectOption({ label: "22 K HM" });
-    await this.DayInyear().fill("360");
-    await this.jsClick(this.btnNext());
+    await this.MaxKarat.selectOption({ label: "22 K HM" });
+    await this.DayInyear.fill("360");
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(2000);
     const interestTab = this.page.getByRole("tab", {
       name: "Interest & Dates",
@@ -259,7 +268,7 @@ export class AddSchemePage extends AdminBasePage {
     await billingCycle.selectOption({ index: 1 });
     await this.page.waitForTimeout(500);
 
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(2000);
     const chargesPanel = this.page.getByRole("tabpanel", {
       name: "Charges & Penalties",
@@ -270,7 +279,6 @@ export class AddSchemePage extends AdminBasePage {
     await gracePeriodDays.fill("3");
     await this.page.waitForTimeout(500);
 
-  
     const addBtn = this.page.getByRole("button", { name: "Add", exact: true });
     await addBtn.waitFor({ state: "visible", timeout: 10000 });
     await addBtn.click();
@@ -302,12 +310,12 @@ export class AddSchemePage extends AdminBasePage {
   }> {
     await this.navigateToSchemeConfiguration();
 
-    await this.loc_btnView().click();
+    await this.loc_btnView.click();
 
-    const partnerNameEl = this.loc_btnPartnerName();
+    const partnerNameEl = this.loc_btnPartnerName;
     const partnerNameVisible = await partnerNameEl.isVisible();
 
-    const schemeTypeEl = this.loc_schemeType();
+    const schemeTypeEl = this.loc_schemeType;
     const schemeTypeVisible = await schemeTypeEl.isVisible();
     await this.page.locator("xpath=//img[contains(@src,'cancel.svg')]").click();
     await this.page.waitForTimeout(500);
@@ -319,7 +327,9 @@ export class AddSchemePage extends AdminBasePage {
 
     await this.partnerTab("Kharatmol Sk").click();
     await this.page.waitForTimeout(1000);
-    const searchBox = this.page.locator("xpath=//input[@placeholder='enter text here']");
+    const searchBox = this.page.locator(
+      "xpath=//input[@placeholder='enter text here']",
+    );
     await searchBox.waitFor({ state: "visible", timeout: 10000 });
     await searchBox.fill(schemeName);
     await this.page.waitForTimeout(2000);
@@ -340,18 +350,26 @@ export class AddSchemePage extends AdminBasePage {
     await editLtv.selectOption({ label: newValue });
     await this.page.waitForTimeout(500);
 
-    const updateBtn = this.page.getByRole("button", { name: "Update", exact: true });
+    const updateBtn = this.page.getByRole("button", {
+      name: "Update",
+      exact: true,
+    });
     await updateBtn.waitFor({ state: "visible", timeout: 10000 });
     await updateBtn.click();
     await this.page.waitForTimeout(1000);
 
-    const confirmYes = this.page.getByRole("button", { name: "Yes", exact: true });
+    const confirmYes = this.page.getByRole("button", {
+      name: "Yes",
+      exact: true,
+    });
     if (await confirmYes.isVisible().catch(() => false)) {
       await confirmYes.click();
       await this.page.waitForTimeout(2000);
     }
 
-    const modalHeading = this.page.getByRole("heading", { name: "Edit Scheme Details" });
+    const modalHeading = this.page.getByRole("heading", {
+      name: "Edit Scheme Details",
+    });
     const stillOpen = await modalHeading.isVisible().catch(() => false);
     if (stillOpen) {
       throw new Error(
@@ -376,15 +394,15 @@ export class AddSchemePage extends AdminBasePage {
   }> {
     await this.navigateToSchemeConfiguration();
 
-    const toggle = this.schemeStatusToggle();
+    const toggle = this.schemeStatusToggle;
     await toggle.waitFor({ state: "visible", timeout: 15000 });
     const initialState = await toggle.isChecked();
 
     await this.jsClick(toggle);
     await this.page.waitForTimeout(1000);
-    await this.confirmYesBtn().click();
+    await this.confirmYesBtn.click();
     await this.page.waitForTimeout(1000);
-    await this.rpgUpdateBtn().click();
+    await this.rpgUpdateBtn.click();
     await this.page.waitForTimeout(1000);
 
     const toggledState = await toggle.isChecked();
@@ -392,7 +410,7 @@ export class AddSchemePage extends AdminBasePage {
     await toggle.waitFor({ state: "visible", timeout: 15000 });
     await this.jsClick(toggle);
     await this.page.waitForTimeout(5000);
-    await this.confirmYesBtn().click();
+    await this.confirmYesBtn.click();
     await this.page.waitForTimeout(1000);
 
     const finalState = await toggle.isChecked();

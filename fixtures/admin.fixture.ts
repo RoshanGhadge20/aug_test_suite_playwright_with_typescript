@@ -20,7 +20,6 @@ import { FullReleasePage } from "../pages/admin/full-release.page";
 // TC03 page objects
 import { AppraiserRequestPage } from "../pages/admin/appraiser-request.page";
 import { CrlPagePage } from "../pages/admin/crl-page.page";
-import { KycForm60Page } from "../pages/admin/kyc-form60.page";
 import { KycOvdPage } from "../pages/admin/kyc-OVD.page";
 import { ViewKycDetailsPage } from "../pages/admin/view-kyc-details.page";
 import { ReKycPage } from "../pages/admin/re-kyc.page";
@@ -38,6 +37,7 @@ import { PartReleaseOfflinePage } from "../pages/admin/part-release-offline.page
 import { FullReleaseOfflinePage } from "../pages/admin/full-release-offline.page";
 import { RenewZeroPage } from "../pages/admin/renew-zero.page";
 import { LoanViewPage } from "../pages/admin/loan-view.page";
+import { TransactionLogPage } from "../pages/admin/transaction-log.page";
 import { WaiverPage } from "../pages/admin/waiver.page";
 import { ManualChargesPage } from "../pages/admin/manual-charges.page";
 import { CustomCancelPage } from "../pages/admin/custom-cancel.page";
@@ -95,7 +95,6 @@ type AdminFixtures = {
   // TC03
   appraiserRequest: AppraiserRequestPage;
   crlPage: CrlPagePage;
-  kycForm60: KycForm60Page;
   kycOvd: KycOvdPage;
   viewKycDetails: ViewKycDetailsPage;
   reKyc: ReKycPage;
@@ -113,6 +112,7 @@ type AdminFixtures = {
   fullReleaseOffline: FullReleaseOfflinePage;
   renewZero: RenewZeroPage;
   loanView: LoanViewPage;
+  transactionLog: TransactionLogPage;
   waiver: WaiverPage;
   manualCharges: ManualChargesPage;
   customCancel: CustomCancelPage;
@@ -218,9 +218,6 @@ export const test = base.extend<AdminFixtures>({
   crlPage: async ({ page }, use) => {
     await use(new CrlPagePage(page));
   },
-  kycForm60: async ({ page }, use) => {
-    await use(new KycForm60Page(page));
-  },
   kycOvd: async ({ page }, use) => {
     await use(new KycOvdPage(page));
   },
@@ -269,6 +266,9 @@ export const test = base.extend<AdminFixtures>({
   },
   loanView: async ({ page }, use) => {
     await use(new LoanViewPage(page));
+  },
+  transactionLog: async ({ page }, use) => {
+    await use(new TransactionLogPage(page));
   },
   waiver: async ({ page }, use) => {
     await use(new WaiverPage(page));

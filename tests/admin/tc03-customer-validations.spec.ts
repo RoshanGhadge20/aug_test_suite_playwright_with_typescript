@@ -3,7 +3,7 @@ import { onboardCustomerThroughKyc } from "../../flows/admin/onboarding.flow";
 import { createDisbursedLoan } from "../../flows/admin/gold-loan.flow";
 
 test.describe("TC03 customer validations @regression @admin @kyc", () => {
-  test("customer validations — add button, appraiser request, CRL, KYC form60, view KYC, delete loan, incomplete rating, partner loan, FIC, bank details, pown ticket, CPV arvog, CPV non-arvog, digio, digio arvog", async ({
+  test("customer validations — add button, appraiser request, CRL, view KYC, delete loan, incomplete rating, partner loan, FIC, bank details, pown ticket, CPV arvog, CPV non-arvog, digio, digio arvog", async ({
     page,
     loginAs,
     customerManagement,
@@ -11,7 +11,6 @@ test.describe("TC03 customer validations @regression @admin @kyc", () => {
     kycApproval,
     appraiserRequest,
     crlPage,
-    kycForm60,
     kycOvd,
     viewKycDetails,
     deleteLoan,
@@ -55,16 +54,6 @@ test.describe("TC03 customer validations @regression @admin @kyc", () => {
     //   await crlPage.viewFunctionality();
     // });
 
-    // await test.step("validate customer KYC with Form60 — autoKycWithPan (appraiser)", async () => {
-    //   await loginAs("appraiser");
-    //   await kycForm60.autoKycWithPan();
-    //   await page.waitForLoadState("networkidle");
-    //   await page.waitForTimeout(5000);
-    //   await loginAs("ops");
-    //   const approvalResult = await kycApproval.performOpsRatingActions(kyc);
-    //   expect.soft(approvalResult.selectedStatus).toBe("Approved");
-    //   expect.soft(approvalResult.formClosed).toBe(true);
-    // });
     // await test.step("validate Add OVD (DL) document with Auto Aadhaar (appraiser)", async () => {
     //   await loginAs("appraiser");
     //   await kycOvd.validateAddOvdDlDocumentWithAutoAadhaar();

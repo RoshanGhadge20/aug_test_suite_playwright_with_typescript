@@ -16,11 +16,11 @@ test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
     kycFilePaths,
   }) => {
     test.setTimeout(15 * 60_000);
-    // await test.step("add customer", async () => {
-    //   test.setTimeout(15 * 60_000);
-    //   await loginAs("appraiser");
-    //   await customerManagement.clickOnCustomerManagementButton();
-    // });
+    await test.step("add customer", async () => {
+      test.setTimeout(15 * 60_000);
+      await loginAs("appraiser");
+      await customerManagement.clickOnCustomerManagementButton();
+    });
     // await test.step("validate Apply KYC button", async () => {
     //   test.setTimeout(15 * 60_000);
     //   const { isDisplayed, isEnabled } = await kyc.validateApplyKycButton();
@@ -35,14 +35,14 @@ test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
     //     kycFilePaths.signaturePath,
     //   );
     // });
-    // await test.step("customer KYC", async () => {
-    //   test.setTimeout(15 * 60_000);
-    //   await kyc.ClickonKyc(
-    //     kycFilePaths.panCardPath,
-    //     kycFilePaths.signaturePath,
-    //     kycFilePaths.aadhaarPath,
-    //   );
-    // });
+    await test.step("customer KYC", async () => {
+      test.setTimeout(15 * 60_000);
+      await kyc.ClickonKyc(
+        kycFilePaths.panCardPath,
+        kycFilePaths.signaturePath,
+        kycFilePaths.aadhaarPath,
+      );
+    });
     await test.step("KYC approval (OPS)", async () => {
       test.setTimeout(15 * 60_000);
       await loginAs("ops");

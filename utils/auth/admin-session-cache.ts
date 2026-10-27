@@ -68,20 +68,84 @@ function readUserDetailsToken(state: StorageStateShape): string | null {
   return null;
 }
 
-/** True only if the cache file exists, parses, and its token's exp is safely in the future. */
-function isSessionCacheValid(filePath: string): boolean {
-  if (!fs.existsSync(filePath)) return false;
+/** Returns null when the cache file is usable, else a short reason why it is not. */
+function sessionCacheRejection(filePath: string): string | null {
+  if (!fs.existsSync(filePath)) return "no saved session file";
   try {
-    const state = JSON.parse(fs.readFileSync(filePath, "utf8")) as StorageStateShape;
+    const state = JSON.parse(
+      fs.readFileSync(filePath, "utf8"),
+    ) as StorageStateShape;
     const token = readUserDetailsToken(state);
-    if (!token) return false;
+    if (!token) return "saved session has no UserDetails token";
     const exp = decodeJwtExpiry(token);
-    if (!exp) return false;
+    if (!exp) return "saved token has no readable expiry";
     const nowSeconds = Math.floor(Date.now() / 1000);
-    return exp - EXPIRY_SAFETY_BUFFER_SECONDS > nowSeconds;
+    if (exp - EXPIRY_SAFETY_BUFFER_SECONDS <= nowSeconds) {
+      return `saved token expired (${new Date(exp * 1000).toISOString()})`;
+    }
+    return null;
+  } catch {
+    return "saved session file is unreadable";
+  }
+}
+
+/** True when the cache file exists, parses, and its token's exp is safely in the future. */
+function isSessionCacheValid(filePath: string): boolean {
+  return sessionCacheRejection(filePath) === null;
+}
+
+/** Token currently held by the page (localStorage UserDetails), or null. */
+async function readPageToken(page: Page): Promise<string | null> {
+  return page
+    .evaluate(() => {
+      try {
+        const raw = window.localStorage.getItem("UserDetails");
+        return raw ? ((JSON.parse(raw).Token as string) ?? null) : null;
+      } catch {
+        return null;
+      }
+    })
+    .catch(() => null);
+}
+
+/**
+ * True when the page is already signed in as `role` — its live token is the saved one for that
+ * role, still unexpired, and the app is not on an /auth/* route. Lets callers skip the whole
+ * logout/login round-trip when the right user is already in.
+ */
+export async function isAlreadySignedInAs(
+  page: Page,
+  role: AdminRole,
+  env: EnvName,
+): Promise<boolean> {
+  const filePath = sessionCachePath(env, role);
+  if (!isSessionCacheValid(filePath)) return false;
+  if (page.url().toLowerCase().includes("/auth/")) return false;
+  try {
+    const saved = readUserDetailsToken(
+      JSON.parse(fs.readFileSync(filePath, "utf8")) as StorageStateShape,
+    );
+    const live = await readPageToken(page);
+    return !!saved && saved === live;
   } catch {
     return false;
   }
+}
+
+/**
+ * Drops the browser-side session (localStorage, sessionStorage, cookies) WITHOUT clicking the
+ * app's Sign Out. Sign Out calls the backend, which revokes the token we saved for that role, so
+ * the next restore was always rejected and a fresh OTP login ran. A client-side clear leaves the
+ * saved tokens valid on the server.
+ */
+export async function clearClientSession(page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    })
+    .catch(() => {});
+  await page.context().clearCookies();
 }
 
 /**
@@ -97,10 +161,16 @@ export async function tryRestoreCachedSession(
   env: EnvName,
 ): Promise<boolean> {
   const filePath = sessionCachePath(env, role);
-  if (!isSessionCacheValid(filePath)) return false;
+  const rejection = sessionCacheRejection(filePath);
+  if (rejection) {
+    console.log(`↻ Fresh login for role="${role}": ${rejection}.`);
+    return false;
+  }
 
   try {
-    const state = JSON.parse(fs.readFileSync(filePath, "utf8")) as StorageStateShape;
+    const state = JSON.parse(
+      fs.readFileSync(filePath, "utf8"),
+    ) as StorageStateShape;
     const origin = state.origins?.[0];
     if (!origin?.localStorage?.length) return false;
 
@@ -127,6 +197,9 @@ export async function tryRestoreCachedSession(
     if (page.url().toLowerCase().includes("/auth/")) {
       // Don't leave the rejected cached token behind for the fresh login that follows.
       await page.evaluate(() => window.localStorage.clear()).catch(() => {});
+      console.log(
+        `↻ Fresh login for role="${role}": the server rejected the saved token (redirected to /auth/).`,
+      );
       return false;
     }
 
@@ -138,8 +211,16 @@ export async function tryRestoreCachedSession(
       .then(() => true)
       .catch(() => false);
 
+    if (!profileVisible) {
+      console.log(
+        `↻ Fresh login for role="${role}": dashboard profile icon did not appear after restoring the saved session.`,
+      );
+    }
     return profileVisible;
-  } catch {
+  } catch (err: any) {
+    console.log(
+      `↻ Fresh login for role="${role}": restoring the saved session failed (${err?.message ?? err}).`,
+    );
     return false;
   }
 }

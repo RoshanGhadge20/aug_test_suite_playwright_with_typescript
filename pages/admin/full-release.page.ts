@@ -1,190 +1,199 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import customerData from "../../testdata/admin/documents/customerData.json";
-/**
- * Port of Java: PO16_FullRelease (locators) + Flow18_FullReleaseLoan.fullRelease() (actions)
- *
- * Flow18_FullReleaseLoan.fullRelease() active steps:
- *   1. Login as appraiser (OMITTED), set branch Show All, navigate.
- *   2. Call fullReleaseOnlinePay(): Loan Details → filter → kebab → Jewellery Release → Full Release
- *      → Proceed → PAYMENT GATEWAY / netbanking → Confirm → Yes → Razorpay iframe / SBI / popup Success.
- *   3. Navigate to Funds and Approvals → Jewellery Release Approval → Full Release Approval → Filter.
- *   4. Click Jewellery Release Final Process → Final Full Release → update().
- *
- * Cross-page locator notes:
- *   - All cross-page locators re-declared locally following the TC02 house style.
- *   - PO08_PacketSubmissionAppraiser locators re-declared for update().
- *   - PO15_PartRelease locators (btnCollect, customerHomeIn, btnCamera, btnAttach) re-declared for update().
- *
- * Omitted loginWith* calls:
- *   - Flow18_FullReleaseLoan.fullRelease() called Flow_LoginLogout.loginWithAppraiser() — OMITTED.
- *     Role = appraiser; caller must inject via loginAs('appraiser').
- *
- * Data note:
- *   - Java used `partnerNumber` → mapped to getLoginData().accountNumber.
- */
+
 export class FullReleasePage extends AdminBasePage {
+  // ── Locators (from PO16_FullRelease + cross-page re-declarations) ─────────
+  private readonly jewllaryRelease: Locator;
+  private readonly jwellaryReleaseApproval: Locator;
+  private readonly btnProced: Locator;
+  private readonly fullReleaseBtn: Locator;
+  private readonly fullReleaseApproval: Locator;
+  private readonly selPayment: Locator;
+  private readonly btnConfirm: Locator;
+  private readonly selPurpose: Locator;
+  private readonly btnFundsAndApproval: Locator;
+  private readonly selDate: Locator;
+  private readonly dateArrow: Locator;
+  private readonly selYear: Locator;
+  private readonly selMonth: Locator;
+  private readonly selDay: Locator;
+  private readonly selTimeFrom: Locator;
+  private readonly selTime: Locator;
+  private readonly btnOk: Locator;
+  private readonly selTimeTo: Locator;
+  private readonly selTimeINPM: Locator;
+  private readonly selTimeTHour: Locator;
+  private readonly btnAdd: Locator;
+  private readonly selScheme: Locator;
+  private readonly selUserType: Locator;
+  private readonly selAppraiser: Locator;
+  private readonly assignReleaser: Locator;
+  private readonly btnCollect: Locator;
+  private readonly fullReleaseFinalProcess: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly loanDetails: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly netBanking: Locator;
+  private readonly customerUniqID: Locator;
+  private readonly btnYesRenew: Locator;
+  private readonly btnJwellaryReleaseFinalProcess: Locator;
+  private readonly customerHomeIn: Locator;
+  private readonly btnCamera: Locator;
+  private readonly btnAttach: Locator;
+  private readonly btnYesAssign: Locator;
+  private readonly inputField: Locator;
+  private readonly btnVerify: Locator;
+  private readonly textField: Locator;
+  private readonly UniqField: Locator;
+  private readonly inputMobileNumber: Locator;
+  private readonly btnOTP: Locator;
+  private readonly inputOTP: Locator;
+  private readonly btnUpdate: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO16_FullRelease) ──────────────────────────────────────
-
-  private readonly jewllaryRelease = () =>
-    this.page.locator("xpath=//button[normalize-space()='Jewellery Release']");
-  private readonly jwellaryReleaseApproval = () =>
-    this.page.locator(
+    this.jewllaryRelease = this.page.locator(
+      "xpath=//button[normalize-space()='Jewellery Release']",
+    );
+    this.jwellaryReleaseApproval = this.page.locator(
       "xpath=//span[normalize-space()='Jewellery Release Approval']",
     );
-  private readonly btnProced = () =>
-    this.page.locator("xpath=//button[.//span[normalize-space()='Proceed']]");
-  private readonly fullReleaseBtn = () =>
-    this.page.locator(
+    this.btnProced = this.page.locator(
+      "xpath=//button[.//span[normalize-space()='Proceed']]",
+    );
+    this.fullReleaseBtn = this.page.locator(
       "xpath=//button[.//span[normalize-space(text())='Full Release']]",
     );
-  private readonly fullReleaseApproval = () =>
-    this.page.locator(
+    this.fullReleaseApproval = this.page.locator(
       "xpath=//span[normalize-space()='Full Release Approval']",
     );
-  private readonly selPayment = () =>
-    this.page.locator("xpath=//select[@name='showPaymentValue']");
-  // PO10_QuickPayment.loc_btnConfirm
-  private readonly btnConfirm = () =>
-    this.page.locator("xpath=//button[.//span[normalize-space()='Confirm']]");
-  // PO12_TopUp.loc_selPurpose
-  private readonly selPurpose = () =>
-    this.page.locator("xpath=//select[@formcontrolname='loanPurpose']");
-  private readonly btnFundsAndApproval = () =>
-    this.page.locator("xpath=//span[normalize-space()='Funds and Approvals']");
-  private readonly selDate = () =>
-    this.page.locator("xpath=//input[@placeholder='DD/MM/YYYY']");
-  private readonly dateArrow = () =>
-    this.page.locator("xpath=//div[@class='mat-calendar-arrow']");
-  private readonly selYear = () =>
-    this.page.locator(
+    this.selPayment = this.page.locator(
+      "xpath=//select[@name='showPaymentValue']",
+    );
+    this.btnConfirm = this.page.locator(
+      "xpath=//button[.//span[normalize-space()='Confirm']]",
+    );
+    this.selPurpose = this.page.locator(
+      "xpath=//select[@formcontrolname='loanPurpose']",
+    );
+    this.btnFundsAndApproval = this.page.locator(
+      "xpath=//span[normalize-space()='Funds and Approvals']",
+    );
+    this.selDate = this.page.locator(
+      "xpath=//input[@placeholder='DD/MM/YYYY']",
+    );
+    this.dateArrow = this.page.locator(
+      "xpath=//div[@class='mat-calendar-arrow']",
+    );
+    this.selYear = this.page.locator(
       "xpath=(//div[@class='mat-calendar-body-cell-content'])[1]",
     );
-  private readonly selMonth = () =>
-    this.page.locator(
+    this.selMonth = this.page.locator(
       "xpath=(//div[@class='mat-calendar-body-cell-content'])[2]",
     );
-  private readonly selDay = () =>
-    this.page.locator(
+    this.selDay = this.page.locator(
       "xpath=(//div[@class='mat-calendar-body-cell-content'])[2]",
     );
-  private readonly selTimeFrom = () =>
-    this.page.locator("xpath=//input[@placeholder='From']");
-  private readonly selTime = () =>
-    this.page.locator("xpath=//span[@class='active']");
-  private readonly btnOk = () =>
-    this.page.locator("xpath=//span[normalize-space()='Ok']");
-  private readonly selTimeTo = () =>
-    this.page.locator("xpath=//input[@placeholder='To']");
-  private readonly selTimeINPM = () =>
-    this.page.locator("xpath=//button[normalize-space()='PM']");
-  private readonly selTimeTHour = () =>
-    this.page.locator("xpath=//span[@class='active']");
-  private readonly btnAdd = () =>
-    this.page.locator(
+    this.selTimeFrom = this.page.locator("xpath=//input[@placeholder='From']");
+    this.selTime = this.page.locator("xpath=//span[@class='active']");
+    this.btnOk = this.page.locator("xpath=//span[normalize-space()='Ok']");
+    this.selTimeTo = this.page.locator("xpath=//input[@placeholder='To']");
+    this.selTimeINPM = this.page.locator(
+      "xpath=//button[normalize-space()='PM']",
+    );
+    this.selTimeTHour = this.page.locator("xpath=//span[@class='active']");
+    this.btnAdd = this.page.locator(
       "xpath=//button[@class='submit mat-raised-button mat-button-base']",
     );
-  private readonly selScheme = () =>
-    this.page.locator("xpath=//select[@formcontrolname='schemeId']");
-  private readonly selUserType = () =>
-    this.page.locator("xpath=//select[@formcontrolname='userType']");
-  private readonly selAppraiser = () =>
-    this.page.locator("xpath=//select[@formcontrolname='appraiserId']");
-  private readonly assignReleaser = () =>
-    this.page.locator("xpath=//button[contains(.,'Assign Releaser')]");
-  private readonly btnCollect = () =>
-    this.page.locator("xpath=//button[normalize-space()='Collect']");
-  private readonly fullReleaseFinalProcess = () =>
-    this.page.locator("xpath=//span[normalize-space()='Final Full Release']");
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
+    this.selScheme = this.page.locator(
+      "xpath=//select[@formcontrolname='schemeId']",
+    );
+    this.selUserType = this.page.locator(
+      "xpath=//select[@formcontrolname='userType']",
+    );
+    this.selAppraiser = this.page.locator(
+      "xpath=//select[@formcontrolname='appraiserId']",
+    );
+    this.assignReleaser = this.page.locator(
+      "xpath=//button[contains(.,'Assign Releaser')]",
+    );
+    this.btnCollect = this.page.locator(
+      "xpath=//button[normalize-space()='Collect']",
+    );
+    this.fullReleaseFinalProcess = this.page.locator(
+      "xpath=//span[normalize-space()='Final Full Release']",
+    );
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  // Inline branch dropdown
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO10_QuickPayment.loc_LoanDetails
-  private readonly loanDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Details']");
-  // PO10_QuickPayment.loc_kebabMenu
-  private readonly kebabMenu = () =>
-    this.page.locator(
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.loanDetails = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Details']",
+    );
+    this.kebabMenu = this.page.locator(
       "xpath=(//button[.//mat-icon[normalize-space(text())='more_vert']])[1]",
     );
-  // PO10_QuickPayment.loc_netBanking
-  private readonly netBanking = () =>
-    this.page.locator("xpath=//img[@alt='netbanking']");
-  // PO10_QuickPayment.loc_selPayment
-  private readonly customerUniqID = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  // PO13_RenewLoan.loc_btnYes
-  private readonly btnYesRenew = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-  // PO15_PartRelease.loc_btnJwellaryReleaseFinalProcess
-  private readonly btnJwellaryReleaseFinalProcess = () =>
-    this.page.locator(
+    this.netBanking = this.page.locator("xpath=//img[@alt='netbanking']");
+    this.customerUniqID = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.btnYesRenew = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.btnJwellaryReleaseFinalProcess = this.page.locator(
       "xpath=//span[normalize-space()='Jewellery Release Final Process']",
     );
-  // PO15_PartRelease.loc_customerHomeIn
-  private readonly customerHomeIn = () =>
-    this.page.locator("xpath=//button[normalize-space()='Customer Home In']");
-  // PO15_PartRelease.loc_btnCamera
-  private readonly btnCamera = () =>
-    this.page.locator("xpath=//i[@class='fas fa-camera']");
-  // PO15_PartRelease.loc_btnAttach
-  private readonly btnAttach = () =>
-    this.page.locator(
+    this.customerHomeIn = this.page.locator(
+      "xpath=//button[normalize-space()='Customer Home In']",
+    );
+    this.btnCamera = this.page.locator("xpath=//i[@class='fas fa-camera']");
+    this.btnAttach = this.page.locator(
       "xpath=//img[@src='../../../../../assets/media/icons/camera.svg']",
     );
-  private readonly btnYesAssign = () =>
-    this.page.locator("xpath=//span[normalize-space()='Yes']");
-  // PO13_RenewLoan.loc_btnYes
-  // PO08_PacketSubmissionAppraiser locators (re-declared for update())
-  private readonly inputField = () =>
-    this.page.locator("xpath=//input[@formcontrolname='Barcode']");
-  private readonly btnVerify = () =>
-    this.page.locator(
+    this.btnYesAssign = this.page.locator(
+      "xpath=//span[normalize-space()='Yes']",
+    );
+    this.inputField = this.page.locator(
+      "xpath=//input[@formcontrolname='Barcode']",
+    );
+    this.btnVerify = this.page.locator(
       "xpath=//kt-button[@ng-reflect-value='Verify']//button[@type='button']",
     );
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  private readonly UniqField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique ID']");
-  private readonly inputMobileNumber = () =>
-    this.page.locator("xpath=//input[@formcontrolname='mobileNumber']");
-  private readonly btnOTP = () =>
-    this.page.locator(
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.UniqField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique ID']",
+    );
+    this.inputMobileNumber = this.page.locator(
+      "xpath=//input[@formcontrolname='mobileNumber']",
+    );
+    this.btnOTP = this.page.locator(
       "xpath=//kt-button[@ng-reflect-value='Send OTP']//button[@type='button']",
     );
-  private readonly inputOTP = () =>
-    this.page.locator("xpath=//input[@formcontrolname='otp']");
-  private readonly btnUpdate = () =>
-    this.page.locator("xpath=//span[normalize-space()='Update']");
+    this.inputOTP = this.page.locator("xpath=//input[@formcontrolname='otp']");
+    this.btnUpdate = this.page.locator(
+      "xpath=//span[normalize-space()='Update']",
+    );
+  }
 
   // ── Actions (from Flow18_FullReleaseLoan.fullRelease) ─────────────────────
 
@@ -200,12 +209,12 @@ export class FullReleasePage extends AdminBasePage {
   async fullRelease(): Promise<void> {
     const data = getLoginData();
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
 
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    await this.branchDropdown().selectOption({ label: "Show All" });
+    await this.branchDropdown.selectOption({ label: "Show All" });
     await this.page.waitForTimeout(5000);
 
     await this.waitForLoaderToDisappear();
@@ -221,17 +230,17 @@ export class FullReleasePage extends AdminBasePage {
     const data = getLoginData();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(2000);
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.page.waitForTimeout(5000);
-    await this.customerUniqID().fill(customerData.customerId.trim());
+    await this.customerUniqID.fill(customerData.customerId.trim());
     console.log(customerData.customerId);
     await this.waitForLoaderToDisappear();
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     // Read customer ID
@@ -240,12 +249,12 @@ export class FullReleasePage extends AdminBasePage {
     );
     const str = (await element.innerText()).trim();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.jewllaryRelease().click();
+    await this.jewllaryRelease.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.fullReleaseBtn().click();
+    await this.fullReleaseBtn.click();
 
     await this.page.waitForTimeout(5000);
 
@@ -262,7 +271,7 @@ export class FullReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
 
-    const payment = this.selPayment();
+    const payment = this.selPayment;
 
     await payment.waitFor({
       state: "visible",
@@ -287,14 +296,14 @@ export class FullReleasePage extends AdminBasePage {
     await payment.selectOption({
       label: "PAYMENT GATEWAY",
     });
-    //await this.selPayment().selectOption({ label: "PAYMENT GATEWAY" });
-    await this.netBanking().click();
+    //await this.selPayment.selectOption({ label: "PAYMENT GATEWAY" });
+    await this.netBanking.click();
     await this.waitForLoaderToDisappear();
-    await expect(this.btnConfirm()).toBeVisible();
-    await this.btnConfirm().click();
+    await expect(this.btnConfirm).toBeVisible();
+    await this.btnConfirm.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.btnYesAssign().click();
+    await this.btnYesAssign.click();
     await this.page.waitForTimeout(5000);
     // Switch into Razorpay iframe
     const iframeEl = this.page.locator(
@@ -364,19 +373,19 @@ export class FullReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
-    await this.btnFundsAndApproval().click();
+    await this.btnFundsAndApproval.click();
     await this.page.waitForTimeout(5000);
-    await this.jwellaryReleaseApproval().click();
-    await this.fullReleaseApproval().click();
+    await this.jwellaryReleaseApproval.click();
+    await this.fullReleaseApproval.click();
     await this.page.waitForTimeout(5000);
-    await this.UniqField().fill(customerData.customerId.trim());
+    await this.UniqField.fill(customerData.customerId.trim());
     await this.page.waitForTimeout(5000);
     console.log(customerData.customerId);
     await this.waitForLoaderToDisappear();
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.assignReleaser().click();
+    await this.assignReleaser.click();
     await this.page.waitForTimeout(5000);
     const userType = this.page.locator("//select[@formcontrolname='userType']");
 
@@ -402,17 +411,17 @@ export class FullReleasePage extends AdminBasePage {
 
     console.log("Selected value:", await appraiser.inputValue());
     await this.page.waitForTimeout(5000);
-    await this.btnAdd().click();
+    await this.btnAdd.click();
     await this.page.waitForTimeout(5000);
-    await this.btnJwellaryReleaseFinalProcess().click();
-    await this.fullReleaseFinalProcess().click();
+    await this.btnJwellaryReleaseFinalProcess.click();
+    await this.fullReleaseFinalProcess.click();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.UniqField().fill(customerData.customerId.trim());
+    await this.UniqField.fill(customerData.customerId.trim());
     await this.page.waitForTimeout(5000);
     console.log(customerData.customerId);
-    const collect = this.btnCollect();
+    const collect = this.btnCollect;
 
     console.log("Collect count:", await collect.count());
 
@@ -432,25 +441,25 @@ export class FullReleasePage extends AdminBasePage {
     console.log(packetID);
     await this.page.locator("//input[@placeholder='Barcode']").fill(packetID);
     await this.page.waitForTimeout(5000);
-    await this.btnVerify().click();
+    await this.btnVerify.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.inputMobileNumber().fill(data.partnerNumber);
+    await this.inputMobileNumber.fill(data.partnerNumber);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.btnOTP().click();
+    await this.btnOTP.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.inputOTP().fill("1234");
+    await this.inputOTP.fill("1234");
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.btnVerify().click();
+    await this.btnVerify.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.customerHomeIn().click();
+    await this.customerHomeIn.click();
     await this.waitForLoaderToDisappear();
 
     const packet = await this.page
@@ -460,41 +469,41 @@ export class FullReleasePage extends AdminBasePage {
     console.log(packet);
     await this.page.locator("//input[@placeholder='Barcode']").fill(packet);
     await this.page.waitForTimeout(5000);
-    await this.btnVerify().click();
+    await this.btnVerify.click();
     await this.waitForLoaderToDisappear();
-    await this.btnCamera().click();
+    await this.btnCamera.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
-    await this.btnAttach().click();
+    await this.btnAttach.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.btnOTP().click();
+    await this.btnOTP.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1000);
-    await this.inputOTP().fill("1234");
+    await this.inputOTP.fill("1234");
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.btnVerify().click();
+    await this.btnVerify.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
-    await this.btnUpdate().click();
+    await this.btnUpdate.click();
     await this.waitForLoaderToDisappear();
   }
   async fullReleaseCronPay(): Promise<void> {
     const data = getLoginData();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(2000);
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.textField().fill(customerData.customerId.trim());
+    await this.textField.fill(customerData.customerId.trim());
     await this.page.waitForTimeout(5000);
     console.log(customerData.customerId);
     await this.waitForLoaderToDisappear();
-    await this.filterbtn().click();
+    await this.filterbtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     // Read customer ID
@@ -503,12 +512,12 @@ export class FullReleasePage extends AdminBasePage {
     );
     const str = (await element.innerText()).trim();
 
-    await this.kebabMenu().click();
+    await this.kebabMenu.click();
     await this.waitForLoaderToDisappear();
-    await this.jewllaryRelease().click();
+    await this.jewllaryRelease.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.fullReleaseBtn().click();
+    await this.fullReleaseBtn.click();
 
     await this.page.waitForTimeout(5000);
 
@@ -525,7 +534,7 @@ export class FullReleasePage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
 
-    const payment = this.selPayment();
+    const payment = this.selPayment;
 
     await payment.waitFor({
       state: "visible",
@@ -547,14 +556,14 @@ export class FullReleasePage extends AdminBasePage {
       return select && select.options.length > 1;
     });
     await this.page.waitForTimeout(5000);
-    await this.selPayment().selectOption({ label: "CRON" });
-    await this.netBanking().click();
+    await this.selPayment.selectOption({ label: "CRON" });
+    await this.netBanking.click();
     await this.waitForLoaderToDisappear();
-    await expect(this.btnConfirm()).toBeVisible();
-    await this.btnConfirm().click();
+    await expect(this.btnConfirm).toBeVisible();
+    await this.btnConfirm.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.btnYesAssign().click();
+    await this.btnYesAssign.click();
     await this.page.waitForTimeout(5000);
     // Switch into Razorpay iframe
     const iframeEl = this.page.locator(

@@ -1,91 +1,114 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { TestDataFactory } from "../../utils/data/test-data.factory";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import { documentPath } from "@config/urls";
 
 export class InternalUserPage extends AdminBasePage {
+  private readonly btnInternalUser: Locator;
+  private readonly addInternalUser: Locator;
+  private readonly firstname: Locator;
+  private readonly lastName: Locator;
+  private readonly selUsertype: Locator;
+  private readonly selRole: Locator;
+  private readonly selBranch: Locator;
+  private readonly selDefaultBranch: Locator;
+  private readonly enteringEmail: Locator;
+  private readonly IDNumber: Locator;
+  private readonly mobileNumber: Locator;
+  private readonly sendOTP: Locator;
+  private readonly otpValue: Locator;
+  private readonly btnVerify: Locator;
+  private readonly uploadPAN: Locator;
+  private readonly uploadAadhar: Locator;
+  private readonly btnAdd: Locator;
+  private readonly nameInput: Locator;
+  private readonly viewBranches: Locator;
+  private readonly close: Locator;
+  private readonly btnEdit: Locator;
+  private readonly btnUpdate: Locator;
+  private readonly btnFilter: Locator;
+  // Cross-page re-declarations
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly userManagent: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO35_InternalUser) ────────────────────────────────────
-
-  private readonly btnInternalUser = () =>
-    this.page.locator("xpath=//span[normalize-space()='Internal User']");
-  private readonly addInternalUser = () =>
-    this.page.locator("xpath=//span[normalize-space()='Add Internal User']");
-  private readonly firstname = () =>
-    this.page.locator("xpath=//input[@placeholder='First Name']");
-  private readonly lastName = () =>
-    this.page.locator("xpath=//input[@placeholder='Last Name']");
-  private readonly selUsertype = () =>
-    this.page.locator("xpath=//select[@formcontrolname='userTypeId']");
-  private readonly selRole = () =>
-    this.page.locator("xpath=//select[@formcontrolname='roleId']");
-  private readonly selBranch = () =>
-    this.page.locator("xpath=(//ng-select//input[@role='combobox'])[1]");
-  private readonly selDefaultBranch = () =>
-    this.page.locator(
+    this.btnInternalUser = this.page.locator(
+      "xpath=//span[normalize-space()='Internal User']",
+    );
+    this.addInternalUser = this.page.locator(
+      "xpath=//span[normalize-space()='Add Internal User']",
+    );
+    this.firstname = this.page.locator(
+      "xpath=//input[@placeholder='First Name']",
+    );
+    this.lastName = this.page.locator(
+      "xpath=//input[@placeholder='Last Name']",
+    );
+    this.selUsertype = this.page.locator(
+      "xpath=//select[@formcontrolname='userTypeId']",
+    );
+    this.selRole = this.page.locator(
+      "xpath=//select[@formcontrolname='roleId']",
+    );
+    this.selBranch = this.page.locator(
+      "xpath=(//ng-select//input[@role='combobox'])[1]",
+    );
+    this.selDefaultBranch = this.page.locator(
       "xpath=//select[@formcontrolname='defaultInternalBranchId']",
     );
-  private readonly enteringEmail = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g abc@123.com']");
-  private readonly IDNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g 012345']");
-  private readonly mobileNumber = () =>
-    this.page.locator("xpath=//input[@placeholder='e.g 9023451234']");
-  private readonly sendOTP = () =>
-    this.page.locator(
+    this.enteringEmail = this.page.locator(
+      "xpath=//input[@placeholder='e.g abc@123.com']",
+    );
+    this.IDNumber = this.page.locator(
+      "xpath=//input[@placeholder='e.g 012345']",
+    );
+    this.mobileNumber = this.page.locator(
+      "xpath=//input[@placeholder='e.g 9023451234']",
+    );
+    this.sendOTP = this.page.locator(
       "xpath=//button[contains(@class,'mat-raised-button') and .//span[text()=' Send OTP ']]",
     );
-  private readonly otpValue = () =>
-    this.page.locator("xpath=//input[@formcontrolname='otp']");
-  private readonly btnVerify = () =>
-    this.page.locator(
+    this.otpValue = this.page.locator("xpath=//input[@formcontrolname='otp']");
+    this.btnVerify = this.page.locator(
       "xpath=//button[contains(@class,'mat-raised-button') and .//span[text()='Verify']]",
     );
-  private readonly uploadPAN = () =>
-    this.page.locator("xpath=(//input[@type='file'])[1]");
-  private readonly uploadAadhar = () =>
-    this.page.locator("xpath=(//input[@type='file'])[2]");
-  private readonly btnAdd = () =>
-    this.page.getByRole("button", { name: "Add", exact: true });
-  private readonly nameInput = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  private readonly viewBranches = () =>
-    this.page.locator(
+    this.uploadPAN = this.page.locator("xpath=(//input[@type='file'])[1]");
+    this.uploadAadhar = this.page.locator("xpath=(//input[@type='file'])[2]");
+    this.btnAdd = this.page.getByRole("button", { name: "Add", exact: true });
+    this.nameInput = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.viewBranches = this.page.locator(
       "xpath=(//mat-cell[contains(@class,'mat-column-action')]//div[contains(@class,'kt-pointer') and contains(text(),'View Branches')])[1]",
     );
-  private readonly close = () =>
-    this.page.locator("xpath=//img[@class='kt-pointer']");
-  private readonly btnEdit = () =>
-    this.page.locator("xpath=(//div[@class='kt-pointer ng-star-inserted'])[1]");
-  private readonly btnUpdate = () =>
-    this.page.locator("xpath=//span[normalize-space()='Update']");
-  private readonly btnFilter = () =>
-    this.page.locator("xpath=//button[span[normalize-space(text())='Filter']]");
-  // Cross-page re-declarations
-  private readonly profile = () =>
-    this.page.locator(
+    this.close = this.page.locator("xpath=//img[@class='kt-pointer']");
+    this.btnEdit = this.page.locator(
+      "xpath=(//div[@class='kt-pointer ng-star-inserted'])[1]",
+    );
+    this.btnUpdate = this.page.locator(
+      "xpath=//span[normalize-space()='Update']",
+    );
+    this.btnFilter = this.page.locator(
+      "xpath=//button[span[normalize-space(text())='Filter']]",
+    );
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
-  private readonly userManagent = () =>
-    this.page.locator("xpath=//span[normalize-space()='User Management']");
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+    this.userManagent = this.page.locator(
+      "xpath=//span[normalize-space()='User Management']",
+    );
+  }
 
   private async navigateToInternalUser(): Promise<void> {
-    // Idempotent: when a previous step already left the app inside the User Management section,
-    // the sidebar shows its sub-items directly and there is no "User Management" header to click
-    // (confirmed from the TC05 failure screenshot) — just open Internal User from the sidebar.
-    const internalUserLink = this.btnInternalUser();
+    const internalUserLink = this.btnInternalUser;
     if (await internalUserLink.isVisible().catch(() => false)) {
       await internalUserLink.click();
       await this.waitForLoaderToDisappear();
@@ -93,19 +116,17 @@ export class InternalUserPage extends AdminBasePage {
     }
 
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.profile.click();
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(7000);
 
     await this.expandSidebar();
     await this.page.waitForTimeout(1000);
-    // The section may already be expanded after the sidebar opens; only click the header if
-    // Internal User isn't visible yet.
-    if (!(await this.btnInternalUser().isVisible().catch(() => false))) {
-      await this.userManagent().click();
+    if (!(await this.btnInternalUser.isVisible().catch(() => false))) {
+      await this.userManagent.click();
       await this.page.waitForTimeout(1000);
     }
-    await this.btnInternalUser().click();
+    await this.btnInternalUser.click();
   }
 
   async validateInternalUser(
@@ -118,20 +139,18 @@ export class InternalUserPage extends AdminBasePage {
     const resolvedPanPath = panDocumentPath ?? documentPath("PAN_CARD");
     const resolvedAadharPath = aadharDocumentPath ?? documentPath("AADHAAR");
 
-    const addBtn = this.addInternalUser();
+    const addBtn = this.addInternalUser;
     await addBtn.waitFor({ state: "visible", timeout: 15000 });
     await addBtn.click();
 
-    await this.firstname().fill(data.firstName);
+    await this.firstname.fill(data.firstName);
     await this.page.waitForTimeout(1000);
-    await this.lastName().fill(data.lastName);
+    await this.lastName.fill(data.lastName);
     await this.page.waitForTimeout(500);
-    await this.selUsertype().selectOption({ label: "Appraiser" });
+    await this.selUsertype.selectOption({ label: "Appraiser" });
     await this.page.waitForTimeout(500);
-    await this.selRole().selectOption({ label: "Appraiser" });
+    await this.selRole.selectOption({ label: "Appraiser" });
     await this.page.waitForTimeout(500);
-
-    // Select branch from ng-select dropdown (2 iterations)
     for (let i = 0; i < 2; i++) {
       const dropdown = this.page.locator(
         "xpath=(//input[@role='combobox']//following::span[@class='ng-arrow-wrapper'])[2]",
@@ -154,22 +173,22 @@ export class InternalUserPage extends AdminBasePage {
     }
 
     await this.page.waitForTimeout(2000);
-    await this.selDefaultBranch().selectOption({ label: "Andheri" });
+    await this.selDefaultBranch.selectOption({ label: "Andheri" });
     const email = TestDataFactory.email();
-    await this.enteringEmail().fill(email);
-    await this.mobileNumber().scrollIntoViewIfNeeded();
+    await this.enteringEmail.fill(email);
+    await this.mobileNumber.scrollIntoViewIfNeeded();
     const mobileNumber = TestDataFactory.mobile();
-    await this.mobileNumber().fill(mobileNumber);
+    await this.mobileNumber.fill(mobileNumber);
 
     await this.page.waitForTimeout(500);
-    await this.sendOTP().click();
+    await this.sendOTP.click();
     await this.page.waitForTimeout(500);
-    await this.otpValue().fill("1234");
+    await this.otpValue.fill("1234");
     await this.page.waitForTimeout(500);
-    await this.btnVerify().click();
+    await this.btnVerify.click();
     await this.page.waitForTimeout(500);
     const idNumber = TestDataFactory.idNumber();
-    await this.IDNumber().fill(idNumber);
+    await this.IDNumber.fill(idNumber);
 
     if (resolvedPanPath) {
       const fileInput1 = this.page.locator("xpath=(//input[@id='file'])[1]");
@@ -182,7 +201,7 @@ export class InternalUserPage extends AdminBasePage {
       await fileInput2.setInputFiles(resolvedAadharPath);
     }
 
-    await this.btnAdd().click();
+    await this.btnAdd.click();
     await this.page.waitForTimeout(3000);
     await this.waitForLoaderToDisappear();
     await this.page
@@ -206,10 +225,10 @@ export class InternalUserPage extends AdminBasePage {
     // await userType.waitFor({ state: "visible", timeout: 30000 });
 
     // await userType.selectOption({ label: "Appraiser" });
-    await this.nameInput().fill(data.firstName);
-    await this.btnFilter().click();
+    await this.nameInput.fill(data.firstName);
+    await this.btnFilter.click();
     await this.page.waitForTimeout(5000);
-    await this.viewBranches().click();
+    await this.viewBranches.click();
 
     const branchCell = this.page.locator(
       "//td[normalize-space(text())='Andheri']",
@@ -219,7 +238,7 @@ export class InternalUserPage extends AdminBasePage {
 
     console.log(branchName);
     await this.page.waitForTimeout(5000);
-    await this.close().click();
+    await this.close.click();
   }
   async validateInternalUserUpdate(): Promise<{
     isDisplayed: boolean;
@@ -227,19 +246,19 @@ export class InternalUserPage extends AdminBasePage {
   }> {
     //await this.navigateToInternalUser();
     const data = getLoginData();
-    await this.nameInput().fill(data.firstName);
-    await this.btnFilter().click();
+    await this.nameInput.fill(data.firstName);
+    await this.btnFilter.click();
     await this.page.waitForTimeout(5000);
-    await this.btnEdit().click();
+    await this.btnEdit.click();
     await this.page.waitForTimeout(500);
 
-    const updateBtn = this.btnUpdate();
+    const updateBtn = this.btnUpdate;
     await updateBtn.waitFor({ state: "visible", timeout: 15000 });
     const isDisplayed = await updateBtn.isVisible();
     const isEnabled = await updateBtn.isEnabled();
-    await this.firstname().clear();
+    await this.firstname.clear();
     await this.page.waitForTimeout(5000);
-    await this.firstname().fill("Priyanka");
+    await this.firstname.fill("Priyanka");
     await this.page.waitForTimeout(5000);
     const checkbox = this.page.locator(
       "//mat-checkbox[@formcontrolname='isDefaultAppraiser']",
@@ -255,9 +274,9 @@ export class InternalUserPage extends AdminBasePage {
     await this.navigateToInternalUser();
     await this.page.waitForLoadState("networkidle");
     await this.page.waitForTimeout(2000);
-    await this.nameInput().waitFor({ state: "visible", timeout: 15_000 });
-    await this.nameInput().fill("Priyanka");
-    await this.btnFilter().click();
+    await this.nameInput.waitFor({ state: "visible", timeout: 15_000 });
+    await this.nameInput.fill("Priyanka");
+    await this.btnFilter.click();
     await this.page.waitForTimeout(2000);
 
     const firstResultCell = this.page.locator(
@@ -265,11 +284,9 @@ export class InternalUserPage extends AdminBasePage {
     );
     const actualUser = (await firstResultCell.innerText()).trim();
     console.log(`[validateOldeInternalUser] Found user: "${actualUser}"`);
-
-    // ── Step 2: Click Edit → verify Update button visible → Cancel ────────
-    await this.btnEdit().click();
+    await this.btnEdit.click();
     await this.page.waitForTimeout(500);
-    const updateBtn = this.btnUpdate();
+    const updateBtn = this.btnUpdate;
     await updateBtn.waitFor({ state: "visible", timeout: 15_000 });
     const isUpdateVisible = await updateBtn.isVisible();
     const isUpdateEnabled = await updateBtn.isEnabled();
@@ -286,19 +303,17 @@ export class InternalUserPage extends AdminBasePage {
       .waitFor({ state: "hidden", timeout: 10_000 })
       .catch(() => {});
     await this.page.waitForTimeout(1000);
-
-    // ── Step 3: Search again → click View Branches → read branch → close ──
-    await this.nameInput().fill("Priya");
-    await this.btnFilter().click();
+    await this.nameInput.fill("Priya");
+    await this.btnFilter.click();
     await this.page.waitForTimeout(2000);
-    await this.viewBranches().click();
+    await this.viewBranches.click();
     await this.page.waitForTimeout(2000);
     const branchCell = this.page
       .locator("xpath=//td[normalize-space(text())='Andheri']")
       .first();
     const branchName = await branchCell.innerText().catch(() => "");
     console.log(`[validateOldeInternalUser] Branch: "${branchName}"`);
-    await this.close().click();
+    await this.close.click();
 
     return actualUser;
   }

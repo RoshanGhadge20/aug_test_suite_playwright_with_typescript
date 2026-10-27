@@ -11,51 +11,7 @@ import { AssignPacketPage } from "./assign-packet.page";
 import { AdminLoginPage } from "./login.page";
 import { OpsApprovalPage } from "./ops-approval.page";
 
-/**
- * Port of Java: PO12_TopUp (locators) + Flow14_TopUp.topUp() / topUpOnlinePay() (actions)
- *
- * The active (non-commented) Flow14_TopUp.topUp() method:
- *   1. Fills CKYC number on the PO05_AssignPacket form (continuation of a previous step).
- *   2. Switches to partner role, navigates to Applied Loan, disburses the loan.
- *
- * The topUpOnlinePay() helper contains the online payment flow for top-up.
- * Both are ported here as separate public methods.
- *
- * Cross-page locator notes:
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `branchDropdown` is an inline locator (same XPath as other TC02 flows).
- *   - `loanManagement` re-declares PO_Common.loc_loanManagement (same XPath).
- *   - `firstNameFilter` re-declares PO01_KycSel.loc_firstName (same XPath).
- *   - `filterbtn` re-declares PO01_KycSel.loc_filterbtn (same XPath).
- *   - `loanDetails` re-declares PO10_QuickPayment.loc_LoanDetails (same XPath).
- *   - `kebabMenu` re-declares PO10_QuickPayment.loc_kebabMenu (same XPath).
- *   - `btnProceed` re-declares PO10_QuickPayment.loc_btnProceed (same XPath).
- *   - `netBanking` re-declares PO10_QuickPayment.loc_netBanking (same XPath).
- *   - `selPayment` re-declares PO10_QuickPayment.loc_selPayment (same XPath).
- *   - `btnConfirm` re-declares PO10_QuickPayment.loc_btnConfirm (same XPath).
- *   - `fieldCkyc` re-declares PO05_AssignPacket.loc_fieldCkyc (inline XPath from Java).
- *   - `btnYes` re-declares PO05_AssignPacket.loc_btnYes (same XPath).
- *   - `btnDone` re-declares PO05_AssignPacket.loc_btnDone (same XPath).
- *   - `btnDisbursement` re-declares PO09_PartnerLoanApproval.loc_btnDisbursement (same XPath).
- *   - `transactionID` re-declares PO09_PartnerLoanApproval.loc_transactionID (same XPath).
- *   - `selPaymentType` re-declares PO09_PartnerLoanApproval.loc_selPaymentType (same XPath).
- *   - `btnDonePartner` re-declares PO09_PartnerLoanApproval.loc_btnDone (same XPath).
- *   - `btnYesPartner` re-declares PO09_PartnerLoanApproval.loc_btnYes (same XPath).
- *
- * Omitted loginWith* calls:
- *   - Flow14_TopUp.topUp() called Flow_LoginLogout.loginWithPartner() — OMITTED.
- *     Role = partner; caller must inject via loginAs('partner') before topUp().
- *
- * Random CKYC generator ported from Flow05_AssignPacket.generateRandomCKYC() inline.
- */
 export class TopUpPage extends AdminBasePage {
-  // Confirmed live via outerHTML dump (2026-09-30): after "Send OTP", the consent modal
-  // re-renders as a `<div class="consent-dialog">` (its own component, NOT a
-  // cdk-overlay-pane/Material dialog — different button/icon classes too: `kyc-btn`/`la la-*`)
-  // with 6 `<input class="otp-cell" maxlength="1" type="text">` boxes. Scope directly to that
-  // dialog's otp-cell inputs instead of the CDK-overlay guess used elsewhere in this suite for
-  // the (differently-styled) Aadhaar-consent modal.
   protected otpInputLocator(): Locator {
     return this.page.locator(
       "xpath=//div[contains(@class,'consent-dialog')]//input[contains(@class,'otp-cell')]",
@@ -66,189 +22,183 @@ export class TopUpPage extends AdminBasePage {
   private assignPacketPage = new AssignPacketPage(this.page);
   private adminLoginPage: AdminLoginPage;
   private opsApprovalPage: OpsApprovalPage;
+
   constructor(page: Page) {
     super(page);
     this.newGoldLoanPage = new NewGoldLoanPage(this.page);
     this.assignPacketPage = new AssignPacketPage(this.page);
     this.adminLoginPage = new AdminLoginPage(this.page);
     this.opsApprovalPage = new OpsApprovalPage(this.page);
-  }
-
-  // ── Locators (from PO12_TopUp) ─────────────────────────────────────────────
-  private readonly btnUploadDocuments = () =>
-    this.page.locator(
+    this.btnUploadDocuments = this.page.locator(
       "xpath=(//button[@ng-reflect-klass='primary-button'][normalize-space()='UPLOAD DOCUMENTS'])[1]",
     );
-  private readonly topUpBtn = () =>
-    this.page.locator("xpath=//button[normalize-space()='Top-Up']");
-  private readonly inputField = () =>
-    this.page.locator("xpath=//input[@formcontrolname='topUpAmount']");
-  private readonly btnconfirm = () =>
-    this.page.locator(
+    this.topUpBtn = this.page.locator(
+      "xpath=//button[normalize-space()='Top-Up']",
+    );
+    this.inputField = this.page.locator(
+      "xpath=//input[@formcontrolname='topUpAmount']",
+    );
+    this.btnconfirm = this.page.locator(
       "xpath=//span[normalize-space()='Confirm']/ancestor::button",
     );
-  private readonly btnYes = () =>
-    this.page.locator("xpath=//button[.//span[normalize-space()='Yes']]");
-  private readonly btnCheckbox = () =>
-    this.page.locator("xpath=//span[@class='checkmark top-0']");
-  private readonly selPurpose = () =>
-    this.page.locator("xpath=//select[@formcontrolname='loanPurpose']");
-  private readonly btnSubmit = () =>
-    this.page.locator("xpath=//button[.//span[normalize-space()='Submit']]");
-  private readonly btnDownloadCash = () =>
-    this.page.locator("xpath=//span[contains(.,'Download Cash Declaration')]");
-  private readonly btnDone = () =>
-    this.page.locator("xpath=//span[contains(.,'Done')]");
-  private readonly btnSave = () =>
-    this.page.locator("xpath=//span[normalize-space()='Save']");
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
+    this.btnYes = this.page.locator(
+      "xpath=//button[.//span[normalize-space()='Yes']]",
+    );
+    this.btnCheckbox = this.page.locator(
+      "xpath=//span[@class='checkmark top-0']",
+    );
+    this.selPurpose = this.page.locator(
+      "xpath=//select[@formcontrolname='loanPurpose']",
+    );
+    this.btnSubmit = this.page.locator(
+      "xpath=//button[.//span[normalize-space()='Submit']]",
+    );
+    this.btnDownloadCash = this.page.locator(
+      "xpath=//span[contains(.,'Download Cash Declaration')]",
+    );
+    this.btnDone = this.page.locator("xpath=//span[contains(.,'Done')]");
+    this.btnSave = this.page.locator("xpath=//span[normalize-space()='Save']");
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  // Inline branch dropdown
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO10_QuickPayment.loc_LoanDetails
-  private readonly loanDetails = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Details']");
-  // PO10_QuickPayment.loc_kebabMenu
-  private readonly kebabMenu = () =>
-    this.page.locator(
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.loanDetails = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Details']",
+    );
+    this.kebabMenu = this.page.locator(
       "xpath=(//button[.//mat-icon[normalize-space(text())='more_vert']])[1]",
     );
-  // PO10_QuickPayment.loc_netBanking
-  private readonly netBanking = () =>
-    this.page.locator("xpath=//img[@alt='netbanking']");
-  // PO10_QuickPayment.loc_selPayment
-  private readonly selPayment = () =>
-    this.page.locator("xpath=//select[@name='showPaymentValue']");
-  // PO10_QuickPayment.loc_btnConfirm
-  private readonly btnConfirm = () =>
-    this.page.locator("xpath=(//span[normalize-space()='Confirm'])[2]");
-  // PO13_RenewLoan.loc_btnYes
-  private readonly btnYesRenew = () =>
-    this.page.locator("xpath=//span[contains(.,'Yes')]");
-  // PO05_AssignPacket.loc_fieldCkyc (inline in Java: no dedicated PO constant — re-declared here)
-  private readonly fieldCkyc = () =>
-    this.page.locator("xpath=//input[@formcontrolname='ckycNumber']");
-  // PO05_AssignPacket.loc_btnYes
-  // "Yes" confirmation dialogs here render a real <button>Yes</button> (see assign-packet.page.ts),
-  // not a bare span — match either form and take the first.
-  private readonly btnYesAssign = () =>
-    this.page
+    this.netBanking = this.page.locator("xpath=//img[@alt='netbanking']");
+    this.selPayment = this.page.locator(
+      "xpath=//select[@name='showPaymentValue']",
+    );
+    this.btnConfirm = this.page.locator(
+      "xpath=(//span[normalize-space()='Confirm'])[2]",
+    );
+    this.btnYesRenew = this.page.locator("xpath=//span[contains(.,'Yes')]");
+    this.fieldCkyc = this.page.locator(
+      "xpath=//input[@formcontrolname='ckycNumber']",
+    );
+    this.btnYesAssign = this.page
       .locator(
         "xpath=//button[normalize-space()='Yes' or .//span[normalize-space()='Yes']]",
       )
       .first();
-  // PO05_AssignPacket.loc_btnDone
-  private readonly btnDoneAssign = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  // PO09_PartnerLoanApproval.loc_btnDisbursement
-  private readonly btnDisbursement = () =>
-    this.page.locator("xpath=(//button[@class='green-button'])[1]");
-  // PO09_PartnerLoanApproval.loc_transactionID
-  private readonly transactionID = () =>
-    this.page.locator("xpath=//input[@formcontrolname='transactionId']");
-  // PO09_PartnerLoanApproval.loc_selPaymentType
-  private readonly selPaymentType = () =>
-    this.page.locator("xpath=//select[@formcontrolname='paymentType']");
-  // PO09_PartnerLoanApproval.loc_btnDone
-  private readonly btnDonePartner = () =>
-    this.page.locator("xpath=//span[normalize-space()='Done']");
-  // PO09_PartnerLoanApproval.loc_btnYes
-  private readonly btnYesPartner = () =>
-    this.page.locator("xpath=//span[normalize-space()='Yes']");
-  private readonly customerUniqID = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  private readonly btnNext = () =>
-    this.page.locator("xpath=//button[span[normalize-space() = 'Next']]");
-  private readonly toBePaid = () =>
-    this.page.locator(
+    this.btnDoneAssign = this.page.locator(
+      "xpath=//span[normalize-space()='Done']",
+    );
+    this.btnDisbursement = this.page.locator(
+      "xpath=(//button[@class='green-button'])[1]",
+    );
+    this.transactionID = this.page.locator(
+      "xpath=//input[@formcontrolname='transactionId']",
+    );
+    this.selPaymentType = this.page.locator(
+      "xpath=//select[@formcontrolname='paymentType']",
+    );
+    this.btnDonePartner = this.page.locator(
+      "xpath=//span[normalize-space()='Done']",
+    );
+    this.btnYesPartner = this.page.locator(
+      "xpath=//span[normalize-space()='Yes']",
+    );
+    this.customerUniqID = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.btnNext = this.page.locator(
+      "xpath=//button[span[normalize-space() = 'Next']]",
+    );
+    this.toBePaid = this.page.locator(
       "xpath=//td[normalize-space(text())='To be paid']/following-sibling::td[@class='currency']",
     );
-  private readonly advanceCashField = () =>
-    this.page.locator("xpath=//td//input[@formcontrolname='advanceCash']");
-  private readonly loanAmountField = () =>
-    this.page.locator(
+    this.advanceCashField = this.page.locator(
+      "xpath=//td//input[@formcontrolname='advanceCash']",
+    );
+    this.loanAmountField = this.page.locator(
       "//td[normalize-space(text())='Top up Amount']/following-sibling::td[1]",
     );
-  // "Confirm Top Up" consent modal — confirmed live via screenshot (2026-09-28) and via a real
-  // outerHTML dump (2026-09-29). The outerHTML exposed the actual bug in the two checkbox
-  // locators below: `//*[contains(normalize-space(),'...')]` matches every ANCESTOR of the
-  // matching text too (an ancestor's string-value includes all its descendants' text), and
-  // since XPath returns nodes in document order, `.first()` was resolving to some huge outer
-  // container (e.g. near the document root) instead of the checkbox's row — clicking it was a
-  // silent no-op. Fixed by targeting the checkboxes directly via their formcontrolname
-  // (confirmed live: `formcontrolname="customerRequestConfirmed"` / `="termsAccepted"`, each a
-  // real <input type="checkbox"> nested inside a `<label class="check-row">` alongside its
-  // `<span class="check-text">` — same convention as every other formcontrolname locator in
-  // this suite).
-  // Confirmed live via outerHTML dump (2026-09-30): the whole modal — both the checkbox step
-  // and the "Enter OTP received by customer" step it advances to after Send OTP — stays inside
-  // one `<div class="consent-dialog">` wrapper for its entire lifetime; only the content
-  // inside re-renders per step. This is a more reliable "is the modal (still) open" signal
-  // than confirmTopUpHeading(), whose matched text is step-specific and goes stale once the
-  // modal moves past the checkbox step (its heading isn't "Confirm Top Up" anymore once the
-  // OTP step renders).
-  private readonly consentDialog = () =>
-    this.page.locator("xpath=//div[contains(@class,'consent-dialog')]");
-  private readonly confirmTopUpRequestedCheckbox = () =>
-    this.page.locator(
+    this.consentDialog = this.page.locator(
+      "xpath=//div[contains(@class,'consent-dialog')]",
+    );
+    this.confirmTopUpRequestedCheckbox = this.page.locator(
       "xpath=//input[@formcontrolname='customerRequestConfirmed']",
     );
-  private readonly confirmTopUpRevisedTermsCheckbox = () =>
-    this.page.locator("xpath=//input[@formcontrolname='termsAccepted']");
-  private readonly btnSendOtp = () =>
-    this.page.locator("xpath=//button[normalize-space()='Send OTP']");
-  // Confirmed live via screenshot (2026-10-01): "Cancel" sits next to "Send OTP" in the same
-  // modal footer. Scoped to consentDialog() rather than a bare //button match — RenewLoanPage
-  // has its own unrelated "Cancel" locator (a <span>, different modal) and a bare match here
-  // would risk colliding with a similarly-labeled button elsewhere on the page.
-  private readonly btnCancelConsent = () =>
-    this.consentDialog().locator("xpath=.//button[normalize-space()='Cancel']");
-
-  // Confirmed live (2026-09-29): after "Send OTP", the modal advances to an OTP-entry step
-  // whose submit button is labeled "Confirm" (not "Verify"/"Submit" as originally guessed —
-  // this button matches on the <button>'s own normalize-space(), so it won't false-match the
-  // "Confirm Renewal"/"Confirm Top Up" *heading* text elsewhere on the page). Older guessed
-  // labels kept as fallbacks in case a different environment's build still uses them.
-  private readonly btnVerifyTopUpOtp = () =>
-    this.page
+    this.confirmTopUpRevisedTermsCheckbox = this.page.locator(
+      "xpath=//input[@formcontrolname='termsAccepted']",
+    );
+    this.btnSendOtp = this.page.locator(
+      "xpath=//button[normalize-space()='Send OTP']",
+    );
+    this.btnCancelConsent = this.consentDialog.locator(
+      "xpath=.//button[normalize-space()='Cancel']",
+    );
+    this.btnVerifyTopUpOtp = this.page
       .locator(
         "xpath=//button[normalize-space()='Confirm' or normalize-space()='Verify' or " +
           "normalize-space()='Verify OTP' or normalize-space()='Consent Received' or " +
           "normalize-space()='Submit']",
       )
       .first();
+  }
 
-  // Confirmed live via outerHTML dump (2026-09-29): each checkbox is a real, visible
-  // <input formcontrolname="..." type="checkbox"> nested directly inside its
-  // <label class="check-row"> alongside the <span class="check-text"> — not the zero-size
-  // custom-checkbox pattern used elsewhere in this suite. confirmTopUpRequestedCheckbox()/
-  // confirmTopUpRevisedTermsCheckbox() resolve straight to these inputs (see their
-  // definitions above for why the old contains()-text locators silently failed), so this can
-  // interact with the checkbox directly instead of hunting for it via an ancestor. Shared by
-  // confirmTopUpConsentIfPresent() (Send OTP path) and verifyCancelTopUpConsentModal()
-  // (Cancel path) — both check the same two boxes before diverging.
+  // ── Locators (from PO12_TopUp) ─────────────────────────────────────────────
+  private readonly btnUploadDocuments: Locator;
+  private readonly topUpBtn: Locator;
+  private readonly inputField: Locator;
+  private readonly btnconfirm: Locator;
+  private readonly btnYes: Locator;
+  private readonly btnCheckbox: Locator;
+  private readonly selPurpose: Locator;
+  private readonly btnSubmit: Locator;
+  private readonly btnDownloadCash: Locator;
+  private readonly btnDone: Locator;
+  private readonly btnSave: Locator;
+
+  private readonly profile: Locator;
+
+  private readonly arrow: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly loanDetails: Locator;
+  private readonly kebabMenu: Locator;
+  private readonly netBanking: Locator;
+  private readonly selPayment: Locator;
+  private readonly btnConfirm: Locator;
+  private readonly btnYesRenew: Locator;
+  private readonly fieldCkyc: Locator;
+  private readonly btnYesAssign: Locator;
+  private readonly btnDoneAssign: Locator;
+  private readonly btnDisbursement: Locator;
+  private readonly transactionID: Locator;
+  private readonly selPaymentType: Locator;
+  private readonly btnDonePartner: Locator;
+  private readonly btnYesPartner: Locator;
+  private readonly customerUniqID: Locator;
+  private readonly btnNext: Locator;
+  private readonly toBePaid: Locator;
+  private readonly advanceCashField: Locator;
+  private readonly loanAmountField: Locator;
+  private readonly consentDialog: Locator;
+  private readonly confirmTopUpRequestedCheckbox: Locator;
+  private readonly confirmTopUpRevisedTermsCheckbox: Locator;
+  private readonly btnSendOtp: Locator;
+  private readonly btnCancelConsent: Locator;
+  private readonly btnVerifyTopUpOtp: Locator;
+
   private async checkConsentBox(
     checkbox: Locator,
     description: string,
@@ -273,26 +223,16 @@ export class TopUpPage extends AdminBasePage {
     revisedTermsCheckboxChecked: boolean;
   }> {
     const requestedCheckboxChecked = await this.checkConsentBox(
-      this.confirmTopUpRequestedCheckbox(),
+      this.confirmTopUpRequestedCheckbox,
       "customer personally requested this Top Up",
     );
     const revisedTermsCheckboxChecked = await this.checkConsentBox(
-      this.confirmTopUpRevisedTermsCheckbox(),
+      this.confirmTopUpRevisedTermsCheckbox,
       "customer agrees to the revised rate/charges/tenure",
     );
     return { requestedCheckboxChecked, revisedTermsCheckboxChecked };
   }
 
-  /**
-   * "Confirm Top Up" consent modal (screenshot, 2026-09-28 and 2026-09-29): checks the two
-   * mandatory checkboxes ("customer personally requested this Top Up" / "customer has been
-   * shown and agrees to the revised rate, charges and tenure"), clicks "Send OTP", then enters
-   * the fixed backdoor OTP (same "123456" used elsewhere in this suite, e.g.
-   * kyc.page.ts's completeAadhaarConsentModalIfPresent) and submits it. No-ops (returns
-   * `modalOpened: false`) if the modal never appears. Never throws — every outcome, including a
-   * rejected OTP, is reported back on the result object so callers (tests) can assert on it
-   * without the whole flow blowing up mid-step.
-   */
   private async confirmTopUpConsentIfPresent(otp: string = "123456"): Promise<{
     modalOpened: boolean;
     requestedCheckboxChecked: boolean;
@@ -301,7 +241,7 @@ export class TopUpPage extends AdminBasePage {
     otpEntered: boolean;
     otpAccepted: boolean;
   }> {
-    const modalOpen = await this.consentDialog()
+    const modalOpen = await this.consentDialog
       .waitFor({ state: "visible", timeout: 8000 })
       .then(() => true)
       .catch(() => false);
@@ -323,7 +263,7 @@ export class TopUpPage extends AdminBasePage {
     const { requestedCheckboxChecked, revisedTermsCheckboxChecked } =
       await this.checkBothTopUpConsentBoxes();
 
-    const sendOtp = this.btnSendOtp();
+    const sendOtp = this.btnSendOtp;
     await sendOtp.waitFor({ state: "visible", timeout: 8000 });
     await sendOtp.click();
     await this.waitForLoaderToDisappear();
@@ -336,7 +276,7 @@ export class TopUpPage extends AdminBasePage {
       otpEntered = true;
       await this.page.waitForTimeout(500);
 
-      const verifyBtn = this.btnVerifyTopUpOtp();
+      const verifyBtn = this.btnVerifyTopUpOtp;
       const verifyVisible = await verifyBtn
         .waitFor({ state: "visible", timeout: 8000 })
         .then(() => true)
@@ -367,7 +307,7 @@ export class TopUpPage extends AdminBasePage {
         "xpath=//*[contains(@class,'toast-error') or contains(@class,'alert-danger')]",
       );
       const errorVisible = await errorBanner.isVisible().catch(() => false);
-      const modalStillOpen = await this.consentDialog()
+      const modalStillOpen = await this.consentDialog
         .isVisible()
         .catch(() => false);
       otpAccepted = !errorVisible && !modalStillOpen;
@@ -406,36 +346,19 @@ export class TopUpPage extends AdminBasePage {
     return sb;
   }
 
-  // ── Actions (from Flow14_TopUp.topUp — active/non-commented section) ──────
-
-  /**
-   * Port of Flow14_TopUp.topUp() — the active (non-commented) portion.
-   *
-   * NOTE: Flow14_TopUp.topUp() called Flow_LoginLogout.loginWithPartner() — OMITTED.
-   * Role = partner; caller must inject via loginAs('partner') before calling topUp().
-   *
-   * Fills CKYC field, saves, selects lead converter, clicks Done, then navigates to
-   * Applied Loan as partner and disburses the loan.
-   */
   async topUp(): Promise<void> {
     const data = getLoginData();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
     await this.topUpOnlinePay();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.validateBankDetailsWithAdvanceCash();
     await this.page.waitForTimeout(5000);
-
-    // After Bank Details → Next the Top Up wizard now carries on to its own Upload Documents tab
-    // (confirmed from the TC02 video). The top-up loan doesn't exist in Applied Loan until the
-    // wizard is saved, so leaving it to look the loan up there ("No data found") abandons the
-    // top-up. Stay in the wizard; only fall back to the Applied Loan route for older builds that
-    // still end the wizard after Bank Details.
     const uploadDocsTab = this.page
       .locator(
         "xpath=//*[contains(normalize-space(text()),'Gold Loan Application')]",
@@ -466,7 +389,7 @@ export class TopUpPage extends AdminBasePage {
       );
       await this.expandSidebar();
       await this.page.waitForTimeout(5000);
-      const loanMgmt = this.loanManagement();
+      const loanMgmt = this.loanManagement;
       await loanMgmt.click();
       await this.waitForLoaderToDisappear();
 
@@ -477,11 +400,11 @@ export class TopUpPage extends AdminBasePage {
       await appliedLoan.click();
       await this.waitForLoaderToDisappear();
       await this.filterAppliedLoanByCustomer(this.currentCustomerId());
-      await this.btnUploadDocuments().waitFor({
+      await this.btnUploadDocuments.waitFor({
         state: "visible",
         timeout: 30000,
       });
-      await this.btnUploadDocuments().click();
+      await this.btnUploadDocuments.click();
       await this.waitForLoaderToDisappear();
     }
     const envPath = documentPath("DOCUMENT");
@@ -537,8 +460,8 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(2000);
     await this.waitForLoaderToDisappear();
 
-    await this.btnYesAssign().waitFor({ state: "visible", timeout: 20000 });
-    await this.btnYesAssign().click();
+    await this.btnYesAssign.waitFor({ state: "visible", timeout: 20000 });
+    await this.btnYesAssign.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
     const dropdownEle = this.page.locator(
@@ -550,7 +473,7 @@ export class TopUpPage extends AdminBasePage {
       await dropdownEle.selectOption({ label: "Priyanka Thorat" });
     } catch {}
     await this.page.waitForTimeout(1000);
-    await this.btnDoneAssign().click();
+    await this.btnDoneAssign.click();
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
@@ -564,7 +487,7 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
 
     for (let attempt = 1; attempt <= 3; attempt++) {
-      const field = this.customerUniqID();
+      const field = this.customerUniqID;
       await field.waitFor({ state: "visible", timeout: 20000 });
       await field.click();
       await field.fill(customerId);
@@ -578,7 +501,7 @@ export class TopUpPage extends AdminBasePage {
       }
 
       // The table keeps re-rendering: bypass stability polling for the Filter click.
-      const filterBtn = this.filterbtn().first();
+      const filterBtn = this.filterbtn.first();
       await filterBtn.evaluate((el) => el.scrollIntoView({ block: "center" }));
       await filterBtn.click({ force: true, noWaitAfter: true });
       await this.waitForLoaderToDisappear();
@@ -601,8 +524,6 @@ export class TopUpPage extends AdminBasePage {
     );
   }
 
-  /** Port of Flow14_TopUp.loanDisbursement(). */
-  /** Reads the customer ID fresh — a static JSON import goes stale once onboarding rewrites it. */
   private currentCustomerId(): string {
     return String(
       JSON.parse(
@@ -612,13 +533,10 @@ export class TopUpPage extends AdminBasePage {
   }
 
   async loanDisbursement(): Promise<void> {
-    // After loginAs('partner') the app lands on the dashboard (confirmed from the failure
-    // screenshot), so the "Disburse Amount" button doesn't exist yet — open Applied Loan and
-    // filter to this customer first, like partner-approval.page.ts does.
     await this.page.waitForTimeout(500);
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
 
     const appliedLoan = this.page.locator(
@@ -628,30 +546,24 @@ export class TopUpPage extends AdminBasePage {
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
 
-    await this.customerUniqID().fill(this.currentCustomerId());
+    await this.customerUniqID.fill(this.currentCustomerId());
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2500);
-
-    // Table re-renders continuously — bypass stability polling for the Filter click.
-    const filterBtn = this.filterbtn().first();
+    const filterBtn = this.filterbtn.first();
     await filterBtn.waitFor({ state: "attached", timeout: 15000 });
     await filterBtn.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await filterBtn.click({ force: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
 
-    await this.btnDisbursement().waitFor({ state: "attached", timeout: 30000 });
-    await this.btnDisbursement().click({ force: true });
+    await this.btnDisbursement.waitFor({ state: "attached", timeout: 30000 });
+    await this.btnDisbursement.click({ force: true });
     await this.waitForLoaderToDisappear();
-
-    // The Top Up disbursement form (confirmed from the failure snapshot) has no
-    // formcontrolname='transactionId' input — the field is just labelled "Transaction ID*".
-    // Locate by label (or the old formcontrolname if it ever exists) instead of a fixed attribute.
     const txnInput = this.page
       .locator(
         "xpath=(//*[self::label or self::span or self::div][starts-with(normalize-space(text()),'Transaction ID')]/following::input[not(@disabled)][1])[1]",
       )
-      .or(this.transactionID())
+      .or(this.transactionID)
       .first();
     await txnInput.waitFor({ state: "visible", timeout: 30000 });
     await txnInput.scrollIntoViewIfNeeded();
@@ -659,8 +571,6 @@ export class TopUpPage extends AdminBasePage {
     await txnInput.fill(txnId);
     await expect(txnInput).toHaveValue(txnId);
     await this.waitForLoaderToDisappear();
-
-    // Payment Type is a <select> with IMPS / NEFT / RTGS (placeholder "Select Payment Type").
     const paymentType = this.page
       .locator("xpath=//select[option[normalize-space()='RTGS']]")
       .first();
@@ -689,14 +599,10 @@ export class TopUpPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
   }
   async validateBankDetailsWithAdvanceCash(): Promise<void> {
-    // No page.reload() here: the Top Up Preview → Bank Details screen lives only in the SPA's
-    // in-memory state, so a reload redirects back to the Loan Details list and the "Top up Amount"
-    // row below never exists (confirmed from the TC02 failure video — the preview was already
-    // showing "Top up Amount ₹700.00" right before the reload threw it back to the list).
     await this.waitForLoaderToDisappear();
     await this.page.waitForLoadState("networkidle");
     await this.page.waitForTimeout(3000);
-    const loanAmtEl = this.loanAmountField();
+    const loanAmtEl = this.loanAmountField;
     //await loanAmtEl.evaluate((el) => (el as any).scrollIntoView(true));
 
     console.log("Loan Amount Count:", await loanAmtEl.count());
@@ -722,7 +628,7 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
     // await wavierField.scrollIntoViewIfNeeded();
 
-    const toBePaidEl = this.toBePaid();
+    const toBePaidEl = this.toBePaid;
     //await toBePaidEl.scrollIntoViewIfNeeded();
     const str = (await toBePaidEl.innerText()).trim();
 
@@ -730,16 +636,13 @@ export class TopUpPage extends AdminBasePage {
 
     console.log(numericValue);
 
-    const advanceCashEl = this.advanceCashField();
+    const advanceCashEl = this.advanceCashField;
     await advanceCashEl.evaluate((el) =>
       (el as any).scrollIntoView({ block: "center" }),
     );
     await advanceCashEl.clear();
     await advanceCashEl.fill(numericValue);
     await this.page.waitForTimeout(4000);
-
-    // The "To be paid" row's Remarks box is mandatory (red "Required field" in the failure video):
-    // Next silently refuses to advance while it is empty. Fill every empty remark in this table.
     const remarkBoxes = this.page.locator(
       "xpath=//table//textarea[not(@disabled)] | //td//textarea[not(@disabled)]",
     );
@@ -753,37 +656,31 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(1000);
 
     await this.page.waitForTimeout(5000);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.waitForLoaderToDisappear();
   }
 
-  /**
-   * Shared navigation for the top-up amount entry: opens the customer's loan, opens the
-   * top-up form, fills amount + purpose, and clicks "Confirm" twice. Extracted from
-   * topUpOnlinePay() so verifyConfirmTopUpConsentModal() can reach the same point without
-   * duplicating the flow or altering topUpOnlinePay()'s own (unchanged) behavior below it.
-   */
   private async navigateAndConfirmTopUp(): Promise<void> {
     const data = getLoginData();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.page.waitForTimeout(2000);
-    const el = this.loanDetails();
+    const el = this.loanDetails;
     await el.scrollIntoViewIfNeeded();
     await el.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    await this.customerUniqID().fill(this.currentCustomerId());
+    await this.customerUniqID.fill(this.currentCustomerId());
     console.log(this.currentCustomerId());
-    //await this.firstNameFilter().fill(data.firstName);
+    //await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     // noWaitAfter: see the fix earlier in topUp() above.
-    await this.filterbtn().click({ noWaitAfter: true });
+    await this.filterbtn.click({ noWaitAfter: true });
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-    const kebab = this.kebabMenu();
+    const kebab = this.kebabMenu;
     await kebab.scrollIntoViewIfNeeded();
     try {
       await this.page.waitForTimeout(5000);
@@ -793,7 +690,7 @@ export class TopUpPage extends AdminBasePage {
     }
     await this.page.waitForTimeout(5000);
 
-    await this.topUpBtn().click();
+    await this.topUpBtn.click();
     await this.page.waitForTimeout(5000);
 
     // Checkbox (3rd custom-checkbox checkmark)
@@ -810,21 +707,18 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await topUpAmtEl.clear();
     await this.page.waitForTimeout(2000);
-    // 200 is below this scheme's processing fee (₹1,000 in the TC02 run), which makes "To be paid"
-    // negative (-₹800) and the Bank Details step unusable. Use an amount that clears the fee.
-    await this.inputField().fill("5000");
+    await this.inputField.fill("5000");
     await this.page.waitForTimeout(2000);
-    await this.selPurpose().selectOption({ label: "Business Expansion" });
+    await this.selPurpose.selectOption({ label: "Business Expansion" });
     await this.page.waitForTimeout(2000);
-    await expect(this.btnConfirm()).toBeVisible();
-    await this.btnConfirm().click();
+    await expect(this.btnConfirm).toBeVisible();
+    await this.btnConfirm.click();
     await this.page.waitForTimeout(1000);
-    await this.btnConfirm().click();
+    await this.btnConfirm.click();
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
   }
 
-  /** Port of Flow14_TopUp.topUpOnlinePay() — unchanged legacy Yes/checkbox/submit path. */
   async topUpOnlinePay(): Promise<void> {
     await this.navigateAndConfirmTopUp();
 
@@ -841,10 +735,10 @@ export class TopUpPage extends AdminBasePage {
 
     await this.page.waitForTimeout(5000);
 
-    await this.btnCheckbox().click();
+    await this.btnCheckbox.click();
 
     await this.page.waitForTimeout(2000);
-    await this.btnSubmit().click();
+    await this.btnSubmit.click();
     await this.waitForLoaderToDisappear();
   }
 
@@ -860,13 +754,6 @@ export class TopUpPage extends AdminBasePage {
     return this.confirmTopUpConsentIfPresent();
   }
 
-  /**
-   * "Confirm Top Up" consent modal — Cancel path (screenshot, 2026-10-01): drives the same
-   * navigation as verifyConfirmTopUpConsentModal(), checks both mandatory checkboxes, then
-   * clicks "Cancel" instead of "Send OTP" and verifies the modal closes without sending an OTP
-   * or submitting the top-up. Non-mutating (no OTP sent, nothing submitted) — safe to run
-   * before an accept-path test reuses the same loan/customer. Never throws.
-   */
   async verifyCancelTopUpConsentModal(): Promise<{
     modalOpened: boolean;
     requestedCheckboxChecked: boolean;
@@ -875,7 +762,7 @@ export class TopUpPage extends AdminBasePage {
   }> {
     await this.navigateAndConfirmTopUp();
 
-    const modalOpen = await this.consentDialog()
+    const modalOpen = await this.consentDialog
       .waitFor({ state: "visible", timeout: 8000 })
       .then(() => true)
       .catch(() => false);
@@ -895,13 +782,13 @@ export class TopUpPage extends AdminBasePage {
     const { requestedCheckboxChecked, revisedTermsCheckboxChecked } =
       await this.checkBothTopUpConsentBoxes();
 
-    const cancelBtn = this.btnCancelConsent();
+    const cancelBtn = this.btnCancelConsent;
     await cancelBtn.waitFor({ state: "visible", timeout: 8000 });
     await cancelBtn.click();
     await this.waitForLoaderToDisappear().catch(() => {});
     await this.page.waitForTimeout(1500);
 
-    const modalClosedAfterCancel = await this.consentDialog()
+    const modalClosedAfterCancel = await this.consentDialog
       .isVisible()
       .then((visible) => !visible)
       .catch(() => true);

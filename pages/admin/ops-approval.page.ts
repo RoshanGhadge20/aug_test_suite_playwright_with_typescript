@@ -1,120 +1,92 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
 import fs from "fs";
 
-/**
- * Port of Java: PO07_OpsTeamLoanApproval (locators) + Flow07_OpsLoanpproval (actions)
- *
- * Cross-page locator notes:
- *   - `profile` re-declares PO_LoginLogout.loc_Profile (same XPath).
- *   - `arrow` re-declares PO_CustomerManagement.loc_arrow (same XPath).
- *   - `branchDropdown` is an inline locator from Flow07.
- *   - `loanManagement` re-declares PO_Common.loc_loanManagement (same XPath).
- *   - `firstNameFilter` re-declares PO01_KycSel.loc_firstName (same XPath).
- *   - `filterbtn` re-declares PO01_KycSel.loc_filterbtn (same XPath).
- *   - `btnNext` re-declares PO04_NewGoldLoan.loc_btnNext (same XPath).
- *
- * Omitted loginWith* calls:
- *   - Flow07_OpsLoanpproval.opsAprroval() called Flow_LoginLogout.loginWithOPS() —
- *     OMITTED. Role switching must be handled by the caller via loginAs('opsTeam').
- */
 export class OpsApprovalPage extends AdminBasePage {
+  private readonly btnOPSTeam: Locator;
+  private readonly btnApprove: Locator;
+  private readonly btnYes: Locator;
+  private readonly txtArea: Locator;
+  private readonly submit: Locator;
+  private readonly selAtatus: Locator;
+  private readonly txtarea: Locator;
+  private readonly btnSubmit: Locator;
+  private readonly partnerApproval: Locator;
+  private readonly profile: Locator;
+  private readonly arrow: Locator;
+  private readonly textField: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly loanManagement: Locator;
+  private readonly firstNameFilter: Locator;
+  private readonly filterbtn: Locator;
+  private readonly btnNext: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators (from PO07_OpsTeamLoanApproval) ──────────────────────────────
-
-  private readonly btnOPSTeam = () =>
-    this.page.locator("xpath=//button[normalize-space()='OPS TEAM RATING']");
-  private readonly btnApprove = () =>
-    this.page.locator("xpath=//span[normalize-space()='Approve']");
-  private readonly btnYes = () =>
-    this.page.locator("xpath=//span[normalize-space()='Yes']");
-  private readonly txtArea = () =>
-    this.page.locator(
+    this.btnOPSTeam = this.page.locator(
+      "xpath=//button[normalize-space()='OPS TEAM RATING']",
+    );
+    this.btnApprove = this.page.locator(
+      "xpath=//span[normalize-space()='Approve']",
+    );
+    this.btnYes = this.page.locator("xpath=//span[normalize-space()='Yes']");
+    this.txtArea = this.page.locator(
       "xpath=//textarea[@formcontrolname='commentByOperatinalTeam']",
     );
-  private readonly submit = () =>
-    this.page.locator("xpath=(//span[@class='mat-button-wrapper'])[4]");
-  private readonly selAtatus = () =>
-    this.page.locator(
+    this.submit = this.page.locator(
+      "xpath=(//span[@class='mat-button-wrapper'])[4]",
+    );
+    this.selAtatus = this.page.locator(
       "xpath=//select[@formcontrolname='loanStatusForOperatinalTeam']",
     );
-  private readonly txtarea = () =>
-    this.page.locator(
+    this.txtarea = this.page.locator(
       "xpath=//textarea[@formcontrolname='commentByOperatinalTeam']",
     );
-  private readonly btnSubmit = () =>
-    this.page.locator("xpath=(//span[@class='mat-button-wrapper'])[2]");
-  private readonly partnerApproval = () =>
-    this.page.locator(
+    this.btnSubmit = this.page.locator(
+      "xpath=(//span[@class='mat-button-wrapper'])[2]",
+    );
+    this.partnerApproval = this.page.locator(
       "xpath=(//button[normalize-space()='PARTNER APPROVAL'])[1]",
     );
-
-  // Cross-page re-declarations
-  // PO_LoginLogout.loc_Profile
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  // PO_CustomerManagement.loc_arrow
-  private readonly arrow = () =>
-    this.page.locator(
+    this.arrow = this.page.locator(
       "xpath=//div[@class=' kt-aside__brand-tools d-none d-md-flex']",
     );
-  private readonly textField = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter Customer Unique Id']");
-  // Inline branch dropdown from Flow07
-  private readonly branchDropdown = () =>
-    this.page.locator(
+    this.textField = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
+    );
+    this.branchDropdown = this.page.locator(
       "xpath=//select[@id='branch' and contains(@class, 'form-control')]",
     );
-  // PO_Common.loc_loanManagement
-  private readonly loanManagement = () =>
-    this.page.locator("xpath=//span[normalize-space()='Loan Management']");
-  // PO01_KycSel.loc_firstName
-  private readonly firstNameFilter = () =>
-    this.page.locator("xpath=//input[@placeholder='Enter First Name']");
-  // PO01_KycSel.loc_filterbtn
-  private readonly filterbtn = () =>
-    this.page.locator("xpath=//button[@type='submit']");
-  // PO04_NewGoldLoan.loc_btnNext — some loan records render more than one accordion
-  // section already expanded (e.g. Basic Details + Nominee Details both showing a "Next"
-  // button at once), so scope to .first() to avoid a strict-mode violation.
-  private readonly btnNext = () =>
-    this.page
+    this.loanManagement = this.page.locator(
+      "xpath=//span[normalize-space()='Loan Management']",
+    );
+    this.firstNameFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter First Name']",
+    );
+    this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
+    this.btnNext = this.page
       .locator("xpath=//button[span[normalize-space() = 'Next']]")
       .first();
+  }
 
-  // ── Actions (from Flow07_OpsLoanpproval) ──────────────────────────────────
-
-  /**
-   * Port of Java Flow07_OpsLoanpproval.opsAprroval().
-   *
-   * NOTE: loginWithOPS() call is OMITTED.
-   * Role switching must be handled by the caller via loginAs('opsTeam').
-   */
   async opsAprroval(): Promise<void> {
     const data = getLoginData();
 
     await this.page.waitForTimeout(5000);
-    await this.profile().click();
+    await this.profile.click();
     await this.page.waitForTimeout(5000);
-
-    // Confirmed live: selecting any branch scope other than the account's own assigned
-    // branch gets the session force-logged-out on UAT within ~3s (backend rejects
-    // subsequent calls with 401/403, Angular's http interceptor redirects to /auth/login).
-    // Leave the account on its default branch scope instead of calling selectOption().
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(500);
 
-    await this.loanManagement().click();
+    await this.loanManagement.click();
     await this.waitForLoaderToDisappear();
 
     const appliedLoan = this.page.locator(
@@ -123,25 +95,16 @@ export class OpsApprovalPage extends AdminBasePage {
     await appliedLoan.scrollIntoViewIfNeeded();
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
-
-    // Read the JSON fresh: the static `import customerData` is resolved once at module load, so
-    // it holds the PREVIOUS run's customer ID (onboarding rewrites this file during the run) and
-    // the filter returns "No data found".
     const currentCustomer = JSON.parse(
       fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
     );
     const customerId = String(currentCustomer.customerId).trim();
-    await this.textField().fill(customerId);
+    await this.textField.fill(customerId);
     console.log(customerId);
-    // await this.firstNameFilter().fill(data.firstName);
+    // await this.firstNameFilter.fill(data.firstName);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
-
-    // Confirmed live: this table keeps re-rendering continuously (likely polling for status
-    // updates), so ANY stability-polling action hangs — not just click()'s own check, but even
-    // jsClick()'s scrollIntoViewIfNeeded() step before the force-click times out the same way.
-    // Bypass stability polling entirely: scroll via evaluate() (no wait) then force-click.
-    const filterBtn = this.filterbtn();
+    const filterBtn = this.filterbtn;
     await filterBtn.waitFor({ state: "attached", timeout: 15000 });
     await filterBtn.evaluate((el) => el.scrollIntoView({ block: "center" }));
     await filterBtn.click({ force: true });
@@ -152,46 +115,64 @@ export class OpsApprovalPage extends AdminBasePage {
 
     // safeClick(PO04_NewGoldLoan.loc_btnNext) × 5
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(500);
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
 
     await this.page.waitForTimeout(5000);
-    //await this.btnApprove().click();
+    //await this.btnApprove.click();
     // await this.waitForLoaderToDisappear();
-    // await this.btnYes().click();
+    // await this.btnYes.click();
     // await this.waitForLoaderToDisappear();
     // await this.page.waitForTimeout(2000);
 
-    // await this.txtArea().fill("Verified");
+    // await this.txtArea.fill("Verified");
     // await this.waitForLoaderToDisappear();
     // await this.page.waitForTimeout(5000);
 
-    // await this.submit().click();
+    // await this.submit.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
 
-    await this.jsClick(this.btnNext());
+    await this.jsClick(this.btnNext);
     await this.page.waitForTimeout(1000);
 
     await this.page.waitForTimeout(5000);
-
-    // The wizard gained extra tabs (Packets, Upload Documents) so a fixed number of Next clicks
-    // stops short of the Loan Status Approval tab. Keep clicking Next until the rating icon shows.
     const incorrectAppForm = this.page.locator(
       "xpath=//img[@name='incorrectApplicationFormForOperatinalTeam']",
     );
-    for (let i = 0; i < 6; i++) {
+    const selectedTab = this.page.locator(
+      "xpath=//div[@role='tablist']//*[@role='tab' and @aria-selected='true']",
+    );
+    const feedback = this.page.locator(
+      "xpath=//*[contains(@class,'toast-message') or contains(@class,'swal2-html-container') or contains(@class,'alert-danger')]",
+    );
+    let lastTab = "";
+    let stalled = 0;
+    for (let i = 0; i < 10; i++) {
       if (await incorrectAppForm.isVisible().catch(() => false)) break;
       await this.safeScrollAndClick();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(3000);
+      // A Next that doesn't change the selected tab is rejected by the app (validation / API
+      // error). Retry a couple of times, then fail with the tab + message instead of a bare
+      // locator timeout on the rating icon.
+      const tab = ((await selectedTab.first().innerText().catch(() => "")) || "").trim();
+      stalled = tab === lastTab ? stalled + 1 : 0;
+      lastTab = tab;
+      if (stalled >= 2) {
+        const msg = ((await feedback.first().innerText().catch(() => "")) || "").trim();
+        throw new Error(
+          `OPS approval is stuck on the "${tab}" tab — Next does not advance and the later tabs ` +
+            `stay disabled. App message: "${msg || "none shown"}".`,
+        );
+      }
     }
     await incorrectAppForm.click();
     await this.waitForLoaderToDisappear();
@@ -209,12 +190,12 @@ export class OpsApprovalPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2000);
 
-    await this.btnSubmit().click();
+    await this.btnSubmit.click();
     await this.waitForLoaderToDisappear();
   }
 
   async clickFirstUnlockedOpsTeamRating(): Promise<void> {
-    const buttons = this.btnOPSTeam();
+    const buttons = this.btnOPSTeam;
     const count = await buttons.count();
     for (let i = 0; i < count; i++) {
       try {
@@ -230,7 +211,7 @@ export class OpsApprovalPage extends AdminBasePage {
   }
 
   async safeScrollAndClick(): Promise<void> {
-    const locator = this.btnNext();
+    const locator = this.btnNext;
     const hasNext = await locator
       .waitFor({ state: "visible", timeout: 5000 })
       .then(() => true)

@@ -26,7 +26,12 @@ function shouldAuthenticate(panel: AuthPanel): boolean {
   const customerOnly =
     /--project(?:=|\s+)customer\b/.test(argv) &&
     !/--project(?:=|\s+)admin\b/.test(argv);
+  const adminOnly =
+    /--project(?:=|\s+)admin\b/.test(argv) &&
+    !/--project(?:=|\s+)(?:customer|business|new-admin)\b/.test(argv);
   if (customerOnly && panel === 'admin') return false;
+  // Running only the admin project: don't log in to the customer panel as a side effect.
+  if (adminOnly && panel !== 'admin') return false;
   if (panel === 'business' || panel === 'new-admin') return false;
   return true;
 }

@@ -1,63 +1,67 @@
-import { Page } from "@playwright/test";
+import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 
 export class IndustryPage extends AdminBasePage {
+  // ── Locators ──────────────────────────────────────────────────────────────
+  private readonly profile: Locator;
+  private readonly branchDropdown: Locator;
+  private readonly adminSetting: Locator;
+  private readonly masters: Locator;
+  private readonly industries: Locator;
+  private readonly addIndustryBtn: Locator;
+  private readonly dialog: Locator;
+  private readonly nameInput: Locator;
+  private readonly lastPageBtn: Locator;
+  private readonly dialogAddBtn: Locator;
+
   constructor(page: Page) {
     super(page);
-  }
-
-  // ── Locators ──────────────────────────────────────────────────────────────
-
-  private readonly profile = () =>
-    this.page.locator(
+    this.profile = this.page.locator(
       "xpath=//div[@class='kt-header__topbar-user']//img[@alt='Pic']",
     );
-  private readonly branchDropdown = () =>
-    this.page.locator("xpath=//select[@id='branch']");
-  private readonly adminSetting = () =>
-    this.page.locator("xpath=//span[normalize-space()='Admin Settings']");
-  private readonly masters = () =>
-    this.page.locator("xpath=//span[normalize-space()='Masters']");
-  private readonly industries = () =>
-    this.page.locator("xpath=//span[normalize-space()='Industries']");
-  private readonly addIndustryBtn = () =>
-    this.page
+    this.branchDropdown = this.page.locator("xpath=//select[@id='branch']");
+    this.adminSetting = this.page.locator(
+      "xpath=//span[normalize-space()='Admin Settings']",
+    );
+    this.masters = this.page.locator(
+      "xpath=//span[normalize-space()='Masters']",
+    );
+    this.industries = this.page.locator(
+      "xpath=//span[normalize-space()='Industries']",
+    );
+    this.addIndustryBtn = this.page
       .locator(
         "xpath=//*[self::button or self::span][starts-with(normalize-space(),'Add') and contains(normalize-space(),'Industr')]",
       )
       .first();
-  private readonly dialog = () =>
-    this.page.locator("xpath=//*[contains(@class,'cdk-overlay-pane')]").last();
-  private readonly nameInput = () =>
-    this.dialog()
+    this.dialog = this.page
+      .locator("xpath=//*[contains(@class,'cdk-overlay-pane')]")
+      .last();
+    this.nameInput = this.dialog
       .locator(
         "xpath=.//input[not(@type='hidden') and not(@type='file') and not(@disabled)]",
       )
       .first();
-  /** Select inside the dialog, found by its label (Category / Risk). */
-  private readonly dialogSelect = (label: string) =>
-    this.dialog()
-      .locator(
-        `xpath=.//*[contains(normalize-space(text()),'${label}')]/following::select[1]`,
-      )
-      .first();
-  private readonly lastPageBtn = () =>
-    this.page
+    this.lastPageBtn = this.page
       .locator("xpath=//button[@aria-label='Last page' or @title='Last page']")
       .first();
-  private readonly dialogAddBtn = () =>
-    this.dialog()
+    this.dialogAddBtn = this.dialog
       .locator(
         "xpath=.//button[normalize-space()='Add' or .//span[normalize-space()='Add']]",
       )
       .first();
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  }
+  private readonly dialogSelect = (label: string) =>
+    this.dialog
+      .locator(
+        `xpath=.//*[contains(normalize-space(text()),'${label}')]/following::select[1]`,
+      )
+      .first();
 
   async navigateToIndustries(): Promise<void> {
     await this.page.waitForTimeout(7000);
-    await this.profile().click();
-    await this.branchDropdown().waitFor({ state: "visible" });
+    await this.profile.click();
+    await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
 
     await this.expandSidebar();
@@ -68,16 +72,16 @@ export class IndustryPage extends AdminBasePage {
     );
     await this.jsClick(settingsEle);
     await this.page.waitForTimeout(1000);
-    await this.adminSetting().click();
-    await this.masters().click();
+    await this.adminSetting.click();
+    await this.masters.click();
     await this.page.waitForTimeout(500);
-    await this.industries().waitFor({ state: "attached", timeout: 30000 });
-    await this.industries().evaluate((el: HTMLElement) => {
+    await this.industries.waitFor({ state: "attached", timeout: 30000 });
+    await this.industries.evaluate((el: HTMLElement) => {
       el.scrollIntoView({ block: "center" });
       el.click();
     });
     await this.waitForLoaderToDisappear();
-    await this.addIndustryBtn().waitFor({ state: "visible", timeout: 20000 });
+    await this.addIndustryBtn.waitFor({ state: "visible", timeout: 20000 });
   }
 
   private async pickFirstOption(label: string): Promise<string> {
@@ -113,10 +117,10 @@ export class IndustryPage extends AdminBasePage {
   ): Promise<{ name: string; category: string; risk: string }> {
     await this.navigateToIndustries();
 
-    await this.addIndustryBtn().click();
+    await this.addIndustryBtn.click();
     await this.page.waitForTimeout(1000);
-    await this.nameInput().waitFor({ state: "visible", timeout: 15000 });
-    await this.nameInput().fill(name);
+    await this.nameInput.waitFor({ state: "visible", timeout: 15000 });
+    await this.nameInput.fill(name);
 
     const category = await this.pickFirstOption("Category");
     const risk = await this.pickFirstOption("Risk");
@@ -125,17 +129,15 @@ export class IndustryPage extends AdminBasePage {
       .screenshot({ path: "reports/test-artifacts/industry-add-form.png" })
       .catch(() => {});
 
-    await this.dialogAddBtn().click();
+    await this.dialogAddBtn.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(3000);
-    await this.dialog()
-      .waitFor({ state: "hidden", timeout: 10000 })
-      .catch(() => {
-        throw new Error(
-          "Add Industry dialog is still open after Add — validation rejected it " +
-            `(name="${name}", category="${category}", risk="${risk}").`,
-        );
-      });
+    await this.dialog.waitFor({ state: "hidden", timeout: 10000 }).catch(() => {
+      throw new Error(
+        "Add Industry dialog is still open after Add — validation rejected it " +
+          `(name="${name}", category="${category}", risk="${risk}").`,
+      );
+    });
 
     const row = this.page
       .locator("xpath=//*[@role='row' or self::tr]")
@@ -145,13 +147,8 @@ export class IndustryPage extends AdminBasePage {
       .waitFor({ state: "visible", timeout: 8000 })
       .then(() => true)
       .catch(() => false);
-    if (
-      !listed &&
-      (await this.lastPageBtn()
-        .isEnabled()
-        .catch(() => false))
-    ) {
-      await this.lastPageBtn().click();
+    if (!listed && (await this.lastPageBtn.isEnabled().catch(() => false))) {
+      await this.lastPageBtn.click();
       await this.waitForLoaderToDisappear();
       await this.page.waitForTimeout(2000);
       listed = await row
