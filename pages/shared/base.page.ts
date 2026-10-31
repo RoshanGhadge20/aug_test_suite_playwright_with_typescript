@@ -11,24 +11,7 @@ export abstract class BasePage {
   ) {}
 
   async goto(path: string = '/'): Promise<void> {
-    // waitUntil: 'domcontentloaded' — confirmed live on the admin panel that the default
-    // 'load' wait can hang past the default 30s navigation timeout: a third-party "Tech
-    // Support" widget's script occasionally stalls during the initial parse (the page
-    // snapshot at failure showed only that widget's iframe, no app content, while a plain
-    // HTTP request to the same URL resolved in under a second — the app itself isn't slow,
-    // that one blocking <script> is). domcontentloaded doesn't wait on it; callers needing
-    // full resource load already wait on specific elements.
-    //
-    // One bounded retry: confirmed live that even domcontentloaded can occasionally hang
-    // the full 60s (the widget stall seems to vary in duration, not just presence) — a
-    // fresh navigation attempt on retry has consistently succeeded quickly rather than
-    // hitting the same stall twice in a row.
-    //
-    // 20s per attempt, not 60s: this goto runs inside the `page` fixture's own timeout
-    // budget alongside session-restore/login logic — a 60s+60s retry pair left no room for
-    // anything else and blew the fixture timeout outright (confirmed live: the first 60s
-    // attempt alone exceeded the fixture's timeout, so the "retry" fired during teardown and
-    // failed with ERR_ABORTED instead of ever getting a fair second attempt).
+   
     try {
       await this.page.goto(path, { waitUntil: 'domcontentloaded', timeout: 20_000 });
     } catch (err) {

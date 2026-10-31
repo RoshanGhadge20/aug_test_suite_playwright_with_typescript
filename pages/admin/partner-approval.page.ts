@@ -107,7 +107,6 @@ export class PartnerApprovalPage extends AdminBasePage {
   }
 
   async loanDisbursement(): Promise<void> {
-
     let dialogOpen = false;
 
     const onResponse = (res: import("@playwright/test").Response) => {
@@ -190,6 +189,7 @@ export class PartnerApprovalPage extends AdminBasePage {
     await this.page.waitForTimeout(500);
 
     await this.btnYes.click();
+    await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
   }
 

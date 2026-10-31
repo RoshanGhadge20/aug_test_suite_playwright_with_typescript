@@ -1,6 +1,7 @@
 import { Locator, Page } from "@playwright/test";
 import { AdminBasePage } from "./admin-base.page";
 import { getLoginData } from "../../utils/data/admin-excel-data";
+import fs from "fs";
 
 export class PacketSubmissionPage extends AdminBasePage {
   private readonly btnSubmitPacket: Locator;
@@ -17,7 +18,7 @@ export class PacketSubmissionPage extends AdminBasePage {
   private readonly arrow: Locator;
   private readonly branchDropdown: Locator;
   private readonly loanManagement: Locator;
-  private readonly firstNameFilter: Locator;
+  private readonly customerIdFilter: Locator;
   private readonly filterbtn: Locator;
 
   constructor(page: Page) {
@@ -63,8 +64,8 @@ export class PacketSubmissionPage extends AdminBasePage {
     this.loanManagement = this.page.locator(
       "xpath=//span[normalize-space()='Loan Management']",
     );
-    this.firstNameFilter = this.page.locator(
-      "xpath=//input[@placeholder='Enter First Name']",
+    this.customerIdFilter = this.page.locator(
+      "xpath=//input[@placeholder='Enter Customer Unique Id']",
     );
     this.filterbtn = this.page.locator("xpath=//button[@type='submit']");
   }
@@ -94,7 +95,13 @@ export class PacketSubmissionPage extends AdminBasePage {
     await appliedLoan.click();
     await this.waitForLoaderToDisappear();
 
-    await this.firstNameFilter.fill(data.firstName);
+    // Filter by the customer ID written during onboarding (a first name can match older loans).
+    const currentCustomer = JSON.parse(
+      fs.readFileSync("./testdata/admin/documents/customerData.json", "utf8"),
+    );
+    const customerId = String(currentCustomer.customerId).trim();
+    await this.customerIdFilter.fill(customerId);
+    console.log(customerId);
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     await this.filterbtn.click({ noWaitAfter: true });

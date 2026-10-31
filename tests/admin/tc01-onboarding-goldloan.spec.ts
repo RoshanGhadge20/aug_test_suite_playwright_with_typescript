@@ -1,6 +1,6 @@
 import { test, expect } from "../../fixtures/admin.fixture";
 import fs from "fs";
-test.describe("TC01 onboarding to gold loan @regression @admin @loans", () => {
+test.describe("TC01 onboarding to gold loan @smoke @sanity @regression @admin @loans", () => {
   test("customer onboarding through gold-loan disbursement", async ({
     customerManagement,
     kyc,

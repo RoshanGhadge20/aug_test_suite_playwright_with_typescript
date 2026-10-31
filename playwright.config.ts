@@ -14,9 +14,9 @@ const targetEnv = getTargetEnv();
 // the customer / business / new-admin panels via the shared auth-setup project.
 {
   const argv = process.argv.join(" ");
-  const names = [
-    ...argv.matchAll(/--project(?:=|\s+)([\w-]+)/g),
-  ].map((m) => m[1]);
+  const names = [...argv.matchAll(/--project(?:=|\s+)([\w-]+)/g)].map(
+    (m) => m[1],
+  );
   if (
     !process.env.TARGET_PANEL &&
     names.length > 0 &&
@@ -75,9 +75,25 @@ export default defineConfig({
       ? 2
       : undefined,
   reporter: [
+    ["list"],
     ["html", { outputFolder: "reports/html", open: "never" }],
     ["json", { outputFile: "reports/results.json" }],
-    ["list"],
+    [
+      "allure-playwright",
+      {
+        resultsDir: "reports/allure-results",
+        detail: true,
+        suiteTitle: true,
+        environmentInfo: {
+          Environment: targetEnv,
+          Panel: process.env.TARGET_PANEL ?? "all",
+          Headless: String(headless),
+          CI: String(isCI),
+          OS: process.platform,
+          Node: process.version,
+        },
+      },
+    ],
   ],
   outputDir: "reports/test-artifacts",
   use: {
@@ -112,6 +128,8 @@ export default defineConfig({
         deviceScaleFactor: undefined,
         baseURL: panelUrl("admin", targetEnv),
       },
+      workers: 1,
+      fullyParallel: false,
       dependencies: ["auth-setup"],
       testMatch: /tests\/admin\/.*\.spec\.ts/,
     },
@@ -124,8 +142,6 @@ export default defineConfig({
         baseURL: panelUrl("customer", targetEnv),
         storageState: storageStateIfExists(targetEnv, "customer"),
       },
-      // The UAT customer account allows one active session; a spec that logs in again kills the
-      // shared storageState session for every other worker. Run customer specs one at a time.
       workers: 1,
       fullyParallel: false,
       dependencies: ["auth-setup"],

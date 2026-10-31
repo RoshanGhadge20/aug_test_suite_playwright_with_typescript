@@ -10,15 +10,6 @@ export interface OnboardingResult {
   customerFirstName: string;
 }
 
-/**
- * Steps 1–4: create customer, KYC, assign branch, OPS KYC approval.
- *
- * Switches into appraiser at the start, creates the customer/KYC record, then ends logged in as OPS.
- *
- * NOTE (file uploads): KycPage.ClickonKyc() accepts optional panCardPath, signaturePath, and
- * aadhaarPath. All params are guarded in the page object — uploads are skipped when paths are
- * omitted. Wire runtime paths via env vars or test-config before live execution.
- */
 export async function onboardCustomerThroughKyc(
   page: Page,
 ): Promise<OnboardingResult> {
@@ -26,7 +17,6 @@ export async function onboardCustomerThroughKyc(
   const customerManagement = new CustomerManagementPage(page);
   const kyc = new KycPage(page);
   const kycApproval = new KycApprovalPage(page);
-  // Start from whatever the fixture seeded (admin) and switch into appraiser for the onboarding flow.
   await login.loginAs("appraiser");
 
   await customerManagement.clickOnCustomerManagementButton();

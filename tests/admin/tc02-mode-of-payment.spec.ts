@@ -4,7 +4,7 @@ import { PacketSubmissionPage } from "../../pages/admin/packet-submission.page";
 import { test, expect } from "../../fixtures/admin.fixture";
 import { createDisbursedLoan } from "../../flows/admin/gold-loan.flow";
 
-test.describe("TC02 mode of payment @regression @admin @payments", () => {
+test.describe("TC02 mode of payment @smoke @sanity @regression @admin @payments", () => {
   test("mode of payment — quick pay, part pay, top-up, renew, renew+topup, part release, full release", async ({
     page,
     loginAs,

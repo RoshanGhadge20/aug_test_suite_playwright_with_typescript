@@ -594,7 +594,74 @@ export class NewGoldLoanPage extends AdminBasePage {
     await this.page.keyboard.press("Tab");
     await this.page.waitForTimeout(4000);
     await this.page.waitForTimeout(30000);
-    await this.jsClick(this.btnNext);
+    await this.clickNextAndConfirmAdvance("Bank Details (advance cash)");
+  }
+
+  /**
+   * Clicks the visible Next button and checks the wizard really moved on. `btnNext` matches the
+   * Next button of every step in the DOM and a forced click does nothing when Next is disabled,
+   * so a blocked step used to pass silently here and fail later, far from the cause.
+   */
+  private async clickNextAndConfirmAdvance(stepName: string): Promise<void> {
+    const next = this.btnNext.filter({ visible: true }).first();
+    const selectedTab = this.page
+      .locator(
+        "xpath=//div[@role='tablist']//*[@role='tab' and @aria-selected='true']",
+      )
+      .first();
+    const tabBefore = (
+      (await selectedTab.innerText().catch(() => "")) || ""
+    ).trim();
+
+    await next.waitFor({ state: "visible", timeout: 30000 });
+    await next.scrollIntoViewIfNeeded();
+
+    const enabled = await next
+      .evaluate((el: HTMLButtonElement) => !el.disabled)
+      .catch(() => false);
+    if (enabled) {
+      await next.click();
+    } else {
+      // Give async validation (e.g. the advance-cash amount recalculating) a chance to enable it.
+      await this.page.waitForTimeout(5000);
+    }
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(3000);
+
+    const tabAfter = (
+      (await selectedTab.innerText().catch(() => "")) || ""
+    ).trim();
+    if (enabled && (!tabBefore || tabAfter !== tabBefore)) return;
+
+    // Still blocked: retry once, then report why.
+    if (!enabled) {
+      const nowEnabled = await next
+        .evaluate((el: HTMLButtonElement) => !el.disabled)
+        .catch(() => false);
+      if (nowEnabled) {
+        await next.click();
+        await this.waitForLoaderToDisappear();
+        await this.page.waitForTimeout(3000);
+        const retryTab = (
+          (await selectedTab.innerText().catch(() => "")) || ""
+        ).trim();
+        if (!tabBefore || retryTab !== tabBefore) return;
+      }
+    }
+    const errors = await this.page
+      .locator(
+        "xpath=//mat-error | //*[contains(@class,'invalid-feedback') or contains(@class,'text-danger') or contains(@class,'toast-message') or contains(@class,'swal2-html-container')]",
+      )
+      .allInnerTexts()
+      .catch(() => [] as string[]);
+    const advanceCash = await this.advanceCashField
+      .inputValue()
+      .catch(() => "(unreadable)");
+    throw new Error(
+      `Next did not advance from ${stepName}: Next is ${enabled ? "enabled but the step stayed on" : "disabled"} ` +
+        `"${tabBefore}". Advance cash field: "${advanceCash}". ` +
+        `Messages on page: ${JSON.stringify(errors.map((e) => e.trim()).filter(Boolean))}.`,
+    );
   }
 
   async safeClick(): Promise<void> {

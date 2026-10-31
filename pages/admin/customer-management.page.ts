@@ -187,14 +187,7 @@ export class CustomerManagementPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
-    const customerId =
-      (
-        await this.page
-          .locator(
-            "(//span[normalize-space()='Customer ID']/following-sibling::span)[1]",
-          )
-          .textContent()
-      )?.trim() || "";
+    const customerId = await this.lookupCustomerIdByMobile(mobileNumber);
 
     console.log("Customer ID captured:", customerId);
 
@@ -217,6 +210,58 @@ export class CustomerManagementPage extends AdminBasePage {
 
     console.log("Saved JSON:", verify);
   }
+  /**
+   * Reads the new customer's ID from All Customers, filtered by the mobile number just used.
+   * The old "first span after 'Customer ID'" lookup picked up an unrelated customer (a concurrent
+   * customer-app signup), so every later step filtered by an ID that had no KYC application.
+   */
+  private async lookupCustomerIdByMobile(mobile: string): Promise<string> {
+    if (
+      !(await this.page
+        .locator("xpath=//input[@placeholder='Enter Mobile Number']")
+        .isVisible()
+        .catch(() => false))
+    ) {
+      await this.allcustomer.click();
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(3000);
+    }
+    await this.page
+      .locator("xpath=//input[@placeholder='Enter Mobile Number']")
+      .fill(mobile);
+    const filterButton = this.page
+      .locator("xpath=//button[normalize-space()='Filter']")
+      .filter({ visible: true })
+      .first();
+    const rows = this.page.locator("xpath=//tbody//tr[td]");
+    // The unfiltered page (25 rows) stays on screen until the filter response lands, so a single
+    // count right after the click reads the old list. Re-apply the filter and wait for it to
+    // narrow down; the new customer can also take a moment to appear in the list.
+    let rowCount = 0;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await filterButton.click();
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(3000);
+      rowCount = await rows.count();
+      if (rowCount === 1) break;
+    }
+    const firstCell = this.page.locator("xpath=(//tbody//tr/td[1])[1]");
+    await firstCell.waitFor({ state: "visible", timeout: 20_000 });
+    if (rowCount !== 1) {
+      throw new Error(
+        `Expected exactly 1 customer for mobile ${mobile} on All Customers, found ${rowCount}.`,
+      );
+    }
+    // The cell's text can carry a "Customer ID" column label ahead of the value; keep only the
+    // last whitespace-separated token, which is the ID itself.
+    const customerId =
+      ((await firstCell.textContent()) ?? "").trim().split(/\s+/).pop() ?? "";
+    if (!customerId) {
+      throw new Error(`Customer ID cell was empty for mobile ${mobile}.`);
+    }
+    return customerId;
+  }
+
   generateRandomMobile(): string {
     return TestDataFactory.mobile();
   }
