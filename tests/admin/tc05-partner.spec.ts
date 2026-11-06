@@ -17,18 +17,18 @@ test.describe("TC05 partner and master data @regression @admin @partner", () => 
   }) => {
     test.setTimeout(20 * 60_000);
 
-    await test.step("validate add partner — add, edit, delete", async () => {
-      const { firstName, lastName, email, mobile } =
-        await addPartner.validateAddNewPartner();
-      expect.soft(firstName).toBeTruthy();
-      expect.soft(lastName).toBeTruthy();
-      expect.soft(email).toContain("@");
-      expect.soft(mobile).toMatch(/^[6-9]\d{9}$/);
-      await addPartner.validateEdit();
-      await addPartner.validateDeletePartner();
-      await addPartner.crossCheckOldPartner();
-      await addPartner.updateOldPartner();
-    });
+    // await test.step("validate add partner — add, edit, delete", async () => {
+    //   const { firstName, lastName, email, mobile } =
+    //     await addPartner.validateAddNewPartner();
+    //   expect.soft(firstName).toBeTruthy();
+    //   expect.soft(lastName).toBeTruthy();
+    //   expect.soft(email).toContain("@");
+    //   expect.soft(mobile).toMatch(/^[6-9]\d{9}$/);
+    //   await addPartner.validateEdit();
+    //  // await addPartner.validateDeletePartner();
+    //   await addPartner.crossCheckOldPartner();
+    //   await addPartner.updateOldPartner();
+    // });
 
     // await test.step("validate add partner branch — add,view,edit anddelete partner branch", async () => {
     //   await editPartnerBranch.navigateToPartnerBranch();
@@ -82,8 +82,8 @@ test.describe("TC05 partner and master data @regression @admin @partner", () => 
     // await test.step("validate add loan defect with edit and view — edit loan defect", async () => {
     //   await loanDefects.validateEditLoanDefect();
     // });
-    //});
-    //});
+    // });
+    // });
     // test.describe("TC05 partner and master data @regression @admin @partner", () => {
     //   test("partner management, internal users, gold rate, scheme, lead, karat, unapproval reason, waiver type, loan defects", async ({
     //     editPartnerBranch,

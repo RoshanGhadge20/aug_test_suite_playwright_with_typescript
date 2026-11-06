@@ -275,7 +275,7 @@ export class QuickPaymentPage extends AdminBasePage {
       await successBtn.click();
     }
     await this.page.waitForTimeout(2000);
-    await this.deposit();
+    //await this.deposit();
   }
 
   async quikPaymentfail(): Promise<string> {

@@ -26,7 +26,6 @@ test.describe("Loan details — Transaction History validations @regression @adm
       }
 
       if (history.noRecords) {
-        // A loan with no payments yet (e.g. "Packet Submitted") shows the empty state only.
         expect(history.records).toHaveLength(0);
         return;
       }

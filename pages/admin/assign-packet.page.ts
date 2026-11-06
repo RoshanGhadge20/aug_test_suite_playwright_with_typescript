@@ -923,58 +923,58 @@ export class AssignPacketPage extends AdminBasePage {
   }
 
   async createAndAssignPacket(): Promise<string> {
-    //   await this.page.waitForTimeout(7000);
-    //   await this.profile.click();
-    //   await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(7000);
+    await this.profile.click();
+    await this.page.waitForTimeout(5000);
 
-    //   await this.branchDropdown.waitFor({ state: "visible" });
-    //   await this.page.waitForTimeout(2000);
+    await this.branchDropdown.waitFor({ state: "visible" });
+    await this.page.waitForTimeout(2000);
 
-    //   await this.expandSidebar();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(2000);
+    await this.expandSidebar();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    //   await this.loanManagement.click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.locator("xpath=//span[normalize-space()='Packet']").click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(2000);
+    await this.loanManagement.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.locator("xpath=//span[normalize-space()='Packet']").click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    //   await this.page
-    //     .locator("xpath=//span[normalize-space()='Add Packet']")
-    //     .click();
-    //   await this.waitForLoaderToDisappear();
+    await this.page
+      .locator("xpath=//span[normalize-space()='Add Packet']")
+      .click();
+    await this.waitForLoaderToDisappear();
 
     const packetCode = this.getRandomAPacketCode();
-    //   await this.page.waitForTimeout(1500);
-    //   await this.packetID.fill(packetCode);
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(5000);
-    //   await this.selectPacketBranch("Augmont");
-    //   await this.btnNewpacket.click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(1500);
+    await this.packetID.fill(packetCode);
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.selectPacketBranch("Augmont");
+    await this.btnNewpacket.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
 
-    //   await this.barCode.fill(packetCode);
-    //   await this.waitForLoaderToDisappear();
-    //   await this.barCode.click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.btnAddPacketPO03.click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(5000);
+    await this.barCode.fill(packetCode);
+    await this.waitForLoaderToDisappear();
+    await this.barCode.click();
+    await this.waitForLoaderToDisappear();
+    await this.btnAddPacketPO03.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
 
-    //   await this.jsClick(this.btnEditPacket);
-    //   await this.page.waitForTimeout(5000);
+    await this.jsClick(this.btnEditPacket);
+    await this.page.waitForTimeout(5000);
 
-    //   await this.selUsertype.selectOption({ label: "Appraiser" });
-    //   await this.page.waitForTimeout(5000);
-    //   await this.page.waitForTimeout(5000);
-    //   await expect(this.selAppraiserId).toBeEnabled();
-    //   await this.selAppraiserId.selectOption({ value: "2717" });
-    //   await this.selAppraiserId.dispatchEvent("change");
-    //   await this.btnUpdatePO03.click();
-    //   await this.waitForLoaderToDisappear();
-    //   await this.page.waitForTimeout(5000);
+    await this.selUsertype.selectOption({ label: "Appraiser" });
+    await this.page.waitForTimeout(5000);
+    await this.page.waitForTimeout(5000);
+    await expect(this.selAppraiserId).toBeEnabled();
+    await this.selAppraiserId.selectOption({ value: "2717" });
+    await this.selAppraiserId.dispatchEvent("change");
+    await this.btnUpdatePO03.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
     return packetCode;
   }
 
@@ -1215,85 +1215,85 @@ export class AssignPacketPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
     await this.jsClick(this.filterbtn);
     await this.page.waitForTimeout(2000);
-    // await this.AssignPacket.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(7000);
+    await this.AssignPacket.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(7000);
 
-    // await this.selectPacket.click();
-    // await this.waitForLoaderToDisappear();
-    // const code = packetCode.trim();
+    await this.selectPacket.click();
+    await this.waitForLoaderToDisappear();
+    const code = packetCode.trim();
 
-    // const options = await this.selectPacket.locator("option").allTextContents();
+    const options = await this.selectPacket.locator("option").allTextContents();
 
-    // console.log("Packet Code:", code);
-    // console.log("Dropdown Options:", options);
+    console.log("Packet Code:", code);
+    console.log("Dropdown Options:", options);
 
-    // await this.selectPacket.selectOption({
-    //   label: `${code} (${code})`,
-    // });
-    // await this.page.waitForTimeout(5000);
+    await this.selectPacket.selectOption({
+      label: `${code} (${code})`,
+    });
+    await this.page.waitForTimeout(5000);
 
-    // await this.ornamenttype.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(2000);
+    await this.ornamenttype.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    // await this.checkbox.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(2000);
+    await this.checkbox.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    // await this.btnAddPacket.click();
-    // await this.waitForLoaderToDisappear();
+    await this.btnAddPacket.click();
+    await this.waitForLoaderToDisappear();
 
-    // await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(2000);
 
-    // for (let i = 0; i < 4; i++) {
-    //   const placeholder = this.page
-    //     .locator("//img[contains(@src,'image-placeholder.png')]")
-    //     .first();
+    for (let i = 0; i < 4; i++) {
+      const placeholder = this.page
+        .locator("//img[contains(@src,'image-placeholder.png')]")
+        .first();
 
-    //   await placeholder.waitFor({
-    //     state: "visible",
-    //     timeout: 10000,
-    //   });
+      await placeholder.waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
 
-    //   await placeholder.click();
-    //   await this.page.waitForTimeout(1500);
+      await placeholder.click();
+      await this.page.waitForTimeout(1500);
 
-    //   const deviceNotFound = this.page.locator(
-    //     "xpath=//h4[normalize-space()='Requested device not found']",
-    //   );
-    //   if (
-    //     await deviceNotFound.isVisible({ timeout: 2000 }).catch(() => false)
-    //   ) {
-    //     const okBtn = this.page.locator(
-    //       "xpath=//button[normalize-space()='Ok']",
-    //     );
-    //     await okBtn.click();
-    //     await this.page.waitForTimeout(500);
-    //     console.log(
-    //       `⚠ Camera unavailable (headless) — skipped photo slot ${i + 1}`,
-    //     );
-    //     continue;
-    //   }
+      const deviceNotFound = this.page.locator(
+        "xpath=//h4[normalize-space()='Requested device not found']",
+      );
+      if (
+        await deviceNotFound.isVisible({ timeout: 2000 }).catch(() => false)
+      ) {
+        const okBtn = this.page.locator(
+          "xpath=//button[normalize-space()='Ok']",
+        );
+        await okBtn.click();
+        await this.page.waitForTimeout(500);
+        console.log(
+          `⚠ Camera unavailable (headless) — skipped photo slot ${i + 1}`,
+        );
+        continue;
+      }
 
-    //   const cameraBtn = this.page.locator("//img[contains(@src,'camera.svg')]");
+      const cameraBtn = this.page.locator("//img[contains(@src,'camera.svg')]");
 
-    //   await cameraBtn.waitFor({
-    //     state: "visible",
-    //     timeout: 10000,
-    //   });
+      await cameraBtn.waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
 
-    //   await cameraBtn.click();
+      await cameraBtn.click();
 
-    //   await this.page.waitForTimeout(5000);
-    // }
+      await this.page.waitForTimeout(5000);
+    }
 
-    // await this.page.waitForTimeout(2000);
+    await this.page.waitForTimeout(2000);
 
-    // await this.btnSave.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(5000);
-    // await this.btnYes.click();
+    await this.btnSave.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
+    await this.btnYes.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(5000);
     const uploadDocsBtn = this.btnUploadDocuments;

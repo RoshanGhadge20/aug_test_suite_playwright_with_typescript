@@ -451,6 +451,23 @@ export class TopUpPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.assignPacketPage.downloadAndUploadCashDeclaration();
     await this.assignPacketPage.ensureCashReceiptAttached();
+    // Same Upload Documents checks as the assign-packet flow: every required slot attached, LIP
+    // Assessment form filled, then a C-KYC number, all before Save.
+    if (resolvedDocPath && existsSync(resolvedDocPath)) {
+      await this.assignPacketPage.verifyDocumentsAttached();
+    }
+    await this.assignPacketPage.fillLipAssessment();
+
+    const ckycField = this.page
+      .locator("xpath=//input[@placeholder='C-KYC00']")
+      .or(this.fieldCkyc)
+      .first();
+    if (await ckycField.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await ckycField.fill(this.assignPacketPage.generateRandomCKYC());
+      await this.page.waitForTimeout(2000);
+    } else {
+      console.log("⊘ C-KYC Number field not shown — skipped");
+    }
     const saveBtn = this.page.locator(
       "xpath=//button[normalize-space()='Save']",
     );

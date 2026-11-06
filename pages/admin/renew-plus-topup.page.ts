@@ -25,13 +25,9 @@ export class RenewPlusTopupPage extends AdminBasePage {
   private readonly btnOk: Locator;
   private readonly branchDropdown: Locator;
   private readonly btnYes: Locator;
-  // PO_Common.loc_loanManagement
   private readonly loanManagement: Locator;
-  // PO01_KycSel.loc_firstName
   private readonly firstNameFilter: Locator;
-  // PO01_KycSel.loc_filterbtn
   private readonly filterbtn: Locator;
-  // PO13_RenewLoan.loc_btnUploadDocuments
   private readonly btnUploadDocuments: Locator;
   private readonly appraisalRequest: Locator;
   private readonly selectAppraiser: Locator;
@@ -39,39 +35,23 @@ export class RenewPlusTopupPage extends AdminBasePage {
   private readonly customerManagementBtn: Locator;
   private readonly btnProceed: Locator;
   private readonly btnRenewLoan: Locator;
-  // PO05_AssignPacket.loc_fieldCkyc (inline)
   private readonly fieldCkyc: Locator;
-  // PO05_AssignPacket.loc_btnYes
   private readonly btnYesAssign: Locator;
-  // PO05_AssignPacket.loc_btnDone
   private readonly btnDoneAssign: Locator;
-  // PO07_OpsTeamLoanApproval.loc_partnerApproval
   private readonly partnerApproval: Locator;
-  // PO07_OpsTeamLoanApproval.loc_checkClick
   private readonly checkClick: Locator;
-  // PO07_OpsTeamLoanApproval.loc_checkClick1
   private readonly checkClick1: Locator;
-  // PO07_OpsTeamLoanApproval.loc_btnSubmit
   private readonly btnSubmitOps: Locator;
   private readonly loanDetails: Locator;
   private readonly renewButton: Locator;
   private readonly btnNext: Locator;
-  // PO10_QuickPayment.loc_kebabMenu
   private readonly kebabMenu: Locator;
   private readonly customerUniqID: Locator;
   private readonly btnDownloadCashDeclaration: Locator;
-  // PO04_NewGoldLoan.loc_btnNext (for clickNextMultipleTimes)
   private readonly btnNextLoop: Locator;
-  // PO09_PartnerLoanApproval.loc_btnDisbursement
-  // private readonly btnDisbursement = () =>
-  //   this.page.locator("xpath=//button[normalize-space()='Disbursement']");
-  // PO09_PartnerLoanApproval.loc_transactionID
   private readonly transactionID: Locator;
-  // PO09_PartnerLoanApproval.loc_selPaymentType
   private readonly selPaymentType: Locator;
-  // PO09_PartnerLoanApproval.loc_btnDone
   private readonly btnDonePartner: Locator;
-  // PO09_PartnerLoanApproval.loc_btnYes
   private readonly btnYesPartner: Locator;
   private readonly selPurpose: Locator;
   private readonly netBanking: Locator;
@@ -458,7 +438,7 @@ export class RenewPlusTopupPage extends AdminBasePage {
     await this.page.waitForTimeout(5000);
     await this.branchDropdown.waitFor({ state: "visible" });
     await this.page.waitForTimeout(2000);
-    // await this.renewPlusTopUpOnlinePay();
+    await this.renewPlusTopUpOnlinePay();
     await this.expandSidebar();
     await this.page.waitForTimeout(5000);
     await this.customerManagementBtn.click();
@@ -498,17 +478,27 @@ export class RenewPlusTopupPage extends AdminBasePage {
     await this.waitForLoaderToDisappear();
 
     await this.page.waitForTimeout(5000);
-    await this.clickNextSafely(3);
     const calculateBtn = this.page.locator(
       "xpath=//button[.//span[normalize-space(text())='Calculate']]",
     );
+
+    const nextBtn = this.page
+      .locator("xpath=//button[span[normalize-space()='Next']]")
+      .first();
+    for (let step = 1; step <= 3; step++) {
+      if (await calculateBtn.isVisible().catch(() => false)) break;
+      await nextBtn.waitFor({ state: "visible", timeout: 30000 });
+      await nextBtn.scrollIntoViewIfNeeded();
+      console.log(`Clicking Next button: ${step}`);
+      await nextBtn.click();
+      await this.waitForLoaderToDisappear();
+      await this.page.waitForTimeout(1000);
+    }
     await calculateBtn.waitFor({ state: "visible", timeout: 30000 });
 
     console.log("Visible:", await calculateBtn.isVisible());
     console.log("Enabled:", await calculateBtn.isEnabled());
 
-    // The Calculate button is re-rendered by Angular while the step loads, so
-    // re-resolve it on each attempt and click at DOM level (no stability wait).
     let clicked = false;
     for (let attempt = 1; attempt <= 5 && !clicked; attempt++) {
       try {
@@ -530,7 +520,7 @@ export class RenewPlusTopupPage extends AdminBasePage {
     await this.page.waitForTimeout(3000);
     await this.btnNext.click();
     await this.page.waitForTimeout(2000);
-    await this.newGoldLoanPage.validateBankDetailsWithAdvanceCash();
+    await this.newGoldLoanPage.validateBankDetails();
     await this.btnNext.click();
     await this.page.waitForTimeout(3000);
 
@@ -609,6 +599,23 @@ export class RenewPlusTopupPage extends AdminBasePage {
     // Download and re-upload Cash Declaration
     await this.assignPacketPage.downloadAndUploadCashDeclaration();
     await this.assignPacketPage.ensureCashReceiptAttached();
+    // Same Upload Documents checks as the assign-packet flow: every required slot attached, LIP
+    // Assessment form filled, then a C-KYC number, all before Save.
+    if (resolvedDocPath && existsSync(resolvedDocPath)) {
+      await this.assignPacketPage.verifyDocumentsAttached();
+    }
+    await this.assignPacketPage.fillLipAssessment();
+
+    const ckycField = this.page
+      .locator("xpath=//input[@placeholder='C-KYC00']")
+      .or(this.fieldCkyc)
+      .first();
+    if (await ckycField.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await ckycField.fill(this.assignPacketPage.generateRandomCKYC());
+      await this.page.waitForTimeout(2000);
+    } else {
+      console.log("⊘ C-KYC Number field not shown — skipped");
+    }
     await this.page.waitForTimeout(5000);
     // Save
     const saveBtn = this.page.locator(
@@ -969,7 +976,7 @@ export class RenewPlusTopupPage extends AdminBasePage {
       await successBtn.click();
     }
     await this.page.waitForTimeout(2000);
-    await this.deposit();
+    //await this.deposit();
   }
   async renewPlusTopUpCronPay(): Promise<void> {
     await this.navigateAndConfirmRenewPlusTopUp("CRON");

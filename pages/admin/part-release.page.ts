@@ -316,7 +316,15 @@ export class PartReleasePage extends AdminBasePage {
     await this.customerUniqID.fill(this.getCurrentCustomerId());
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(2500);
-    await this.filterbtn.first().click({ noWaitAfter: true });
+    // The Filter click is dispatched (the failure screenshot shows the filtered row) but
+    // Playwright's click action never returns while the grid keeps re-rendering after the request.
+    // Click at DOM level so it can't hang on that, same approach as top-up's Applied Loan filter.
+    const filterBtn = this.filterbtn.first();
+    await filterBtn.waitFor({ state: "attached", timeout: 15000 });
+    await filterBtn.evaluate((el: HTMLElement) => {
+      el.scrollIntoView({ block: "center" });
+      el.click();
+    });
     await this.page.waitForTimeout(5000);
     await this.waitForLoaderToDisappear();
     const partnerBtn = this.partnerApproval.first();

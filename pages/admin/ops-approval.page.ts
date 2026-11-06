@@ -126,17 +126,17 @@ export class OpsApprovalPage extends AdminBasePage {
     await this.jsClick(this.btnNext);
 
     await this.page.waitForTimeout(5000);
-    //await this.btnApprove.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.btnYes.click();
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(2000);
+    await this.btnApprove.click();
+    await this.waitForLoaderToDisappear();
+    await this.btnYes.click();
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(2000);
 
-    // await this.txtArea.fill("Verified");
-    // await this.waitForLoaderToDisappear();
-    // await this.page.waitForTimeout(5000);
+    await this.txtArea.fill("Verified");
+    await this.waitForLoaderToDisappear();
+    await this.page.waitForTimeout(5000);
 
-    // await this.submit.click();
+    await this.submit.click();
     await this.waitForLoaderToDisappear();
     await this.page.waitForTimeout(1500);
 
@@ -163,11 +163,21 @@ export class OpsApprovalPage extends AdminBasePage {
       // A Next that doesn't change the selected tab is rejected by the app (validation / API
       // error). Retry a couple of times, then fail with the tab + message instead of a bare
       // locator timeout on the rating icon.
-      const tab = ((await selectedTab.first().innerText().catch(() => "")) || "").trim();
+      const tab = (
+        (await selectedTab
+          .first()
+          .innerText()
+          .catch(() => "")) || ""
+      ).trim();
       stalled = tab === lastTab ? stalled + 1 : 0;
       lastTab = tab;
       if (stalled >= 2) {
-        const msg = ((await feedback.first().innerText().catch(() => "")) || "").trim();
+        const msg = (
+          (await feedback
+            .first()
+            .innerText()
+            .catch(() => "")) || ""
+        ).trim();
         throw new Error(
           `OPS approval is stuck on the "${tab}" tab — Next does not advance and the later tabs ` +
             `stay disabled. App message: "${msg || "none shown"}".`,

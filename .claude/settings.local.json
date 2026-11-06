@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(TARGET_ENV=uat npx playwright test --project=admin tests/admin/tc04-mode-of-payment-offline.spec.ts --grep \"renew loan plus top-up cash\" --reporter=line)",
+      "Bash(TARGET_ENV=uat npx playwright test --project=admin tests/admin/tc05-partner.spec.ts --reporter=line)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
